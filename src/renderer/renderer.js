@@ -1,9 +1,8 @@
-let currentTab = 0;
-const tabs = [];
 let isAutoRunning = false;
+let isWebviewRegistered = false;
 
 window.addEventListener('DOMContentLoaded', () => {
-  addTab();
+  initWebview();
   loadLogs();
 
   window.api.onLogMessage((msg) => {
@@ -11,49 +10,26 @@ window.addEventListener('DOMContentLoaded', () => {
   });
 });
 
-function addTab() {
-  const idx = tabs.length;
-  tabs.push({ idx, webview: null, registered: false });
-
-  const tabBtn = document.createElement('button');
-  tabBtn.className = 'tab-btn';
-  tabBtn.textContent = `Tab ${idx + 1}`;
-  tabBtn.onclick = () => switchTab(idx);
-  document.getElementById('tabs').appendChild(tabBtn);
-
+function initWebview() {
   const webview = document.createElement('webview');
-  webview.id = `webview-${idx}`;
-  webview.className = 'wv-hidden';
-  webview.setAttribute('partition', 'persist:discord-npc');
+  webview.id = 'webview-main';
+  // Use a stable partition for single account persistence
+  webview.setAttribute('partition', 'persist:discord-main-account');
   webview.src = 'https://discord.com/login';
-  webview.addEventListener('did-finish-load', () => onWebviewLoad(idx, webview));
+  webview.addEventListener('did-finish-load', () => onWebviewLoad(webview));
   document.getElementById('content').appendChild(webview);
-
-  switchTab(idx);
 }
 
-function switchTab(idx) {
-  currentTab = idx;
-  document.querySelectorAll('.tab-btn').forEach((btn, i) => {
-    btn.classList.toggle('active', i === idx);
-  });
-  document.querySelectorAll('#content webview').forEach((wv, i) => {
-    wv.classList.toggle('wv-hidden', i !== idx);
-  });
-  updateStatus();
-}
-
-function onWebviewLoad(idx, webview) {
+function onWebviewLoad(webview) {
   const wcId = webview.getWebContentsId();
-  window.api.registerWebview(idx, wcId);
-  tabs[idx].registered = true;
+  window.api.registerWebview(0, wcId);
+  isWebviewRegistered = true;
   updateStatus();
 }
 
 function updateStatus() {
-  const entry = tabs[currentTab];
   const statusEl = document.getElementById('status-text');
-  if (entry && entry.registered) {
+  if (isWebviewRegistered) {
     statusEl.textContent = 'Ready';
     statusEl.style.color = '#4ecca3';
   } else {
@@ -63,19 +39,20 @@ function updateStatus() {
 }
 
 function startBot() {
+  if (!isWebviewRegistered) return;
   const config = getConfig();
-  window.api.botUpdateConfig(currentTab, config);
-  window.api.botStart(currentTab);
+  window.api.botUpdateConfig(0, config);
+  window.api.botStart(0);
   isAutoRunning = true;
   updateToggleButton();
-  appendLog(`[System] Bot started for Tab ${currentTab + 1}`);
+  appendLog(`[System] Bot started`);
 }
 
 function stopBot() {
-  window.api.botStop(currentTab);
+  window.api.botStop(0);
   isAutoRunning = false;
   updateToggleButton();
-  appendLog(`[System] Bot stopped for Tab ${currentTab + 1}`);
+  appendLog(`[System] Bot stopped`);
 }
 
 function toggleBot() {
@@ -129,8 +106,4 @@ function appendLog(msg) {
 function clearLogs() {
   window.api.clearLogs();
   document.getElementById('log-area').innerHTML = '';
-}
-
-function addNewTab() {
-  addTab();
 }

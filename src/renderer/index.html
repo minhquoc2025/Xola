@@ -24,23 +24,7 @@
     }
     #bar h1 { font-size: 14px; color: #e94560; white-space: nowrap; }
 
-    #tabs {
-      display: flex; gap: 2px; padding: 4px 8px;
-      background: #0d1b2e; border-bottom: 1px solid #1a2a4e;
-      flex-shrink: 0; overflow-x: auto;
-    }
-    .tab-btn {
-      background: #1a1a2e; color: #888; border: 1px solid #2a2a4e;
-      padding: 4px 12px; border-radius: 4px 4px 0 0; cursor: pointer;
-      font-size: 11px; white-space: nowrap;
-    }
-    .tab-btn:hover { background: #2a2a4a; color: #ccc; }
-    .tab-btn.active { background: #0f3460; color: #fff; border-color: #0f3460; }
-    #btn-add-tab {
-      background: #1a5a2e; color: #fff; border: 1px solid #2a7a3e;
-      padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px;
-    }
-    #btn-add-tab:hover { background: #2a7a3e; }
+
 
     #content {
       flex: 1; position: relative; background: #0a0a1a;
@@ -124,9 +108,7 @@
   <div id="bar">
     <h1>Discord NPC Auto</h1>
   </div>
-  <div id="tabs">
-    <button id="btn-add-tab" onclick="addNewTab()">+ Add Tab</button>
-  </div>
+
   <div id="content"></div>
   <div id="control-panel">
     <div id="config-section" class="panel-section">
@@ -145,7 +127,7 @@
       </div>
       <div class="config-field">
         <label for="button-delay">Button Delay (sec)</label>
-        <input id="button-delay" type="number" value="1" min="0.5" max="10" step="0.5">
+        <input id="button-delay" type="number" value="5" min="0.5" max="10" step="0.5">
       </div>
       <div class="config-field">
         <label for="click-pattern">Click Pattern (vi tri)</label>
@@ -166,8 +148,8 @@
         <span id="status-text" class="status-value">Not connected</span>
       </div>
       <div class="status-row">
-        <span class="status-label">Current Tab:</span>
-        <span id="current-tab" class="status-value">1</span>
+        <span class="status-label">Mode:</span>
+        <span id="current-tab" class="status-value">Single Account</span>
       </div>
     </div>
 

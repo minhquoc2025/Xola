@@ -51,13 +51,15 @@ class NpcBot {
   start() {
     if (this.isRunning) return;
     this.isRunning = true;
+    this.runId = Date.now();
     this.battleCount = 0;
     this.log('Bot started');
-    this.mainLoop();
+    this.mainLoop(this.runId);
   }
 
   stop() {
     this.isRunning = false;
+    this.runId = null;
     if (this.timeoutId) {
       clearTimeout(this.timeoutId);
       this.timeoutId = null;
@@ -65,8 +67,8 @@ class NpcBot {
     this.log('Bot stopped');
   }
 
-  async mainLoop() {
-    if (!this.isRunning) return;
+  async mainLoop(runId) {
+    if (!this.isRunning || this.runId !== runId) return;
 
     if (this.battleCount >= this.totalBattles) {
       this.log('=== COMPLETED ALL BATTLES ===');
@@ -80,9 +82,28 @@ class NpcBot {
     await this.sendNpcCommand();
     await this.delay(4000);
 
+    const cooldownSec = await this.checkCooldownMessage();
+    if (cooldownSec > 0) {
+      this.log(`Bot is on cooldown. Waiting for ${cooldownSec}s before retrying...`);
+      await this.cooldownWait(cooldownSec, runId);
+      if (this.isRunning && this.runId === runId) this.mainLoop(runId);
+      return;
+    }
+
+    const isAlreadyFighting = await this.checkAlreadyFighting();
+    if (isAlreadyFighting) {
+      this.log('Phát hiện trận đánh đang dở! Đang cuộn lên để tìm nút...');
+    }
+
     // Step 2: Click buttons in pattern until battle ends
-    const battleEnded = await this.clickButtonsUntilEnd();
-    if (!battleEnded) {
+    const battleResult = await this.clickButtonsUntilEnd(isAlreadyFighting, runId);
+    if (typeof battleResult === 'object' && battleResult.type === 'cooldown') {
+      this.log(`Bot is on cooldown. Waiting for ${battleResult.sec}s before retrying...`);
+      await this.cooldownWait(battleResult.sec, runId);
+      if (this.isRunning && this.runId === runId) this.mainLoop(runId);
+      return;
+    }
+    if (!battleResult) {
       this.log('Stopped during battle');
       return;
     }
@@ -92,22 +113,22 @@ class NpcBot {
 
     // Step 3: Wait 2 minutes then continue
     if (this.battleCount < this.totalBattles) {
-      await this.cooldownWait();
+      await this.cooldownWait(null, runId);
     }
 
     // Step 4: Loop again
-    if (this.isRunning) {
-      this.mainLoop();
+    if (this.isRunning && this.runId === runId) {
+      this.mainLoop(runId);
     }
   }
 
-  async cooldownWait() {
-    const totalSec = Math.floor(this.cooldownMs / 1000);
+  async cooldownWait(overrideSec = null, runId = null) {
+    const totalSec = overrideSec !== null ? overrideSec : Math.floor(this.cooldownMs / 1000);
     this.log(`\n--- Waiting ${totalSec}s before next battle ---`);
 
     // Countdown every 10 seconds
     let remaining = totalSec;
-    while (remaining > 0 && this.isRunning) {
+    while (remaining > 0 && this.isRunning && this.runId === runId) {
       const showAt = [120, 90, 60, 30, 10, 5, 4, 3, 2, 1];
       if (showAt.includes(remaining) || remaining === totalSec) {
         this.log(`Cooldown: ${remaining}s remaining...`);
@@ -117,12 +138,29 @@ class NpcBot {
       remaining -= Math.floor(sleepMs / 1000);
     }
 
-    if (this.isRunning) {
+    if (this.isRunning && this.runId === runId) {
       this.log('Cooldown finished! Starting next battle...\n');
     }
   }
 
   async sendNpcCommand() {
+    // Record max message ID and tag existing messages so we only process new messages
+    await this.exec(`(() => {
+      let maxId = 0n;
+      document.querySelectorAll('[role="article"]').forEach(m => {
+        m.setAttribute('data-bot-seen', 'true');
+        if (m.id) {
+          const parts = m.id.split('-');
+          const idStr = parts[parts.length - 1];
+          try {
+            const id = BigInt(idStr);
+            if (id > maxId) maxId = id;
+          } catch(e) {}
+        }
+      });
+      window.botMaxMsgId = maxId.toString();
+    })()`);
+
     const cmd = `!npc ${this.npcNumber}`;
     this.log(`Typing: ${cmd}`);
 
@@ -176,15 +214,29 @@ class NpcBot {
 
   async checkBattleEnd() {
     return await this.exec(`(() => {
+      const maxIdStr = window.botMaxMsgId || '0';
+      const maxId = BigInt(maxIdStr);
       const msgs = document.querySelectorAll('[role="article"]');
       const recent = Array.from(msgs).slice(-10);
       for (const msg of recent.reverse()) {
+        if (msg.getAttribute('data-bot-seen') === 'true') continue;
+
+        if (msg.id) {
+          const parts = msg.id.split('-');
+          const idStr = parts[parts.length - 1];
+          try {
+            const id = BigInt(idStr);
+            if (id <= maxId) continue;
+          } catch(e) {}
+        }
+
         const text = msg.textContent.toLowerCase();
-        if (text.includes('battle ended') || text.includes('ket thuc') ||
-            text.includes('victory') || text.includes('defeat') ||
-            text.includes('you won') || text.includes('you lost') ||
-            text.includes('experience') || text.includes('level up') ||
-            text.includes('fainted') || text.includes('hp: 0')) {
+        if (text.includes('kết quả trận đấu') || text.includes('battle ended') || text.includes('ket thuc') || text.includes('kết thúc')) {
+          msg.setAttribute('data-bot-seen', 'true');
+          if (msg.id) {
+            const parts = msg.id.split('-');
+            window.botMaxMsgId = parts[parts.length - 1];
+          }
           return true;
         }
       }
@@ -192,17 +244,94 @@ class NpcBot {
     })()`);
   }
 
-  async clickButtonsUntilEnd() {
+  async checkCooldownMessage() {
+    return await this.exec(`(() => {
+      const maxIdStr = window.botMaxMsgId || '0';
+      const maxId = BigInt(maxIdStr);
+      const msgs = document.querySelectorAll('[role="article"]');
+      const recent = Array.from(msgs).slice(-5);
+      for (const msg of recent.reverse()) {
+        if (msg.getAttribute('data-bot-seen') === 'true') continue;
+
+        if (msg.id) {
+          const parts = msg.id.split('-');
+          const idStr = parts[parts.length - 1];
+          try {
+            const id = BigInt(idStr);
+            if (id <= maxId) continue;
+          } catch(e) {}
+        }
+
+        const text = msg.textContent.toLowerCase();
+        if (text.includes('hồi chiêu') || text.includes('cooldown')) {
+          msg.setAttribute('data-bot-seen', 'true');
+          if (msg.id) {
+            const parts = msg.id.split('-');
+            window.botMaxMsgId = parts[parts.length - 1];
+          }
+          const match = text.match(/(?:(\\d+)\\s*[pm])?\\s*(\\d+)\\s*s/);
+          if (match) {
+            let sec = 0;
+            if (match[1]) sec += parseInt(match[1]) * 60;
+            if (match[2]) sec += parseInt(match[2]);
+            return sec;
+          }
+          return 120;
+        }
+      }
+      return -1;
+    })()`);
+  }
+
+  async checkAlreadyFighting() {
+    return await this.exec(`(() => {
+      const maxIdStr = window.botMaxMsgId || '0';
+      const maxId = BigInt(maxIdStr);
+      const msgs = document.querySelectorAll('[role="article"]');
+      const recent = Array.from(msgs).slice(-5);
+      for (const msg of recent.reverse()) {
+        if (msg.getAttribute('data-bot-seen') === 'true') continue;
+
+        if (msg.id) {
+          const parts = msg.id.split('-');
+          const idStr = parts[parts.length - 1];
+          try {
+            const id = BigInt(idStr);
+            if (id <= maxId) continue;
+          } catch(e) {}
+        }
+
+        const text = msg.textContent.toLowerCase();
+        if (text.includes('đang đánh npc rồi') || text.includes('already fighting')) {
+          msg.setAttribute('data-bot-seen', 'true');
+          if (msg.id) {
+            const parts = msg.id.split('-');
+            window.botMaxMsgId = parts[parts.length - 1];
+          }
+          return true;
+        }
+      }
+      return false;
+    })()`);
+  }
+
+  async clickButtonsUntilEnd(isResuming = false, runId = null) {
     let patternIndex = 0;
     let noButtonsCount = 0;
     let lastLogCount = 0;
 
-    while (this.isRunning) {
+    while (this.isRunning && this.runId === runId) {
       // Check if battle ended
       const ended = await this.checkBattleEnd();
       if (ended) {
         this.log('>>> BATTLE ENDED detected! <<<');
         return true;
+      }
+
+      const cooldownSec = await this.checkCooldownMessage();
+      if (cooldownSec > 0) {
+        this.log(`>>> COOLDOWN detected: ${cooldownSec}s <<<`);
+        return { type: 'cooldown', sec: cooldownSec };
       }
 
       // Find skill buttons
@@ -221,12 +350,22 @@ class NpcBot {
       if (!allButtons || allButtons.length === 0) {
         noButtonsCount++;
         if (noButtonsCount > 30) {
-          this.log('No buttons found for too long, stopping...');
-          return false;
+          this.log('No buttons found for too long, assuming battle ended...');
+          return true;
         }
         if (noButtonsCount % 10 === 0) {
           this.log(`Waiting for buttons... (${noButtonsCount})`);
         }
+        
+        if (isResuming && noButtonsCount % 3 === 0) {
+          await this.exec(`(() => {
+            const scrollers = document.querySelectorAll('div[class*="scroller_"]');
+            for (const s of scrollers) {
+              if (s.scrollHeight > s.clientHeight) s.scrollBy(0, -600);
+            }
+          })()`);
+        }
+        
         await this.delay(1000);
         continue;
       }
@@ -244,9 +383,19 @@ class NpcBot {
       if (skillButtons.length === 0) {
         noButtonsCount++;
         if (noButtonsCount > 30) {
-          this.log('No skill buttons found, stopping...');
-          return false;
+          this.log('No skill buttons found for too long, assuming battle ended...');
+          return true;
         }
+
+        if (isResuming && noButtonsCount % 3 === 0) {
+          await this.exec(`(() => {
+            const scrollers = document.querySelectorAll('div[class*="scroller_"]');
+            for (const s of scrollers) {
+              if (s.scrollHeight > s.clientHeight) s.scrollBy(0, -600);
+            }
+          })()`);
+        }
+
         await this.delay(1000);
         continue;
       }
