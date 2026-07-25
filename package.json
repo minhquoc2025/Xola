@@ -1,0 +1,29 @@
+{
+  "name": "discord-npc-auto",
+  "version": "1.0.0",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win dir"
+  },
+  "build": {
+    "appId": "com.discord.npc.auto",
+    "productName": "Discord NPC Auto",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": ["dir"],
+      "sign": false
+    }
+  },
+  "description": "Discord NPC Auto Clicker",
+  "devDependencies": {
+    "electron": "^41.7.1",
+    "electron-builder": "^25.1.8"
+  }
+}
