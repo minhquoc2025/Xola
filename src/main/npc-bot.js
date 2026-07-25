@@ -10,6 +10,11 @@ class NpcBot {
     this.cooldownMs = 120000; // 2 minutes
     this.buttonDelayMs = 1000;
     this.clickPattern = [3, 2, 1]; // Kich Doc -> Pha Giap -> Kiem Co Ban
+    // Auto Climb fields
+    this.autoClimb = false;
+    this.targetMaxNpc = 60;
+    this.climbWinsNeeded = 0;  // wins still needed for current NPC before climbing
+    this.climbWinsDone = 0;    // wins done in current farming session
   }
 
   ts() {
@@ -46,6 +51,8 @@ class NpcBot {
     if (config.cooldownMs !== undefined) this.cooldownMs = config.cooldownMs;
     if (config.buttonDelayMs !== undefined) this.buttonDelayMs = config.buttonDelayMs;
     if (config.clickPattern !== undefined) this.clickPattern = config.clickPattern;
+    if (config.autoClimb !== undefined) this.autoClimb = config.autoClimb;
+    if (config.targetMaxNpc !== undefined) this.targetMaxNpc = config.targetMaxNpc;
   }
 
   start() {
@@ -53,7 +60,12 @@ class NpcBot {
     this.isRunning = true;
     this.runId = Date.now();
     this.battleCount = 0;
+    this.climbWinsNeeded = 0;
+    this.climbWinsDone = 0;
     this.log('Bot started');
+    if (this.autoClimb) {
+      this.log(`=== AUTO CLIMB MODE: NPC ${this.npcNumber} → NPC ${this.targetMaxNpc} ===`);
+    }
     this.mainLoop(this.runId);
   }
 
@@ -70,36 +82,87 @@ class NpcBot {
   async mainLoop(runId) {
     if (!this.isRunning || this.runId !== runId) return;
 
-    if (this.battleCount >= this.totalBattles) {
+    // Normal mode: stop after totalBattles
+    if (!this.autoClimb && this.battleCount >= this.totalBattles) {
       this.log('=== COMPLETED ALL BATTLES ===');
       this.stop();
       return;
     }
 
-    this.log(`\n=== Battle ${this.battleCount + 1}/${this.totalBattles} ===`);
+    // Auto Climb mode: stop when reached target NPC
+    if (this.autoClimb && this.npcNumber > this.targetMaxNpc) {
+      this.log(`=== AUTO CLIMB COMPLETE! Đã mở khóa đến NPC ${this.targetMaxNpc} ===`);
+      this.stop();
+      return;
+    }
+
+    const label = this.autoClimb
+      ? `NPC ${this.npcNumber} (climb ${this.climbWinsDone}/${this.climbWinsNeeded > 0 ? this.climbWinsNeeded : '?'} wins)`
+      : `Battle ${this.battleCount + 1}/${this.totalBattles}`;
+    this.log(`\n=== ${label} ===`);
 
     // Step 1: Send !npc command
     await this.sendNpcCommand();
     await this.delay(4000);
 
+    if (!this.isRunning || this.runId !== runId) return;
+
+    // Check cooldown
     const cooldownSec = await this.checkCooldownMessage();
     if (cooldownSec > 0) {
-      this.log(`Bot is on cooldown. Waiting for ${cooldownSec}s before retrying...`);
+      // Auto Climb: check lock BEFORE waiting cooldown
+      if (this.autoClimb) {
+        const lockInfo = await this.checkLockedMessage();
+        if (lockInfo) {
+          this.log(`🔒 NPC ${this.npcNumber} bị khóa! Cần thắng NPC ${lockInfo.requiredNpc} thêm ${lockInfo.winsLeft} lần.`);
+          this.npcNumber = lockInfo.requiredNpc;
+          this.climbWinsNeeded = lockInfo.winsLeft;
+          this.climbWinsDone = 0;
+          if (this.isRunning && this.runId === runId) this.mainLoop(runId);
+          return;
+        }
+      }
+      this.log(`Hồi chiêu! Chờ ${cooldownSec}s...`);
       await this.cooldownWait(cooldownSec, runId);
       if (this.isRunning && this.runId === runId) this.mainLoop(runId);
       return;
     }
 
-    const isAlreadyFighting = await this.checkAlreadyFighting();
-    if (isAlreadyFighting) {
-      this.log('Phát hiện trận đánh đang dở! Đang cuộn lên để tìm nút...');
+    // Auto Climb: check if NPC is locked
+    if (this.autoClimb) {
+      const lockInfo = await this.checkLockedMessage();
+      if (lockInfo) {
+        this.log(`🔒 NPC ${this.npcNumber} bị khóa! Cần thắng NPC ${lockInfo.requiredNpc} thêm ${lockInfo.winsLeft} lần.`);
+        this.npcNumber = lockInfo.requiredNpc;
+        this.climbWinsNeeded = lockInfo.winsLeft;
+        this.climbWinsDone = 0;
+        if (this.isRunning && this.runId === runId) this.mainLoop(runId);
+        return;
+      }
     }
 
-    // Step 2: Click buttons in pattern until battle ends
+    // Check already fighting
+    const isAlreadyFighting = await this.checkAlreadyFighting();
+    if (isAlreadyFighting) {
+      this.log('⚔️ Phát hiện trận đang dở! Đang tìm nút...');
+    }
+
+    // Step 2: Click buttons until battle ends
     const battleResult = await this.clickButtonsUntilEnd(isAlreadyFighting, runId);
+
+    if (!this.isRunning || this.runId !== runId) return;
+
     if (typeof battleResult === 'object' && battleResult.type === 'cooldown') {
-      this.log(`Bot is on cooldown. Waiting for ${battleResult.sec}s before retrying...`);
+      this.log(`Hồi chiêu trong trận! Chờ ${battleResult.sec}s...`);
       await this.cooldownWait(battleResult.sec, runId);
+      if (this.isRunning && this.runId === runId) this.mainLoop(runId);
+      return;
+    }
+    if (typeof battleResult === 'object' && battleResult.type === 'locked') {
+      this.log(`🔒 NPC ${this.npcNumber} bị khóa! Cần thắng NPC ${battleResult.requiredNpc} thêm ${battleResult.winsLeft} lần.`);
+      this.npcNumber = battleResult.requiredNpc;
+      this.climbWinsNeeded = battleResult.winsLeft;
+      this.climbWinsDone = 0;
       if (this.isRunning && this.runId === runId) this.mainLoop(runId);
       return;
     }
@@ -108,15 +171,75 @@ class NpcBot {
       return;
     }
 
+    // When timeout (no buttons found = unknown result), check if NPC is locked
+    const isUnknown = typeof battleResult === 'object' && battleResult.result === 'unknown';
+    if (isUnknown && this.autoClimb) {
+      // Re-check for lock message (might have appeared but missed earlier)
+      const lockInfo = await this.checkLockedMessage();
+      if (lockInfo) {
+        this.log(`🔒 NPC ${this.npcNumber} bị khóa! Cần thắng NPC ${lockInfo.requiredNpc} thêm ${lockInfo.winsLeft} lần.`);
+        this.npcNumber = lockInfo.requiredNpc;
+        this.climbWinsNeeded = lockInfo.winsLeft;
+        this.climbWinsDone = 0;
+        if (this.isRunning && this.runId === runId) this.mainLoop(runId);
+        return;
+      }
+      // No lock message found but no buttons either → NPC likely locked or inaccessible
+      // Step back to previous NPC
+      if (this.npcNumber > 1) {
+        const prevNpc = this.npcNumber - 1;
+        this.log(`⚠️ NPC ${this.npcNumber}: không có nút chiến đấu → có thể bị khóa. Quay lại NPC ${prevNpc} farm thêm...`);
+        this.npcNumber = prevNpc;
+        this.climbWinsNeeded = 15; // farm mặc định 15 trận, sẽ được cập nhật khi nhận lock msg thật
+        this.climbWinsDone = 0;
+        await this.cooldownWait(null, runId);
+        if (this.isRunning && this.runId === runId) this.mainLoop(runId);
+        return;
+      }
+    }
+
+    // Determine win/loss from { type: 'ended', result: 'win'|'loss'|'unknown' }
+    const isWin = (typeof battleResult === 'object' && battleResult.type === 'ended')
+      ? battleResult.result === 'win'
+      : true; // fallback
+    this.log(isWin ? '✅ THẮNG!' : '❌ THUA!');
+
+    if (this.autoClimb) {
+      if (isWin) {
+        this.climbWinsDone++;
+
+        if (this.climbWinsNeeded > 0) {
+          // Farming mode: counting wins toward a specific target
+          this.log(`Tiến độ farm: ${this.climbWinsDone}/${this.climbWinsNeeded} wins (NPC ${this.npcNumber})`);
+          if (this.climbWinsDone >= this.climbWinsNeeded) {
+            // Farmed enough — try climbing back up
+            this.npcNumber++;
+            this.climbWinsNeeded = 0;
+            this.climbWinsDone = 0;
+            this.log(`🚀 Đủ điều kiện! Leo lên thử NPC ${this.npcNumber}...`);
+          }
+        } else {
+          // Exploration mode: no lock detected yet, try next NPC after every win
+          this.log(`✅ Thắng NPC ${this.npcNumber}! Thử leo lên NPC ${this.npcNumber + 1}...`);
+          this.npcNumber++;
+          this.climbWinsDone = 0;
+        }
+      } else {
+        // Lost: stay on same NPC and retry (don't advance)
+        this.log(`❌ Thua NPC ${this.npcNumber}. Thử lại...`);
+      }
+      // Always cooldown then retry
+      await this.cooldownWait(null, runId);
+      if (this.isRunning && this.runId === runId) this.mainLoop(runId);
+      return;
+    }
+
+    // Normal mode
     this.battleCount++;
     this.log(`Battle ${this.battleCount}/${this.totalBattles} completed!`);
-
-    // Step 3: Wait 2 minutes then continue
     if (this.battleCount < this.totalBattles) {
       await this.cooldownWait(null, runId);
     }
-
-    // Step 4: Loop again
     if (this.isRunning && this.runId === runId) {
       this.mainLoop(runId);
     }
@@ -217,7 +340,7 @@ class NpcBot {
       const maxIdStr = window.botMaxMsgId || '0';
       const maxId = BigInt(maxIdStr);
       const msgs = document.querySelectorAll('[role="article"]');
-      const recent = Array.from(msgs).slice(-10);
+      const recent = Array.from(msgs).slice(-15);
       for (const msg of recent.reverse()) {
         if (msg.getAttribute('data-bot-seen') === 'true') continue;
 
@@ -231,16 +354,70 @@ class NpcBot {
         }
 
         const text = msg.textContent.toLowerCase();
-        if (text.includes('kết quả trận đấu') || text.includes('battle ended') || text.includes('ket thuc') || text.includes('kết thúc')) {
+        const rawText = msg.textContent;
+        if (text.includes('kết quả trận đấu') || text.includes('battle ended') || text.includes('kết thúc')) {
           msg.setAttribute('data-bot-seen', 'true');
           if (msg.id) {
             const parts = msg.id.split('-');
             window.botMaxMsgId = parts[parts.length - 1];
           }
-          return true;
+          // Determine win or loss
+          const isWin = text.includes('chiến thắng') || text.includes('thắng npc') || 
+                        rawText.includes('✅') || text.includes('thắng!') ||
+                        rawText.includes('🥇') || rawText.includes('thắng');
+          const isLoss = text.includes('thất bại') || text.includes('thua') ||
+                         rawText.includes('❌') || rawText.includes('💀');
+          const result = isLoss && !isWin ? 'loss' : 'win';
+          return { ended: true, result };
         }
       }
-      return false;
+      return null;
+    })()`);
+  }
+
+  async checkLockedMessage() {
+    return await this.exec(`(() => {
+      const maxIdStr = window.botMaxMsgId || '0';
+      const maxId = BigInt(maxIdStr);
+      const msgs = document.querySelectorAll('[role="article"]');
+      const recent = Array.from(msgs).slice(-8);
+      for (const msg of recent.reverse()) {
+        // Skip already-seen messages using BigInt ID comparison
+        if (msg.id) {
+          const parts = msg.id.split('-');
+          const idStr = parts[parts.length - 1];
+          try {
+            const id = BigInt(idStr);
+            if (id <= maxId) continue;
+          } catch(e) {}
+        } else if (msg.getAttribute('data-bot-seen') === 'true') {
+          continue;
+        }
+
+        const text = msg.textContent;
+        const lockMatch = text.match(/bị khóa/i);
+        if (!lockMatch) continue;
+
+        msg.setAttribute('data-bot-seen', 'true');
+
+        // Extract required NPC number - "Cần giết NPC X"
+        const npcMatch = text.match(/cần giết npc (\d+)/i);
+        const requiredNpc = npcMatch ? parseInt(npcMatch[1]) : null;
+
+        // Extract total required and already done - "X lần (đã giết: Y)"
+        const progressMatch = text.match(/(\d+) lần.*đã giết:\s*(\d+)/i);
+        let winsLeft = 15; // fallback
+        if (progressMatch) {
+          const total = parseInt(progressMatch[1]);
+          const done = parseInt(progressMatch[2]);
+          winsLeft = Math.max(1, total - done);
+        }
+
+        if (requiredNpc) {
+          return { requiredNpc, winsLeft };
+        }
+      }
+      return null;
     })()`);
   }
 
@@ -322,14 +499,22 @@ class NpcBot {
 
     while (this.isRunning && this.runId === runId) {
       // Check if battle ended
-      const ended = await this.checkBattleEnd();
-      if (ended) {
-        this.log('>>> BATTLE ENDED detected! <<<');
-        return true;
+      const battleEndResult = await this.checkBattleEnd();
+      if (battleEndResult && battleEndResult.ended) {
+        this.log(`>>> BATTLE ENDED: ${battleEndResult.result === 'win' ? '✅ THẮNG' : '❌ THUA'} <<<`);
+        return { type: 'ended', result: battleEndResult.result };
       }
 
       const cooldownSec = await this.checkCooldownMessage();
       if (cooldownSec > 0) {
+        // Auto Climb: check lock BEFORE returning cooldown
+        if (this.autoClimb) {
+          const lockInfo = await this.checkLockedMessage();
+          if (lockInfo) {
+            this.log(`>>> LOCK detected: NPC ${lockInfo.requiredNpc} need ${lockInfo.winsLeft} more wins <<<`);
+            return { type: 'locked', requiredNpc: lockInfo.requiredNpc, winsLeft: lockInfo.winsLeft };
+          }
+        }
         this.log(`>>> COOLDOWN detected: ${cooldownSec}s <<<`);
         return { type: 'cooldown', sec: cooldownSec };
       }
@@ -351,7 +536,7 @@ class NpcBot {
         noButtonsCount++;
         if (noButtonsCount > 30) {
           this.log('No buttons found for too long, assuming battle ended...');
-          return true;
+          return { type: 'ended', result: 'unknown' };
         }
         if (noButtonsCount % 10 === 0) {
           this.log(`Waiting for buttons... (${noButtonsCount})`);
@@ -384,7 +569,7 @@ class NpcBot {
         noButtonsCount++;
         if (noButtonsCount > 30) {
           this.log('No skill buttons found for too long, assuming battle ended...');
-          return true;
+          return { type: 'ended', result: 'unknown' };
         }
 
         if (isResuming && noButtonsCount % 3 === 0) {
@@ -458,6 +643,10 @@ class NpcBot {
       npcNumber: this.npcNumber,
       cooldownMs: this.cooldownMs,
       clickPattern: this.clickPattern,
+      autoClimb: this.autoClimb,
+      targetMaxNpc: this.targetMaxNpc,
+      climbWinsNeeded: this.climbWinsNeeded,
+      climbWinsDone: this.climbWinsDone,
     };
   }
 }

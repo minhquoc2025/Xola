@@ -48,7 +48,7 @@
 
     #config-section {
       flex: 1; display: grid;
-      grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+      grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1fr 1fr;
       gap: 8px; align-content: start;
     }
     .config-field label {
@@ -132,6 +132,17 @@
       <div class="config-field">
         <label for="click-pattern">Click Pattern (vi tri)</label>
         <input id="click-pattern" type="text" value="3,2,1" placeholder="3,2,1">
+      </div>
+      <div class="config-field" style="border-left:1px solid #1a2a4e;padding-left:10px;">
+        <label style="color:#e94560;font-weight:600;">🚀 AUTO CLIMB</label>
+        <label style="display:flex;align-items:center;gap:6px;margin-top:4px;cursor:pointer;">
+          <input id="auto-climb" type="checkbox" style="width:14px;height:14px;">
+          <span style="font-size:11px;color:#ccc;">Bật Auto Climb</span>
+        </label>
+      </div>
+      <div class="config-field">
+        <label for="target-max-npc">Target NPC (đích)</label>
+        <input id="target-max-npc" type="number" value="60" min="1" max="999">
       </div>
     </div>
 
