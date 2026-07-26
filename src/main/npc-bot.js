@@ -492,10 +492,107 @@ class NpcBot {
     })()`);
   }
 
+  // Scan ALL buttons on screen with full context for debugging
+  async scanAllButtons() {
+    return await this.exec(`(() => {
+      const allBtns = document.querySelectorAll('button[role="button"]');
+      const result = [];
+      allBtns.forEach((btn, idx) => {
+        const text = btn.textContent.trim();
+        if (text.length === 0 || btn.offsetParent === null) return;
+
+        // Get context: parent message info
+        const msg = btn.closest('[role="article"]');
+        const msgId = msg ? msg.id : null;
+        const msgText = msg ? msg.textContent.substring(0, 80) : '';
+
+        result.push({
+          idx,
+          text,
+          textLen: text.length,
+          msgId: msgId || 'none',
+          msgPreview: msgText
+        });
+      });
+      return result;
+    })()`);
+  }
+
+  // Find skill buttons that belong to battle messages
+  // Strategy: find the LAST message with buttons, those are battle skills
+  async findBattleButtons() {
+    return await this.exec(`(() => {
+      // Get all messages, find ones with buttons
+      const msgs = document.querySelectorAll('[role="article"]');
+      let battleMsg = null;
+      let battleButtons = [];
+
+      // Check last 10 messages for one that has buttons
+      const recentMsgs = Array.from(msgs).slice(-10).reverse();
+      for (const msg of recentMsgs) {
+        const btns = msg.querySelectorAll('button[role="button"]');
+        if (btns.length > 0) {
+          battleMsg = msg;
+          break;
+        }
+      }
+
+      if (!battleMsg) return { buttons: [], msgId: 'none', msgPreview: '' };
+
+      // Get all visible buttons in this message
+      const btns = battleMsg.querySelectorAll('button[role="button"]');
+      btns.forEach((btn, idx) => {
+        const text = btn.textContent.trim();
+        if (text.length > 0 && btn.offsetParent !== null) {
+          battleButtons.push({ idx, text });
+        }
+      });
+
+      const msgId = battleMsg.id || 'unknown';
+      const msgPreview = battleMsg.textContent.substring(0, 100);
+
+      return { buttons: battleButtons, msgId, msgPreview };
+    })()`);
+  }
+
+  // Click a specific skill button (by index) in the last message that has buttons
+  async clickSkillButton(btnIndex) {
+    return await this.exec(`(() => {
+      // Find the last message with buttons
+      const msgs = document.querySelectorAll('[role="article"]');
+      const recentMsgs = Array.from(msgs).slice(-10).reverse();
+      let targetMsg = null;
+      for (const msg of recentMsgs) {
+        const btns = msg.querySelectorAll('button[role="button"]');
+        if (btns.length > 0) {
+          targetMsg = msg;
+          break;
+        }
+      }
+
+      if (!targetMsg) return false;
+
+      const btns = targetMsg.querySelectorAll('button[role="button"]');
+      let count = 0;
+      for (const btn of btns) {
+        const text = btn.textContent.trim();
+        if (text.length > 0 && btn.offsetParent !== null) {
+          if (count === ${btnIndex}) {
+            btn.click();
+            return true;
+          }
+          count++;
+        }
+      }
+      return false;
+    })()`);
+  }
+
   async clickButtonsUntilEnd(isResuming = false, runId = null) {
     let patternIndex = 0;
     let noButtonsCount = 0;
     let lastLogCount = 0;
+    let debugScanned = false;
 
     while (this.isRunning && this.runId === runId) {
       // Check if battle ended
@@ -519,21 +616,26 @@ class NpcBot {
         return { type: 'cooldown', sec: cooldownSec };
       }
 
-      // Find skill buttons
-      const allButtons = await this.exec(`(() => {
-        const allBtns = document.querySelectorAll('button[role="button"]');
-        const result = [];
-        allBtns.forEach((btn, idx) => {
-          const text = btn.textContent.trim();
-          if (text.length > 0 && text.length < 30 && btn.offsetParent !== null) {
-            result.push({ idx, text });
-          }
-        });
-        return result;
-      })()`);
+      // === NEW: Find battle buttons from message context ===
+      const battleInfo = await this.findBattleButtons();
 
-      if (!allButtons || allButtons.length === 0) {
+      if (!battleInfo || !battleInfo.buttons || battleInfo.buttons.length === 0) {
         noButtonsCount++;
+
+        // Debug: scan ALL buttons on first failure to help identify issue
+        if (!debugScanned && noButtonsCount === 3) {
+          debugScanned = true;
+          const allBtns = await this.scanAllButtons();
+          if (allBtns && allBtns.length > 0) {
+            this.log(`=== DEBUG: All ${allBtns.length} buttons on screen ===`);
+            allBtns.forEach(b => {
+              this.log(`  [${b.idx}] "${b.text}" (msg: ${b.msgId}, preview: ${b.msgPreview.substring(0, 40)}...)`);
+            });
+          } else {
+            this.log('=== DEBUG: No buttons found anywhere on screen ===');
+          }
+        }
+
         if (noButtonsCount > 30) {
           this.log('No buttons found for too long, assuming battle ended...');
           return { type: 'ended', result: 'unknown' };
@@ -555,77 +657,32 @@ class NpcBot {
         continue;
       }
 
-      // Filter skill buttons
-      const skillButtons = allButtons.filter(b => {
-        const t = b.text.toLowerCase();
-        if (t.includes('reaction') || t.includes('reply') || t.includes('edit')) return false;
-        if (t.includes('pin') || t.includes('more') || t.includes('attach')) return false;
-        if (t.includes('gif') || t.includes('sticker') || t.includes('emoji')) return false;
-        if (t === '' || t.length > 20) return false;
-        return true;
-      });
-
-      if (skillButtons.length === 0) {
-        noButtonsCount++;
-        if (noButtonsCount > 30) {
-          this.log('No skill buttons found for too long, assuming battle ended...');
-          return { type: 'ended', result: 'unknown' };
-        }
-
-        if (isResuming && noButtonsCount % 3 === 0) {
-          await this.exec(`(() => {
-            const scrollers = document.querySelectorAll('div[class*="scroller_"]');
-            for (const s of scrollers) {
-              if (s.scrollHeight > s.clientHeight) s.scrollBy(0, -600);
-            }
-          })()`);
-        }
-
-        await this.delay(1000);
-        continue;
-      }
-
       noButtonsCount = 0;
+      debugScanned = false;
 
-      // Log buttons found (only once)
-      if (skillButtons.length !== lastLogCount) {
-        this.log(`Found ${skillButtons.length} skills: ${skillButtons.map(b => b.text).join(' | ')}`);
-        lastLogCount = skillButtons.length;
+      // Log buttons found (only when count changes)
+      if (battleInfo.buttons.length !== lastLogCount) {
+        this.log(`Found ${battleInfo.buttons.length} skills: ${battleInfo.buttons.map(b => b.text).join(' | ')}`);
+        lastLogCount = battleInfo.buttons.length;
       }
 
       // Get current position in pattern
       const pos = this.clickPattern[patternIndex % this.clickPattern.length];
       const btnIndex = pos - 1;
 
-      if (btnIndex < skillButtons.length) {
-        const btn = skillButtons[btnIndex];
+      if (btnIndex < battleInfo.buttons.length) {
+        const btn = battleInfo.buttons[btnIndex];
         this.log(`Click [${pos}]: "${btn.text}"`);
 
-        await this.exec(`(() => {
-          const allBtns = document.querySelectorAll('button[role="button"]');
-          let skillCount = 0;
-          for (const btn of allBtns) {
-            const text = btn.textContent.trim();
-            if (text.length === 0 || text.length > 30) continue;
-            if (btn.offsetParent === null) continue;
-            const t = text.toLowerCase();
-            if (t.includes('reaction') || t.includes('reply') || t.includes('edit')) continue;
-            if (t.includes('pin') || t.includes('more') || t.includes('attach')) continue;
-            if (t.includes('gif') || t.includes('sticker') || t.includes('emoji')) continue;
-            if (t.length > 20) continue;
-            
-            if (skillCount === ${btnIndex}) {
-              btn.click();
-              return true;
-            }
-            skillCount++;
-          }
-          return false;
-        })()`);
+        // Click skill button in the battle message
+        const clicked = await this.clickSkillButton(btnIndex);
+        if (!clicked) {
+          this.log(`Failed to click button at position ${pos}`);
+        }
 
         patternIndex++;
       } else {
-        this.log(`Position ${pos} not available (only ${skillButtons.length} skills)`);
+        this.log(`Position ${pos} not available (only ${battleInfo.buttons.length} skills)`);
         patternIndex = 0;
       }
 
