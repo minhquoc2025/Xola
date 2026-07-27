@@ -8,6 +8,7 @@ class NpcBot {
     this.totalBattles = 5;
     this.npcNumber = 1;
     this.cooldownMs = 120000; // 2 minutes
+    this.defeatCooldownSec = 300; // 5 minutes wait after defeat
     this.buttonDelayMs = 1000;
     this.clickPattern = [3, 2, 1]; // Legacy fallback
     this.smartMode = true; // Always smart mode
@@ -104,6 +105,19 @@ class NpcBot {
       : `Battle ${this.battleCount + 1}/${this.totalBattles}`;
     this.log(`\n=== ${label} ===`);
 
+    // Auto Climb: check lock BEFORE sendNpcCommand updates botMaxMsgId
+    if (this.autoClimb) {
+      const lockInfo = await this.checkLockedMessage();
+      if (lockInfo) {
+        this.log(`🔒 NPC ${this.npcNumber} bị khóa! Cần thắng NPC ${lockInfo.requiredNpc} thêm ${lockInfo.winsLeft} lần.`);
+        this.npcNumber = lockInfo.requiredNpc;
+        this.climbWinsNeeded = lockInfo.winsLeft;
+        this.climbWinsDone = 0;
+        if (this.isRunning && this.runId === runId) this.mainLoop(runId);
+        return;
+      }
+    }
+
     // Step 1: Send !npc command
     await this.sendNpcCommand();
     await this.delay(4000);
@@ -187,18 +201,11 @@ class NpcBot {
         if (this.isRunning && this.runId === runId) this.mainLoop(runId);
         return;
       }
-      // No lock message found but no buttons either → NPC likely locked or inaccessible
-      // Step back to previous NPC
-      if (this.npcNumber > 1) {
-        const prevNpc = this.npcNumber - 1;
-        this.log(`⚠️ NPC ${this.npcNumber}: không có nút chiến đấu → có thể bị khóa. Quay lại NPC ${prevNpc} farm thêm...`);
-        this.npcNumber = prevNpc;
-        this.climbWinsNeeded = 15; // farm mặc định 15 trận, sẽ được cập nhật khi nhận lock msg thật
-        this.climbWinsDone = 0;
-        await this.cooldownWait(null, runId);
-        if (this.isRunning && this.runId === runId) this.mainLoop(runId);
-        return;
-      }
+      // No lock message found but no buttons either → wait and retry same NPC
+      this.log(`⚠️ NPC ${this.npcNumber}: không tìm thấy nút chiến đấu. Chờ ${this.defeatCooldownSec}s rồi thử lại...`);
+      await this.cooldownWait(this.defeatCooldownSec, runId);
+      if (this.isRunning && this.runId === runId) this.mainLoop(runId);
+      return;
     }
 
     // Determine win/loss from { type: 'ended', result: 'win'|'loss'|'unknown' }
@@ -231,17 +238,22 @@ class NpcBot {
         // Lost: stay on same NPC and retry (don't advance)
         this.log(`❌ Thua NPC ${this.npcNumber}. Thử lại...`);
       }
-      // Always cooldown then retry
-      await this.cooldownWait(null, runId);
+      // Cooldown then retry
+      const waitSec = isWin ? null : this.defeatCooldownSec;
+      await this.cooldownWait(waitSec, runId);
       if (this.isRunning && this.runId === runId) this.mainLoop(runId);
       return;
     }
 
     // Normal mode
-    this.battleCount++;
-    this.log(`Battle ${this.battleCount}/${this.totalBattles} completed!`);
+    if (isWin) {
+      this.battleCount++;
+      this.log(`Battle ${this.battleCount}/${this.totalBattles} completed!`);
+    } else {
+      this.log(`❌ Thua! Không tính vào target. Thử lại...`);
+    }
     if (this.battleCount < this.totalBattles) {
-      await this.cooldownWait(null, runId);
+      await this.cooldownWait(isWin ? null : this.defeatCooldownSec, runId);
     }
     if (this.isRunning && this.runId === runId) {
       this.mainLoop(runId);
