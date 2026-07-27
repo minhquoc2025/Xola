@@ -9,7 +9,8 @@ class NpcBot {
     this.npcNumber = 1;
     this.cooldownMs = 120000; // 2 minutes
     this.buttonDelayMs = 1000;
-    this.clickPattern = [3, 2, 1]; // Kich Doc -> Pha Giap -> Kiem Co Ban
+    this.clickPattern = [3, 2, 1]; // Legacy fallback
+    this.smartMode = true; // Always smart mode
     // Auto Climb fields
     this.autoClimb = false;
     this.targetMaxNpc = 60;
@@ -51,6 +52,7 @@ class NpcBot {
     if (config.cooldownMs !== undefined) this.cooldownMs = config.cooldownMs;
     if (config.buttonDelayMs !== undefined) this.buttonDelayMs = config.buttonDelayMs;
     if (config.clickPattern !== undefined) this.clickPattern = config.clickPattern;
+    if (config.smartMode !== undefined) this.smartMode = config.smartMode;
     if (config.autoClimb !== undefined) this.autoClimb = config.autoClimb;
     if (config.targetMaxNpc !== undefined) this.targetMaxNpc = config.targetMaxNpc;
   }
@@ -63,6 +65,7 @@ class NpcBot {
     this.climbWinsNeeded = 0;
     this.climbWinsDone = 0;
     this.log('Bot started');
+    this.log('=== SMART MODE: Đọc turn real-time ===');
     if (this.autoClimb) {
       this.log(`=== AUTO CLIMB MODE: NPC ${this.npcNumber} → NPC ${this.targetMaxNpc} ===`);
     }
@@ -492,6 +495,153 @@ class NpcBot {
     })()`);
   }
 
+  // ===== SMART MODE: Read battle state from DOM =====
+  async readBattleState() {
+    return await this.exec(`(() => {
+      const msgs = document.querySelectorAll('[role="article"]');
+      const recentMsgs = Array.from(msgs).slice(-10).reverse();
+
+      let battleMsg = null;
+      for (const msg of recentMsgs) {
+        const btns = msg.querySelectorAll('button[role="button"]');
+        if (btns.length > 0) { battleMsg = msg; break; }
+      }
+      if (!battleMsg) return null;
+
+      const text = battleMsg.textContent;
+
+      // HP
+      const hpMatch = text.match(/(\\d[\\d,.]*)\\s*\\/\\s*(\\d[\\d,.]*)\\s*\\((\\d+)%\\)/);
+      let userHpPercent = -1, userHpCurrent = -1, userHpMax = -1;
+      if (hpMatch) {
+        userHpCurrent = parseInt(hpMatch[1].replace(/[,\\.]/g, ''));
+        userHpMax = parseInt(hpMatch[2].replace(/[,\\.]/g, ''));
+        userHpPercent = parseInt(hpMatch[3]);
+      }
+
+      // Read ALL emoji data-name from embed
+      const allEmoji = Array.from(battleMsg.querySelectorAll('img[data-name]'));
+      const emojiSeq = allEmoji.map(e => (e.getAttribute('data-name') || '').toLowerCase());
+
+      // Classify
+      const isSkillIcon = (name) => /dagger|crossed_swords|sword|skull_and_crossbones|skull|green_heart|heart_green|crystal_ball|gem/.test(name);
+      const isReadyIcon = (name) => /white_check_mark|check_mark_button|heavy_check_mark|check_mark/.test(name);
+      const isCooldownIcon = (name) => /hourglass/.test(name);
+
+      // Pattern: skill1, status1, skill2, status2, ... (xen kẽ)
+      // Find the section with skill+status pairs
+      const skills = [];
+      const allText = battleMsg.textContent;
+      let lastCdSearchPos = 0; // track position for ⏳ number extraction
+
+      for (let i = 0; i < emojiSeq.length; i++) {
+        if (!isSkillIcon(emojiSeq[i])) continue;
+
+        let iconType = 'unknown';
+        const name = emojiSeq[i];
+        if (/dagger|crossed_swords|sword/.test(name)) iconType = 'sword';
+        else if (/skull/.test(name)) iconType = 'poison';
+        else if (/green_heart|heart_green/.test(name)) iconType = 'heal';
+        else if (/crystal_ball|gem/.test(name)) iconType = 'magic';
+
+        // Check NEXT emoji for status
+        let isReady = true;
+        let cooldownTurns = 0;
+        if (i + 1 < emojiSeq.length) {
+          const nextName = emojiSeq[i + 1];
+          if (isCooldownIcon(nextName)) {
+            isReady = false;
+            // Find cooldown number: search ⏳ in text starting from last position
+            const cdIdx = allText.indexOf('⏳', lastCdSearchPos);
+            if (cdIdx >= 0) {
+              lastCdSearchPos = cdIdx + 1;
+              const after = allText.substring(cdIdx + 1, cdIdx + 4);
+              const numMatch = after.match(/(\\d+)/);
+              if (numMatch) cooldownTurns = parseInt(numMatch[1]);
+            }
+          } else if (isReadyIcon(nextName)) {
+            isReady = true;
+          }
+        }
+
+        skills.push({ icon: iconType, ready: isReady, cooldownTurns });
+      }
+
+      // Fallback: if no emoji detected, use button text (assume all ready)
+      if (skills.length === 0) {
+        const btns = battleMsg.querySelectorAll('button[role="button"]');
+        btns.forEach(btn => {
+          const t = btn.textContent.trim();
+          if (t.length > 0 && btn.offsetParent !== null) {
+            let iconType = 'unknown';
+            if (t.includes('Kịch Độc')) iconType = 'poison';
+            else if (t.includes('Phá Giáp')) iconType = 'sword';
+            else if (t.includes('Hồi Phục')) iconType = 'heal';
+            else if (t.includes('Cơ Bản')) iconType = 'basic';
+            skills.push({ icon: iconType, ready: true, cooldownTurns: 0 });
+          }
+        });
+      }
+
+      // Buttons
+      const btns = battleMsg.querySelectorAll('button[role="button"]');
+      const buttonTexts = [];
+      btns.forEach(btn => {
+        const t = btn.textContent.trim();
+        if (t.length > 0 && btn.offsetParent !== null) buttonTexts.push(t);
+      });
+
+      return {
+        userHpPercent, userHpCurrent, userHpMax,
+        skills, buttonCount: buttonTexts.length, buttonTexts,
+        emojiDump: emojiSeq.slice(0, 40).join(' | ')
+      };
+    })()`);
+  }
+
+  // Choose best skill index based on battle state
+  // Returns 0-based index to click, or -1 if no skill available
+  chooseSkill(battleState) {
+    if (!battleState || !battleState.skills || battleState.skills.length === 0) {
+      return -1;
+    }
+
+    const { skills, userHpPercent, buttonCount } = battleState;
+
+    // skills[] = [sword, poison, heal] (from emoji, no basic)
+    // buttons[] = [Kiếm Cơ Bản, 🗡️ Phá Giáp, ☠️ Kịch Độc, 💚 Hồi Phục]
+    // skills[0]=sword → buttons[1], skills[1]=poison → buttons[2], skills[2]=heal → buttons[3]
+    // So buttonIndex = skillsIndex + 1
+
+    const poisonIdx = skills.findIndex(s => s.icon === 'poison');
+    const swordIdx = skills.findIndex(s => s.icon === 'sword');
+    const healIdx = skills.findIndex(s => s.icon === 'heal');
+
+    // Priority 1: 💚 (heal) if HP < 60% → heal first!
+    if (healIdx >= 0 && skills[healIdx].ready) {
+      if (userHpPercent >= 0 && userHpPercent < 60) {
+        this.log(`Smart: Chọn 💚 (button ${healIdx + 1 + 1}) - HP thấp ${userHpPercent}%`);
+        return healIdx + 1;
+      }
+    }
+
+    // Priority 2: ☠️ (poison/kill) if ready
+    if (poisonIdx >= 0 && skills[poisonIdx].ready) {
+      this.log(`Smart: Chọn ☠️ (button ${poisonIdx + 1 + 1}) - Sẵn sàng`);
+      return poisonIdx + 1;
+    }
+
+    // Priority 3: 🗡️ (sword/attack) if ready
+    if (swordIdx >= 0 && skills[swordIdx].ready) {
+      this.log(`Smart: Chọn 🗡️ (button ${swordIdx + 1 + 1}) - Sẵn sàng`);
+      return swordIdx + 1;
+    }
+
+    // Priority 4: No skill ready → fallback click skill 1 (basic attack)
+    this.log('Smart: Không có skill nào sẵn sàng → click skill 1 (Kiếm cơ bản)');
+    return 0;
+  }
+
   // Scan ALL buttons on screen with full context for debugging
   async scanAllButtons() {
     return await this.exec(`(() => {
@@ -666,24 +816,43 @@ class NpcBot {
         lastLogCount = battleInfo.buttons.length;
       }
 
-      // Get current position in pattern
-      const pos = this.clickPattern[patternIndex % this.clickPattern.length];
-      const btnIndex = pos - 1;
+      let btnIndex = -1;
 
-      if (btnIndex < battleInfo.buttons.length) {
+      if (this.smartMode) {
+        // Smart mode: read battle state and choose skill intelligently
+        const battleState = await this.readBattleState();
+        if (battleState) {
+          this.log(`Smart: HP ${battleState.userHpPercent}% (${battleState.userHpCurrent}/${battleState.userHpMax}) | Skills: ${battleState.skills.map(s => `${s.icon}(${s.ready ? '✅' : '⏳' + s.cooldownTurns})`).join(' | ')}`);
+          this.log(`Smart DEBUG emojis: ${battleState.emojiDump}`);
+          btnIndex = this.chooseSkill(battleState);
+        } else {
+          this.log('Smart: Không đọc được battle state, fallback pattern');
+        }
+      }
+
+      if (btnIndex === -1) {
+        // Legacy mode or smart mode fallback: use click pattern
+        const pos = this.clickPattern[patternIndex % this.clickPattern.length];
+        btnIndex = pos - 1;
+        if (!this.smartMode) {
+          this.log(`Pattern: chọn vị trí ${pos}`);
+        }
+      }
+
+      if (btnIndex >= 0 && btnIndex < battleInfo.buttons.length) {
         const btn = battleInfo.buttons[btnIndex];
-        this.log(`Click [${pos}]: "${btn.text}"`);
+        this.log(`Click [${btnIndex + 1}]: "${btn.text}"`);
 
         // Click skill button in the battle message
         const clicked = await this.clickSkillButton(btnIndex);
         if (!clicked) {
-          this.log(`Failed to click button at position ${pos}`);
+          this.log(`Failed to click button at position ${btnIndex + 1}`);
         }
 
-        patternIndex++;
+        if (!this.smartMode) patternIndex++;
       } else {
-        this.log(`Position ${pos} not available (only ${battleInfo.buttons.length} skills)`);
-        patternIndex = 0;
+        this.log(`Position ${btnIndex + 1} not available (only ${battleInfo.buttons.length} skills)`);
+        if (!this.smartMode) patternIndex = 0;
       }
 
       await this.delay(this.buttonDelayMs);
@@ -700,6 +869,7 @@ class NpcBot {
       npcNumber: this.npcNumber,
       cooldownMs: this.cooldownMs,
       clickPattern: this.clickPattern,
+      smartMode: this.smartMode,
       autoClimb: this.autoClimb,
       targetMaxNpc: this.targetMaxNpc,
       climbWinsNeeded: this.climbWinsNeeded,

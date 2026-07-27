@@ -75,8 +75,6 @@ function updateToggleButton() {
 }
 
 function getConfig() {
-  const patternStr = document.getElementById('click-pattern').value || '3,2,1';
-  const clickPattern = patternStr.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
   const autoClimb = document.getElementById('auto-climb').checked;
   const targetMaxNpc = parseInt(document.getElementById('target-max-npc').value) || 60;
   return {
@@ -84,7 +82,7 @@ function getConfig() {
     totalBattles: parseInt(document.getElementById('total-battles').value) || 5,
     cooldownMs: (parseInt(document.getElementById('cooldown-seconds').value) || 120) * 1000,
     buttonDelayMs: (parseFloat(document.getElementById('button-delay').value) || 1) * 1000,
-    clickPattern: clickPattern.length > 0 ? clickPattern : [3, 2, 1],
+    smartMode: true,
     autoClimb,
     targetMaxNpc,
   };
