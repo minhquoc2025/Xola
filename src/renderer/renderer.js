@@ -77,6 +77,7 @@ function updateToggleButton() {
 function getConfig() {
   const autoClimb = document.getElementById('auto-climb').checked;
   const targetMaxNpc = parseInt(document.getElementById('target-max-npc').value) || 60;
+  const username = document.getElementById('username').value.trim();
   return {
     npcNumber: parseInt(document.getElementById('npc-number').value) || 1,
     totalBattles: parseInt(document.getElementById('total-battles').value) || 5,
@@ -85,6 +86,7 @@ function getConfig() {
     smartMode: true,
     autoClimb,
     targetMaxNpc,
+    username,
   };
 }
 

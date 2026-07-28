@@ -18,6 +18,8 @@ class NpcBot {
     this.targetMaxNpc = 60;
     this.climbWinsNeeded = 0;  // wins still needed for current NPC before climbing
     this.climbWinsDone = 0;    // wins done in current farming session
+    // Group chat: filter by username
+    this.username = ''; // Empty = no filter (solo mode)
   }
 
   ts() {
@@ -65,6 +67,7 @@ class NpcBot {
     if (config.smartMode !== undefined) this.smartMode = config.smartMode;
     if (config.autoClimb !== undefined) this.autoClimb = config.autoClimb;
     if (config.targetMaxNpc !== undefined) this.targetMaxNpc = config.targetMaxNpc;
+    if (config.username !== undefined) this.username = config.username;
   }
 
   start() {
@@ -77,6 +80,9 @@ class NpcBot {
     this.processedLockIds = new Set();
     this.log('Bot started');
     this.log('=== SMART MODE: Đọc turn real-time ===');
+    if (this.username) {
+      this.log(`=== GROUP MODE: Lọc tin nhắn theo "${this.username}" ===`);
+    }
     if (this.autoClimb) {
       this.log(`=== AUTO CLIMB MODE: NPC ${this.npcNumber} → NPC ${this.targetMaxNpc} ===`);
     }
@@ -360,13 +366,18 @@ class NpcBot {
   }
 
   async checkBattleEnd() {
+    const username = this.username || '';
     return await this.exec(`(() => {
       const maxIdStr = window.botMaxMsgId || '0';
       const maxId = BigInt(maxIdStr);
+      const username = ${JSON.stringify(username)};
       const msgs = document.querySelectorAll('[role="article"]');
-      const recent = Array.from(msgs).slice(-15);
+      const recent = Array.from(msgs).slice(-30);
       for (const msg of recent.reverse()) {
         if (msg.getAttribute('data-bot-seen') === 'true') continue;
+
+        // If username is set, skip messages that don't contain it
+        if (username && !msg.textContent.includes(username)) continue;
 
         if (msg.id) {
           const parts = msg.id.split('-');
@@ -405,7 +416,7 @@ class NpcBot {
       const maxId = BigInt(maxIdStr);
       const processedIds = ${JSON.stringify(Array.from(this.processedLockIds))};
       const msgs = document.querySelectorAll('[role="article"]');
-      const recent = Array.from(msgs).slice(-8);
+      const recent = Array.from(msgs).slice(-30);
       for (const msg of recent.reverse()) {
         if (msg.id) {
           const parts = msg.id.split('-');
@@ -488,13 +499,16 @@ class NpcBot {
   }
 
   async checkCooldownMessage() {
+    const username = this.username || '';
     return await this.exec(`(() => {
       const maxIdStr = window.botMaxMsgId || '0';
       const maxId = BigInt(maxIdStr);
+      const username = ${JSON.stringify(username)};
       const msgs = document.querySelectorAll('[role="article"]');
-      const recent = Array.from(msgs).slice(-5);
+      const recent = Array.from(msgs).slice(-30);
       for (const msg of recent.reverse()) {
         if (msg.getAttribute('data-bot-seen') === 'true') continue;
+        if (username && !msg.textContent.includes(username)) continue;
 
         if (msg.id) {
           const parts = msg.id.split('-');
@@ -527,13 +541,16 @@ class NpcBot {
   }
 
   async checkAlreadyFighting() {
+    const username = this.username || '';
     return await this.exec(`(() => {
       const maxIdStr = window.botMaxMsgId || '0';
       const maxId = BigInt(maxIdStr);
+      const username = ${JSON.stringify(username)};
       const msgs = document.querySelectorAll('[role="article"]');
-      const recent = Array.from(msgs).slice(-5);
+      const recent = Array.from(msgs).slice(-30);
       for (const msg of recent.reverse()) {
         if (msg.getAttribute('data-bot-seen') === 'true') continue;
+        if (username && !msg.textContent.includes(username)) continue;
 
         if (msg.id) {
           const parts = msg.id.split('-');
@@ -560,12 +577,17 @@ class NpcBot {
 
   // ===== SMART MODE: Read battle state from DOM =====
   async readBattleState() {
+    const username = this.username || '';
     return await this.exec(`(() => {
       const msgs = document.querySelectorAll('[role="article"]');
-      const recentMsgs = Array.from(msgs).slice(-10).reverse();
+      const username = ${JSON.stringify(username)};
+      const recentMsgs = Array.from(msgs).slice(-30).reverse();
 
       let battleMsg = null;
       for (const msg of recentMsgs) {
+        // If username is set, skip messages that don't contain it
+        if (username && !msg.textContent.includes(username)) continue;
+
         const btns = msg.querySelectorAll('button[role="button"]');
         if (btns.length > 0) { battleMsg = msg; break; }
       }
@@ -745,16 +767,22 @@ class NpcBot {
 
   // Find skill buttons that belong to battle messages
   // Strategy: find the LAST message with buttons, those are battle skills
+  // If username is set, only look at messages containing the username
   async findBattleButtons() {
+    const username = this.username || '';
     return await this.exec(`(() => {
       // Get all messages, find ones with buttons
       const msgs = document.querySelectorAll('[role="article"]');
+      const username = ${JSON.stringify(username)};
       let battleMsg = null;
       let battleButtons = [];
 
-      // Check last 10 messages for one that has buttons
-      const recentMsgs = Array.from(msgs).slice(-10).reverse();
+      // Check last 30 messages (group chat can have many messages)
+      const recentMsgs = Array.from(msgs).slice(-30).reverse();
       for (const msg of recentMsgs) {
+        // If username is set, skip messages that don't contain it
+        if (username && !msg.textContent.includes(username)) continue;
+
         const btns = msg.querySelectorAll('button[role="button"]');
         if (btns.length > 0) {
           battleMsg = msg;
@@ -781,13 +809,19 @@ class NpcBot {
   }
 
   // Click a specific skill button (by index) in the last message that has buttons
+  // If username is set, only click buttons in messages containing the username
   async clickSkillButton(btnIndex) {
+    const username = this.username || '';
     return await this.exec(`(() => {
       // Find the last message with buttons
       const msgs = document.querySelectorAll('[role="article"]');
-      const recentMsgs = Array.from(msgs).slice(-10).reverse();
+      const username = ${JSON.stringify(username)};
+      const recentMsgs = Array.from(msgs).slice(-30).reverse();
       let targetMsg = null;
       for (const msg of recentMsgs) {
+        // If username is set, skip messages that don't contain it
+        if (username && !msg.textContent.includes(username)) continue;
+
         const btns = msg.querySelectorAll('button[role="button"]');
         if (btns.length > 0) {
           targetMsg = msg;
