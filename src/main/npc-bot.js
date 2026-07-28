@@ -12,6 +12,7 @@ class NpcBot {
     this.buttonDelayMs = 1000;
     this.clickPattern = [3, 2, 1]; // Legacy fallback
     this.smartMode = true; // Always smart mode
+    this.processedLockIds = new Set(); // Track processed lock message IDs
     // Auto Climb fields
     this.autoClimb = false;
     this.targetMaxNpc = 60;
@@ -47,6 +48,14 @@ class NpcBot {
     return Math.floor(Math.random() * (max - min + 1)) + min;
   }
 
+  handleLock(lockInfo) {
+    this.log(`🔒 NPC ${this.npcNumber} bị khóa! Cần thắng NPC ${lockInfo.requiredNpc} thêm ${lockInfo.winsLeft} lần.`);
+    this.npcNumber = lockInfo.requiredNpc;
+    this.climbWinsNeeded = lockInfo.winsLeft;
+    this.climbWinsDone = 0;
+    if (lockInfo.lockMsgId) this.processedLockIds.add(lockInfo.lockMsgId);
+  }
+
   updateConfig(config) {
     if (config.npcNumber !== undefined) this.npcNumber = config.npcNumber;
     if (config.totalBattles !== undefined) this.totalBattles = config.totalBattles;
@@ -65,6 +74,7 @@ class NpcBot {
     this.battleCount = 0;
     this.climbWinsNeeded = 0;
     this.climbWinsDone = 0;
+    this.processedLockIds = new Set();
     this.log('Bot started');
     this.log('=== SMART MODE: Đọc turn real-time ===');
     if (this.autoClimb) {
@@ -109,10 +119,7 @@ class NpcBot {
     if (this.autoClimb) {
       const lockInfo = await this.checkLockedMessage();
       if (lockInfo) {
-        this.log(`🔒 NPC ${this.npcNumber} bị khóa! Cần thắng NPC ${lockInfo.requiredNpc} thêm ${lockInfo.winsLeft} lần.`);
-        this.npcNumber = lockInfo.requiredNpc;
-        this.climbWinsNeeded = lockInfo.winsLeft;
-        this.climbWinsDone = 0;
+        this.handleLock(lockInfo);
         if (this.isRunning && this.runId === runId) this.mainLoop(runId);
         return;
       }
@@ -124,6 +131,16 @@ class NpcBot {
 
     if (!this.isRunning || this.runId !== runId) return;
 
+    // Auto Climb: check lock immediately after sending command
+    if (this.autoClimb) {
+      const lockInfo = await this.checkLockedMessage();
+      if (lockInfo) {
+        this.handleLock(lockInfo);
+        if (this.isRunning && this.runId === runId) this.mainLoop(runId);
+        return;
+      }
+    }
+
     // Check cooldown
     const cooldownSec = await this.checkCooldownMessage();
     if (cooldownSec > 0) {
@@ -131,10 +148,7 @@ class NpcBot {
       if (this.autoClimb) {
         const lockInfo = await this.checkLockedMessage();
         if (lockInfo) {
-          this.log(`🔒 NPC ${this.npcNumber} bị khóa! Cần thắng NPC ${lockInfo.requiredNpc} thêm ${lockInfo.winsLeft} lần.`);
-          this.npcNumber = lockInfo.requiredNpc;
-          this.climbWinsNeeded = lockInfo.winsLeft;
-          this.climbWinsDone = 0;
+          this.handleLock(lockInfo);
           if (this.isRunning && this.runId === runId) this.mainLoop(runId);
           return;
         }
@@ -149,10 +163,7 @@ class NpcBot {
     if (this.autoClimb) {
       const lockInfo = await this.checkLockedMessage();
       if (lockInfo) {
-        this.log(`🔒 NPC ${this.npcNumber} bị khóa! Cần thắng NPC ${lockInfo.requiredNpc} thêm ${lockInfo.winsLeft} lần.`);
-        this.npcNumber = lockInfo.requiredNpc;
-        this.climbWinsNeeded = lockInfo.winsLeft;
-        this.climbWinsDone = 0;
+        this.handleLock(lockInfo);
         if (this.isRunning && this.runId === runId) this.mainLoop(runId);
         return;
       }
@@ -176,10 +187,7 @@ class NpcBot {
       return;
     }
     if (typeof battleResult === 'object' && battleResult.type === 'locked') {
-      this.log(`🔒 NPC ${this.npcNumber} bị khóa! Cần thắng NPC ${battleResult.requiredNpc} thêm ${battleResult.winsLeft} lần.`);
-      this.npcNumber = battleResult.requiredNpc;
-      this.climbWinsNeeded = battleResult.winsLeft;
-      this.climbWinsDone = 0;
+      this.handleLock(battleResult);
       if (this.isRunning && this.runId === runId) this.mainLoop(runId);
       return;
     }
@@ -194,10 +202,7 @@ class NpcBot {
       // Re-check for lock message (might have appeared but missed earlier)
       const lockInfo = await this.checkLockedMessage();
       if (lockInfo) {
-        this.log(`🔒 NPC ${this.npcNumber} bị khóa! Cần thắng NPC ${lockInfo.requiredNpc} thêm ${lockInfo.winsLeft} lần.`);
-        this.npcNumber = lockInfo.requiredNpc;
-        this.climbWinsNeeded = lockInfo.winsLeft;
-        this.climbWinsDone = 0;
+        this.handleLock(lockInfo);
         if (this.isRunning && this.runId === runId) this.mainLoop(runId);
         return;
       }
@@ -283,10 +288,14 @@ class NpcBot {
 
   async sendNpcCommand() {
     // Record max message ID and tag existing messages so we only process new messages
+    // BUT preserve lock messages (🔒) so checkLockedMessage can still find them
     await this.exec(`(() => {
       let maxId = 0n;
       document.querySelectorAll('[role="article"]').forEach(m => {
-        m.setAttribute('data-bot-seen', 'true');
+        const text = m.textContent || '';
+        if (!text.includes('bị khóa')) {
+          m.setAttribute('data-bot-seen', 'true');
+        }
         if (m.id) {
           const parts = m.id.split('-');
           const idStr = parts[parts.length - 1];
@@ -394,40 +403,54 @@ class NpcBot {
     return await this.exec(`(() => {
       const maxIdStr = window.botMaxMsgId || '0';
       const maxId = BigInt(maxIdStr);
+      const processedIds = ${JSON.stringify(Array.from(this.processedLockIds))};
       const msgs = document.querySelectorAll('[role="article"]');
       const recent = Array.from(msgs).slice(-8);
       for (const msg of recent.reverse()) {
-        // Skip already-seen messages using BigInt ID comparison
         if (msg.id) {
           const parts = msg.id.split('-');
           const idStr = parts[parts.length - 1];
           try {
             const id = BigInt(idStr);
             if (id <= maxId) continue;
+            if (processedIds.includes(idStr)) continue;
           } catch(e) {}
         } else if (msg.getAttribute('data-bot-seen') === 'true') {
           continue;
         }
 
         const text = msg.textContent;
-        const lockMatch = text.match(/bị khóa/i);
-        if (!lockMatch) continue;
+        if (!text.includes('bị khóa')) continue;
 
         msg.setAttribute('data-bot-seen', 'true');
 
-        // Extract required NPC number - "Cần giết NPC X"
-        const npcMatch = text.match(/cần giết npc (\d+)/i);
-        const requiredNpc = npcMatch ? parseInt(npcMatch[1]) : null;
-
-        // Extract total required and already done - "X lần (đã giết: Y)"
-        const progressMatch = text.match(/(\d+) lần.*đã giết:\s*(\d+)/i);
-        let winsLeft = 15; // fallback
-        if (progressMatch) {
-          const total = parseInt(progressMatch[1]);
-          const done = parseInt(progressMatch[2]);
-          winsLeft = Math.max(1, total - done);
+        // Extract NPC number after "NPC X"
+        let requiredNpc = null;
+        const npcIdx = text.toLowerCase().lastIndexOf('npc');
+        if (npcIdx >= 0) {
+          const afterNpc = text.substring(npcIdx + 3);
+          const numMatch = afterNpc.match(/\\s*(\\d+)/);
+          if (numMatch) requiredNpc = parseInt(numMatch[1]);
         }
 
+        // Extract progress: "20 lần" and "giết: 4"
+        let winsLeft = 15;
+        const lanIdx = text.indexOf('lần');
+        const gietIdx = text.indexOf('giết');
+        if (lanIdx >= 0 && gietIdx >= 0) {
+          const beforeLan = text.substring(Math.max(0, lanIdx - 10), lanIdx);
+          const totalMatch = beforeLan.match(/(\\d+)\\s*$/);
+          const afterGiet = text.substring(gietIdx, gietIdx + 20);
+          const doneMatch = afterGiet.match(/(\\d+)/);
+          if (totalMatch && doneMatch) {
+            winsLeft = Math.max(1, parseInt(totalMatch[1]) - parseInt(doneMatch[1]));
+          }
+        }
+
+        if (requiredNpc && msg.id) {
+          const parts = msg.id.split('-');
+          return { requiredNpc, winsLeft, lockMsgId: parts[parts.length - 1] };
+        }
         if (requiredNpc) {
           return { requiredNpc, winsLeft };
         }
@@ -536,25 +559,36 @@ class NpcBot {
       const emojiSeq = allEmoji.map(e => (e.getAttribute('data-name') || '').toLowerCase());
 
       // Classify
-      const isSkillIcon = (name) => /dagger|crossed_swords|sword|skull_and_crossbones|skull|green_heart|heart_green|crystal_ball|gem/.test(name);
-      const isReadyIcon = (name) => /white_check_mark|check_mark_button|heavy_check_mark|check_mark/.test(name);
+      const isSkillIcon = (name) => /dagger|crossed_swords|skull|green_heart|heart_green/.test(name);
+      const isReadyIcon = (name) => /white_check_mark|check_mark_button|heavy_check_mark/.test(name);
       const isCooldownIcon = (name) => /hourglass/.test(name);
+      const isHpBar = (name) => /green_square|white_large_square|yellow_square|red_square|black_large_square/.test(name);
 
-      // Pattern: skill1, status1, skill2, status2, ... (xen kẽ)
-      // Find the section with skill+status pairs
+      // Find skill status: bar_chart (📊) → skip HP bar → skill+status pairs
       const skills = [];
       const allText = battleMsg.textContent;
-      let lastCdSearchPos = 0; // track position for ⏳ number extraction
+      let lastCdSearchPos = 0;
+      let barFound = false;
 
       for (let i = 0; i < emojiSeq.length; i++) {
-        if (!isSkillIcon(emojiSeq[i])) continue;
+        const name = emojiSeq[i];
+
+        // Step 1: Find bar_chart (📊) = HP status section starts
+        if (!barFound) {
+          if (name.includes('bar_chart')) barFound = true;
+          continue;
+        }
+
+        // Step 2: Skip HP bar squares
+        if (isHpBar(name)) continue;
+
+        // Step 3: Skill + status pairs only
+        if (!isSkillIcon(name)) continue;
 
         let iconType = 'unknown';
-        const name = emojiSeq[i];
-        if (/dagger|crossed_swords|sword/.test(name)) iconType = 'sword';
+        if (/dagger|crossed_swords/.test(name)) iconType = 'sword';
         else if (/skull/.test(name)) iconType = 'poison';
         else if (/green_heart|heart_green/.test(name)) iconType = 'heal';
-        else if (/crystal_ball|gem/.test(name)) iconType = 'magic';
 
         // Check NEXT emoji for status
         let isReady = true;
@@ -563,7 +597,6 @@ class NpcBot {
           const nextName = emojiSeq[i + 1];
           if (isCooldownIcon(nextName)) {
             isReady = false;
-            // Find cooldown number: search ⏳ in text starting from last position
             const cdIdx = allText.indexOf('⏳', lastCdSearchPos);
             if (cdIdx >= 0) {
               lastCdSearchPos = cdIdx + 1;
@@ -571,12 +604,14 @@ class NpcBot {
               const numMatch = after.match(/(\\d+)/);
               if (numMatch) cooldownTurns = parseInt(numMatch[1]);
             }
+            if (cooldownTurns === 0) cooldownTurns = 1;
           } else if (isReadyIcon(nextName)) {
             isReady = true;
           }
         }
 
         skills.push({ icon: iconType, ready: isReady, cooldownTurns });
+        if (skills.length >= 4) break;
       }
 
       // Fallback: if no emoji detected, use button text (assume all ready)
@@ -771,7 +806,7 @@ class NpcBot {
           const lockInfo = await this.checkLockedMessage();
           if (lockInfo) {
             this.log(`>>> LOCK detected: NPC ${lockInfo.requiredNpc} need ${lockInfo.winsLeft} more wins <<<`);
-            return { type: 'locked', requiredNpc: lockInfo.requiredNpc, winsLeft: lockInfo.winsLeft };
+            return { type: 'locked', requiredNpc: lockInfo.requiredNpc, winsLeft: lockInfo.winsLeft, lockMsgId: lockInfo.lockMsgId };
           }
         }
         this.log(`>>> COOLDOWN detected: ${cooldownSec}s <<<`);
