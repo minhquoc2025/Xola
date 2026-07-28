@@ -12,6 +12,8 @@ class NpcBot {
     this.buttonDelayMs = 1000;
     this.clickPattern = [3, 2, 1]; // Legacy fallback
     this.smartMode = true; // Always smart mode
+    this.healPosition = 3; //1-based position of heal skill in special skills list (not counting basic)
+    this.skillPriority = [2, 1, 3]; // Priority order for non-heal skills by position
     this.processedLockIds = new Set(); // Track processed lock message IDs
     // Auto Climb fields
     this.autoClimb = false;
@@ -65,6 +67,11 @@ class NpcBot {
     if (config.buttonDelayMs !== undefined) this.buttonDelayMs = config.buttonDelayMs;
     if (config.clickPattern !== undefined) this.clickPattern = config.clickPattern;
     if (config.smartMode !== undefined) this.smartMode = config.smartMode;
+    if (config.healPosition !== undefined) this.healPosition = Math.max(1, parseInt(config.healPosition) || 3);
+    if (config.skillPriority !== undefined) {
+      const arr = config.skillPriority.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n > 0);
+      if (arr.length > 0) this.skillPriority = arr;
+    }
     if (config.autoClimb !== undefined) this.autoClimb = config.autoClimb;
     if (config.targetMaxNpc !== undefined) this.targetMaxNpc = config.targetMaxNpc;
     if (config.username !== undefined) this.username = config.username;
@@ -609,7 +616,6 @@ class NpcBot {
       const emojiSeq = allEmoji.map(e => (e.getAttribute('data-name') || '').toLowerCase());
 
       // Classify
-      const isSkillIcon = (name) => /dagger|crossed_swords|skull|green_heart|heart_green/.test(name);
       const isReadyIcon = (name) => /white_check_mark|check_mark_button|heavy_check_mark/.test(name);
       const isCooldownIcon = (name) => /hourglass/.test(name);
       const isHpBar = (name) => /green_square|white_large_square|yellow_square|red_square|black_large_square/.test(name);
@@ -632,13 +638,11 @@ class NpcBot {
         // Step 2: Skip HP bar squares
         if (isHpBar(name)) continue;
 
-        // Step 3: Skill + status pairs only
-        if (!isSkillIcon(name)) continue;
+        // Step 3: Skip status icons (✅/⏳) - they follow skill icons
+        if (isReadyIcon(name) || isCooldownIcon(name)) continue;
 
-        let iconType = 'unknown';
-        if (/dagger|crossed_swords/.test(name)) iconType = 'sword';
-        else if (/skull/.test(name)) iconType = 'poison';
-        else if (/green_heart|heart_green/.test(name)) iconType = 'heal';
+        // This is a skill icon → assign position
+        let position = skills.length + 1;
 
         // Check NEXT emoji for status
         let isReady = true;
@@ -660,22 +664,19 @@ class NpcBot {
           }
         }
 
-        skills.push({ icon: iconType, ready: isReady, cooldownTurns });
+        skills.push({ position, ready: isReady, cooldownTurns });
         if (skills.length >= 4) break;
       }
 
-      // Fallback: if no emoji detected, use button text (assume all ready)
+      // Fallback: if no emoji detected, use buttons (assume all ready)
       if (skills.length === 0) {
         const btns = battleMsg.querySelectorAll('button[role="button"]');
+        let pos = 0;
         btns.forEach(btn => {
           const t = btn.textContent.trim();
           if (t.length > 0 && btn.offsetParent !== null) {
-            let iconType = 'unknown';
-            if (t.includes('Kịch Độc')) iconType = 'poison';
-            else if (t.includes('Phá Giáp')) iconType = 'sword';
-            else if (t.includes('Hồi Phục')) iconType = 'heal';
-            else if (t.includes('Cơ Bản')) iconType = 'basic';
-            skills.push({ icon: iconType, ready: true, cooldownTurns: 0 });
+            pos++;
+            skills.push({ position: pos, ready: true, cooldownTurns: 0 });
           }
         });
       }
@@ -705,36 +706,33 @@ class NpcBot {
 
     const { skills, userHpPercent, buttonCount } = battleState;
 
-    // skills[] = [sword, poison, heal] (from emoji, no basic)
-    // buttons[] = [Kiếm Cơ Bản, 🗡️ Phá Giáp, ☠️ Kịch Độc, 💚 Hồi Phục]
-    // skills[0]=sword → buttons[1], skills[1]=poison → buttons[2], skills[2]=heal → buttons[3]
-    // So buttonIndex = skillsIndex + 1
+    // Position-based: healPosition is 1-based index in skills array
+    // skills[0] → button 1, skills[1] → button 2, etc.
+    // buttonIndex = skills array index + 1 (because button[0] is basic attack)
+    const healSkillIdx = this.healPosition - 1; // 0-based index in skills[]
 
-    const poisonIdx = skills.findIndex(s => s.icon === 'poison');
-    const swordIdx = skills.findIndex(s => s.icon === 'sword');
-    const healIdx = skills.findIndex(s => s.icon === 'heal');
-
-    // Priority 1: 💚 (heal) if HP < 60% → heal first!
-    if (healIdx >= 0 && skills[healIdx].ready) {
-      if (userHpPercent >= 0 && userHpPercent < 60) {
-        this.log(`Smart: Chọn 💚 (button ${healIdx + 1 + 1}) - HP thấp ${userHpPercent}%`);
-        return healIdx + 1;
+    // Priority 1: Heal skill at healPosition if HP < 60%
+    if (healSkillIdx >= 0 && healSkillIdx < skills.length) {
+      const healSkill = skills[healSkillIdx];
+      if (healSkill.ready && userHpPercent >= 0 && userHpPercent < 60) {
+        const btnIndex = this.healPosition; // skills[0] → button 1
+        this.log(`Smart: Chọn heal (position ${this.healPosition}, button ${btnIndex + 1}) - HP thấp ${userHpPercent}%`);
+        return btnIndex;
       }
     }
 
-    // Priority 2: ☠️ (poison/kill) if ready
-    if (poisonIdx >= 0 && skills[poisonIdx].ready) {
-      this.log(`Smart: Chọn ☠️ (button ${poisonIdx + 1 + 1}) - Sẵn sàng`);
-      return poisonIdx + 1;
+    // Priority 2+: Other skills by skillPriority order (skip healPosition)
+    for (const pos of this.skillPriority) {
+      if (pos < 1 || pos > skills.length || pos === this.healPosition) continue;
+      const skill = skills[pos - 1];
+      if (skill && skill.ready) {
+        const btnIndex = pos; // skills[0] → button 1
+        this.log(`Smart: Chọn skill position ${pos} (button ${btnIndex + 1}) - Sẵn sàng`);
+        return btnIndex;
+      }
     }
 
-    // Priority 3: 🗡️ (sword/attack) if ready
-    if (swordIdx >= 0 && skills[swordIdx].ready) {
-      this.log(`Smart: Chọn 🗡️ (button ${swordIdx + 1 + 1}) - Sẵn sàng`);
-      return swordIdx + 1;
-    }
-
-    // Priority 4: No skill ready → fallback click skill 1 (basic attack)
+    // Fallback: basic attack (button 0)
     this.log('Smart: Không có skill nào sẵn sàng → click skill 1 (Kiếm cơ bản)');
     return 0;
   }
@@ -931,7 +929,7 @@ class NpcBot {
         // Smart mode: read battle state and choose skill intelligently
         const battleState = await this.readBattleState();
         if (battleState) {
-          this.log(`Smart: HP ${battleState.userHpPercent}% (${battleState.userHpCurrent}/${battleState.userHpMax}) | Skills: ${battleState.skills.map(s => `${s.icon}(${s.ready ? '✅' : '⏳' + s.cooldownTurns})`).join(' | ')}`);
+          this.log(`Smart: HP ${battleState.userHpPercent}% (${battleState.userHpCurrent}/${battleState.userHpMax}) | Skills: ${battleState.skills.map(s => `pos${s.position}(${s.ready ? '✅' : '⏳' + s.cooldownTurns})`).join(' | ')}`);
           this.log(`Smart DEBUG emojis: ${battleState.emojiDump}`);
           btnIndex = this.chooseSkill(battleState);
         } else {

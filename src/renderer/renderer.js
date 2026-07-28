@@ -84,6 +84,8 @@ function getConfig() {
     cooldownMs: (parseInt(document.getElementById('cooldown-seconds').value) || 120) * 1000,
     buttonDelayMs: (parseFloat(document.getElementById('button-delay').value) || 1) * 1000,
     smartMode: true,
+    healPosition: parseInt(document.getElementById('heal-position').value) || 3,
+    skillPriority: document.getElementById('skill-priority').value.trim() || '1,2,3',
     autoClimb,
     targetMaxNpc,
     username,
