@@ -49,7 +49,7 @@ class NpcBot {
   }
 
   handleLock(lockInfo) {
-    this.log(`🔒 NPC ${this.npcNumber} bị khóa! Cần thắng NPC ${lockInfo.requiredNpc} thêm ${lockInfo.winsLeft} lần.`);
+    this.log(`🔒 NPC ${this.npcNumber} bị khóa! → Chuyển NPC ${lockInfo.requiredNpc}, cần thắng ${lockInfo.winsLeft} lần.`);
     this.npcNumber = lockInfo.requiredNpc;
     this.climbWinsNeeded = lockInfo.winsLeft;
     this.climbWinsDone = 0;
@@ -424,28 +424,56 @@ class NpcBot {
 
         msg.setAttribute('data-bot-seen', 'true');
 
-        // Extract NPC number after "NPC X"
+        // Extract required NPC: "giết NPC X" or "giết npc X"
         let requiredNpc = null;
-        const npcIdx = text.toLowerCase().lastIndexOf('npc');
-        if (npcIdx >= 0) {
-          const afterNpc = text.substring(npcIdx + 3);
-          const numMatch = afterNpc.match(/\\s*(\\d+)/);
+        const gietNpcIdx = text.toLowerCase().indexOf('giết npc');
+        if (gietNpcIdx >= 0) {
+          const afterGietNpc = text.substring(gietNpcIdx + 8);
+          const numMatch = afterGietNpc.match(/\\s*(\\d+)/);
           if (numMatch) requiredNpc = parseInt(numMatch[1]);
         }
 
-        // Extract progress: "20 lần" and "giết: 4"
+        // Extract progress: find "X lần" then "giết: Y" or "giết:Y"
         let winsLeft = 15;
-        const lanIdx = text.indexOf('lần');
-        const gietIdx = text.indexOf('giết');
-        if (lanIdx >= 0 && gietIdx >= 0) {
-          const beforeLan = text.substring(Math.max(0, lanIdx - 10), lanIdx);
-          const totalMatch = beforeLan.match(/(\\d+)\\s*$/);
-          const afterGiet = text.substring(gietIdx, gietIdx + 20);
-          const doneMatch = afterGiet.match(/(\\d+)/);
-          if (totalMatch && doneMatch) {
-            winsLeft = Math.max(1, parseInt(totalMatch[1]) - parseInt(doneMatch[1]));
+        const textLower = text.toLowerCase();
+        const lanIdx = textLower.indexOf('lần');
+        // Find "giết:" (with colon) specifically for done count
+        const gietColonIdx = textLower.indexOf('giết:');
+        if (lanIdx >= 0) {
+          // Total: scan backwards from "lần" to find digits
+          let total = 0;
+          for (let j = lanIdx - 1; j >= Math.max(0, lanIdx - 15); j--) {
+            if (/[0-9]/.test(text[j])) {
+              let numStr = text[j];
+              for (let k = j - 1; k >= Math.max(0, lanIdx - 15); k--) {
+                if (/[0-9]/.test(text[k])) numStr = text[k] + numStr;
+                else break;
+              }
+              total = parseInt(numStr);
+              break;
+            }
+          }
+          // Done: scan forward from "giết:" to find digits
+          let done = 0;
+          if (gietColonIdx >= 0) {
+            for (let j = gietColonIdx; j < Math.min(text.length, gietColonIdx + 10); j++) {
+              if (/[0-9]/.test(text[j])) {
+                let numStr = text[j];
+                for (let k = j + 1; k < Math.min(text.length, gietColonIdx + 10); k++) {
+                  if (/[0-9]/.test(text[k])) numStr += text[k];
+                  else break;
+                }
+                done = parseInt(numStr);
+                break;
+              }
+            }
+          }
+          if (total > 0) {
+            winsLeft = Math.max(1, total - done);
           }
         }
+
+        console.log('[Lock] text="' + text + '" -> requiredNpc=' + requiredNpc + ', winsLeft=' + winsLeft);
 
         if (requiredNpc && msg.id) {
           const parts = msg.id.split('-');
