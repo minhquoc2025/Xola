@@ -86,6 +86,18 @@ function getConfig() {
     smartMode: true,
     healPosition: parseInt(document.getElementById('heal-position').value) || 3,
     skillPriority: document.getElementById('skill-priority').value.trim() || '1,2,3',
+    rollSchedule: (() => {
+      const d = document.getElementById('roll-date').value.trim();
+      const t = document.getElementById('roll-time').value.trim();
+      if (!d || !t) return null;
+      if (d.length === 8 && t.length >= 3) {
+        const y = d.substring(0,4), m = d.substring(4,6), day = d.substring(6,8);
+        const h = t.substring(0,2), min = t.substring(2,4);
+        return `${y}-${m}-${day}T${h}:${min}`;
+      }
+      return null;
+    })(),
+    rollCount: parseInt(document.getElementById('roll-count').value) || 1,
     autoClimb,
     targetMaxNpc,
     username,

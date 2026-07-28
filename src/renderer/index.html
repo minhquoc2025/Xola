@@ -154,6 +154,18 @@
         <label for="target-max-npc">Target NPC (đích)</label>
         <input id="target-max-npc" type="number" value="60" min="1" max="999">
       </div>
+      <div class="config-field" style="border-left:1px solid #1a2a4e;padding-left:6px;">
+        <label style="color:#ffcc00;font-weight:600;">🎲 ROLL SCHEDULE</label>
+        <label for="roll-date" style="font-size:9px;color:#888;margin-top:3px;">Ngày (yyyyMMdd)</label>
+        <input id="roll-date" type="text" value="" placeholder="20260728" style="width:100%;font-size:10px;">
+        <label for="roll-time" style="font-size:9px;color:#888;margin-top:3px;">Giờ (HHmm)</label>
+        <input id="roll-time" type="text" value="" placeholder="2300" style="width:100%;font-size:10px;">
+        <div style="display:flex;align-items:center;gap:4px;margin-top:3px;">
+          <label for="roll-count" style="font-size:9px;color:#888;white-space:nowrap;">SL</label>
+          <input id="roll-count" type="number" value="1" min="1" max="99" style="width:40px;">
+          <span style="font-size:8px;color:#666;">lần</span>
+        </div>
+      </div>
     </div>
 
     <div id="action-section" class="panel-section">

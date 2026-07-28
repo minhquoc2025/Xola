@@ -22,6 +22,11 @@ class NpcBot {
     this.climbWinsDone = 0;    // wins done in current farming session
     // Group chat: filter by username
     this.username = ''; // Empty = no filter (solo mode)
+    // Roll schedule
+    this.rollSchedule = null; // ISO datetime string, e.g. "2026-07-28T14:30"
+    this.rollCount = 1;
+    this.rollDelayMs = 3000;
+    this.rollPending = false;
   }
 
   ts() {
@@ -75,6 +80,9 @@ class NpcBot {
     if (config.autoClimb !== undefined) this.autoClimb = config.autoClimb;
     if (config.targetMaxNpc !== undefined) this.targetMaxNpc = config.targetMaxNpc;
     if (config.username !== undefined) this.username = config.username;
+    if (config.rollSchedule !== undefined) this.rollSchedule = config.rollSchedule || null;
+    if (config.rollCount !== undefined) this.rollCount = Math.max(1, parseInt(config.rollCount) || 1);
+    if (config.rollDelayMs !== undefined) this.rollDelayMs = Math.max(500, parseInt(config.rollDelayMs) || 3000);
   }
 
   start() {
@@ -99,6 +107,7 @@ class NpcBot {
   stop() {
     this.isRunning = false;
     this.runId = null;
+    this.rollPending = false;
     if (this.timeoutId) {
       clearTimeout(this.timeoutId);
       this.timeoutId = null;
@@ -127,6 +136,12 @@ class NpcBot {
       ? `NPC ${this.npcNumber} (climb ${this.climbWinsDone}/${this.climbWinsNeeded > 0 ? this.climbWinsNeeded : '?'} wins)`
       : `Battle ${this.battleCount + 1}/${this.totalBattles}`;
     this.log(`\n=== ${label} ===`);
+
+    // Roll schedule: execute if it's time
+    if (this.isRollTime()) {
+      await this.executeRoll(runId);
+      return;
+    }
 
     // Auto Climb: check lock BEFORE sendNpcCommand updates botMaxMsgId
     if (this.autoClimb) {
@@ -370,6 +385,81 @@ class NpcBot {
 
     this.log(`Sent: ${cmd}`);
     return true;
+  }
+
+  async sendMessage(cmd) {
+    await this.exec(`document.querySelector('[role="textbox"]')?.click()`);
+    await this.delay(this.rand(200, 400));
+
+    const len = await this.exec(`document.querySelector('[role="textbox"]')?.textContent?.length || 0`);
+    for (let i = 0; i < len; i++) {
+      await this.exec(`(() => {
+        const el = document.querySelector('[role="textbox"]');
+        if (!el) return;
+        el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', code: 'Backspace', keyCode: 8, which: 8, bubbles: true }));
+        el.dispatchEvent(new InputEvent('beforeinput', { inputType: 'deleteContentBackward', bubbles: true, cancelable: true }));
+        el.dispatchEvent(new InputEvent('input', { inputType: 'deleteContentBackward', bubbles: true, cancelable: true }));
+        el.dispatchEvent(new KeyboardEvent('keyup', { key: 'Backspace', code: 'Backspace', keyCode: 8, which: 8, bubbles: true }));
+      })()`);
+      await this.delay(this.rand(30, 60));
+    }
+
+    for (let i = 0; i < cmd.length; i++) {
+      const ch = cmd[i];
+      await this.exec(`(() => {
+        const el = document.querySelector('[role="textbox"]');
+        if (!el) return;
+        el.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(ch)}, code: 'Key${ch.toUpperCase()}', bubbles: true }));
+        el.dispatchEvent(new KeyboardEvent('keypress', { key: ${JSON.stringify(ch)}, code: 'Key${ch.toUpperCase()}', bubbles: true }));
+        el.dispatchEvent(new InputEvent('beforeinput', { inputType: 'insertText', data: ${JSON.stringify(ch)}, bubbles: true, cancelable: true }));
+        el.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: ${JSON.stringify(ch)}, bubbles: true, cancelable: true }));
+        el.dispatchEvent(new KeyboardEvent('keyup', { key: ${JSON.stringify(ch)}, code: 'Key${ch.toUpperCase()}', bubbles: true }));
+      })()`);
+      await this.delay(this.rand(80, 180));
+    }
+
+    await this.delay(this.rand(200, 400));
+
+    await this.exec(`(() => {
+      const el = document.querySelector('[role="textbox"]');
+      if (!el) return;
+      el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+      el.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+      el.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+    })()`);
+
+    this.log(`Sent: ${cmd}`);
+    return true;
+  }
+
+  isRollTime() {
+    if (!this.rollSchedule || this.rollPending) return false;
+    const now = new Date();
+    const target = new Date(this.rollSchedule);
+    if (isNaN(target.getTime())) return false;
+    return now >= target;
+  }
+
+  async executeRoll(runId) {
+    this.rollPending = true;
+    this.log(`🎲 Bắt đầu quay số: ${this.rollCount} lần !roll`);
+
+    for (let i = 0; i < this.rollCount; i++) {
+      if (!this.isRunning || this.runId !== runId) break;
+      await this.sendMessage('!roll');
+      this.log(`🎲 Roll ${i + 1}/${this.rollCount}`);
+      if (i < this.rollCount - 1) {
+        await this.delay(this.rollDelayMs);
+      }
+    }
+
+    this.log(`🎲 Hoàn thành quay số!`);
+    this.rollPending = false;
+    this.rollSchedule = null;
+
+    if (this.isRunning && this.runId === runId) {
+      this.mainLoop(runId);
+    }
   }
 
   async checkBattleEnd() {
