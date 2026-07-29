@@ -12,8 +12,8 @@ class NpcBot {
     this.buttonDelayMs = 1000;
     this.clickPattern = [3, 2, 1]; // Legacy fallback
     this.smartMode = true; // Always smart mode
-    this.healPosition = 3; //1-based position of heal skill in special skills list (not counting basic)
-    this.skillPriority = [2, 1, 3]; // Priority order for non-heal skills by position
+    this.healPosition = 3; //1-based position of heal/defensive skill in skills[] array (Skill4 = position 3)
+    this.skillPriority = [2, 1]; // Priority: Skill3 (Tuyệt Sát=pos2) > Skill2 (Phá Giáp=pos1)
     this.processedLockIds = new Set(); // Track processed lock message IDs
     // Auto Climb fields
     this.autoClimb = false;
@@ -682,9 +682,7 @@ class NpcBot {
 
       let battleMsg = null;
       for (const msg of recentMsgs) {
-        // If username is set, skip messages that don't contain it
         if (username && !msg.textContent.includes(username)) continue;
-
         const btns = msg.querySelectorAll('button[role="button"]');
         if (btns.length > 0) { battleMsg = msg; break; }
       }
@@ -701,76 +699,6 @@ class NpcBot {
         userHpPercent = parseInt(hpMatch[3]);
       }
 
-      // Read ALL emoji data-name from embed
-      const allEmoji = Array.from(battleMsg.querySelectorAll('img[data-name]'));
-      const emojiSeq = allEmoji.map(e => (e.getAttribute('data-name') || '').toLowerCase());
-
-      // Classify
-      const isReadyIcon = (name) => /white_check_mark|check_mark_button|heavy_check_mark/.test(name);
-      const isCooldownIcon = (name) => /hourglass/.test(name);
-      const isHpBar = (name) => /green_square|white_large_square|yellow_square|red_square|black_large_square/.test(name);
-
-      // Find skill status: bar_chart (📊) → skip HP bar → skill+status pairs
-      const skills = [];
-      const allText = battleMsg.textContent;
-      let lastCdSearchPos = 0;
-      let barFound = false;
-
-      for (let i = 0; i < emojiSeq.length; i++) {
-        const name = emojiSeq[i];
-
-        // Step 1: Find bar_chart (📊) = HP status section starts
-        if (!barFound) {
-          if (name.includes('bar_chart')) barFound = true;
-          continue;
-        }
-
-        // Step 2: Skip HP bar squares
-        if (isHpBar(name)) continue;
-
-        // Step 3: Skip status icons (✅/⏳) - they follow skill icons
-        if (isReadyIcon(name) || isCooldownIcon(name)) continue;
-
-        // This is a skill icon → assign position
-        let position = skills.length + 1;
-
-        // Check NEXT emoji for status
-        let isReady = true;
-        let cooldownTurns = 0;
-        if (i + 1 < emojiSeq.length) {
-          const nextName = emojiSeq[i + 1];
-          if (isCooldownIcon(nextName)) {
-            isReady = false;
-            const cdIdx = allText.indexOf('⏳', lastCdSearchPos);
-            if (cdIdx >= 0) {
-              lastCdSearchPos = cdIdx + 1;
-              const after = allText.substring(cdIdx + 1, cdIdx + 4);
-              const numMatch = after.match(/(\\d+)/);
-              if (numMatch) cooldownTurns = parseInt(numMatch[1]);
-            }
-            if (cooldownTurns === 0) cooldownTurns = 1;
-          } else if (isReadyIcon(nextName)) {
-            isReady = true;
-          }
-        }
-
-        skills.push({ position, ready: isReady, cooldownTurns });
-        if (skills.length >= 4) break;
-      }
-
-      // Fallback: if no emoji detected, use buttons (assume all ready)
-      if (skills.length === 0) {
-        const btns = battleMsg.querySelectorAll('button[role="button"]');
-        let pos = 0;
-        btns.forEach(btn => {
-          const t = btn.textContent.trim();
-          if (t.length > 0 && btn.offsetParent !== null) {
-            pos++;
-            skills.push({ position: pos, ready: true, cooldownTurns: 0 });
-          }
-        });
-      }
-
       // Buttons
       const btns = battleMsg.querySelectorAll('button[role="button"]');
       const buttonTexts = [];
@@ -779,10 +707,57 @@ class NpcBot {
         if (t.length > 0 && btn.offsetParent !== null) buttonTexts.push(t);
       });
 
+      // Skill count = buttons - 1 (skip basic at [0])
+      const skillCount = Math.max(0, buttonTexts.length - 1);
+
+      // Collect ONLY ✅/⏳ status icons in order from emoji stream
+      const allEmoji = Array.from(battleMsg.querySelectorAll('img[data-name]'));
+      const emojiSeq = allEmoji.map(e => (e.getAttribute('data-name') || '').toLowerCase());
+
+      const statusList = [];
+      let barFound = false;
+      for (let i = 0; i < emojiSeq.length; i++) {
+        const name = emojiSeq[i];
+        if (!barFound) {
+          if (name.includes('bar_chart')) barFound = true;
+          continue;
+        }
+        if (/white_check_mark|check_mark_button|heavy_check_mark/.test(name)) {
+          statusList.push({ ready: true, cooldownTurns: 0 });
+        } else if (/hourglass/.test(name)) {
+          // ⏳ is img element, text won't contain it. 
+          // Find cooldown number: look for digit紧跟在⏳img后面 in DOM
+          let cooldownTurns = 1;
+          const imgEls = battleMsg.querySelectorAll('img[data-name]');
+          for (const img of imgEls) {
+            if (/hourglass/.test((img.getAttribute('data-name') || '').toLowerCase())) {
+              // Check next sibling text or parent text after this img
+              let nextText = '';
+              let node = img.nextSibling;
+              while (node && nextText.length < 5) {
+                if (node.nodeType === 3) nextText += node.textContent;
+                else break;
+                node = node.nextSibling;
+              }
+              const numMatch = nextText.match(/(\d+)/);
+              if (numMatch) { cooldownTurns = parseInt(numMatch[1]); break; }
+            }
+          }
+          statusList.push({ ready: false, cooldownTurns });
+        }
+      }
+
+      // Map status to skills: first N status icons = skill readiness
+      const skills = [];
+      for (let i = 0; i < skillCount; i++) {
+        const s = statusList[i] || { ready: true, cooldownTurns: 0 };
+        skills.push({ position: i + 1, ready: s.ready, cooldownTurns: s.cooldownTurns });
+      }
+
       return {
         userHpPercent, userHpCurrent, userHpMax,
         skills, buttonCount: buttonTexts.length, buttonTexts,
-        emojiDump: emojiSeq.slice(0, 40).join(' | ')
+        statusDump: statusList.map(s => s.ready ? '✅' : '⏳' + s.cooldownTurns).join(' ')
       };
     })()`);
   }
@@ -801,12 +776,12 @@ class NpcBot {
     // buttonIndex = skills array index + 1 (because button[0] is basic attack)
     const healSkillIdx = this.healPosition - 1; // 0-based index in skills[]
 
-    // Priority 1: Heal skill at healPosition if HP < 60%
+    // Priority 1: Heal skill at healPosition if HP < 60% (or HP unknown = -1)
     if (healSkillIdx >= 0 && healSkillIdx < skills.length) {
       const healSkill = skills[healSkillIdx];
-      if (healSkill.ready && userHpPercent >= 0 && userHpPercent < 60) {
-        const btnIndex = this.healPosition; // skills[0] → button 1
-        this.log(`Smart: Chọn heal (position ${this.healPosition}, button ${btnIndex + 1}) - HP thấp ${userHpPercent}%`);
+      if (healSkill.ready && (userHpPercent < 0 || userHpPercent < 60)) {
+        const btnIndex = this.healPosition;
+        this.log(`Smart: Chọn heal (position ${this.healPosition}, button ${btnIndex + 1}) - HP ${userHpPercent}%`);
         return btnIndex;
       }
     }
@@ -816,7 +791,7 @@ class NpcBot {
       if (pos < 1 || pos > skills.length || pos === this.healPosition) continue;
       const skill = skills[pos - 1];
       if (skill && skill.ready) {
-        const btnIndex = pos; // skills[0] → button 1
+        const btnIndex = pos; // pos1 → button[1], pos2 → button[2]
         this.log(`Smart: Chọn skill position ${pos} (button ${btnIndex + 1}) - Sẵn sàng`);
         return btnIndex;
       }
