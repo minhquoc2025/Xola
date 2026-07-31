@@ -493,12 +493,15 @@ class NpcBot {
             const parts = msg.id.split('-');
             window.botMaxMsgId = parts[parts.length - 1];
           }
-          // Determine win or loss
-          const isWin = text.includes('chiến thắng') || text.includes('thắng npc') || 
-                        rawText.includes('✅') || text.includes('thắng!') ||
-                        rawText.includes('🥇') || rawText.includes('thắng');
-          const isLoss = text.includes('thất bại') || text.includes('thua') ||
-                         rawText.includes('❌') || rawText.includes('💀');
+          // Determine win or loss - check player-specific lines first
+          const isWin = /\b\w+\s+thắng npc\b/.test(text) ||
+                        text.includes('chiến thắng!') ||
+                        rawText.includes('🥇') ||
+                        text.includes('✅ thắng');
+          const isLoss = /\b\w+\s+thua\b/.test(text) ||
+                         text.includes('thất bại') ||
+                         text.includes('bị xỏ lá') ||
+                         rawText.includes('❌');
           const result = isLoss && !isWin ? 'loss' : 'win';
           return { ended: true, result };
         }
