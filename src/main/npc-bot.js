@@ -18,6 +18,12 @@ class NpcBot {
     // Sell state
     this.pendingSellItems = new Set(); // items sent sell command, waiting decompose
     this.sellInventory = [];
+    // Username filtering
+    this.username = '';
+    // Luân Hồi mode
+    this.mode = 'npc';           // 'npc' hoặc 'luanhoi'
+    this.maxLayer = 20;          // tầng boss cuối cùng (10, 20, 30...)
+    this.currentLayer = 0;       // tầng hiện tại trong luân hồi
   }
 
   ts() {
@@ -65,6 +71,7 @@ class NpcBot {
   }
 
   updateConfig(config) {
+    if (config.username !== undefined) this.username = config.username;
     if (config.npcNumber !== undefined) this.npcNumber = config.npcNumber;
     if (config.totalBattles !== undefined) this.totalBattles = config.totalBattles;
     if (config.cooldownMs !== undefined) this.cooldownMs = config.cooldownMs;
@@ -72,6 +79,8 @@ class NpcBot {
     if (config.clickPattern !== undefined) this.clickPattern = config.clickPattern;
     if (config.autoClimb !== undefined) this.autoClimb = config.autoClimb;
     if (config.targetMaxNpc !== undefined) this.targetMaxNpc = config.targetMaxNpc;
+    if (config.mode !== undefined) this.mode = config.mode;
+    if (config.maxLayer !== undefined) this.maxLayer = config.maxLayer;
   }
 
   start() {
@@ -82,6 +91,16 @@ class NpcBot {
     this.climbWinsNeeded = 0;
     this.climbWinsDone = 0;
     this.log('Bot started');
+    if (this.username) {
+      this.log(`Username filter: "${this.username}" — chỉ xử lý tin nhắn của bạn`);
+    }
+
+    if (this.mode === 'luanhoi') {
+      this.log(`=== LUÂN HỒI MODE: maxLayer=${this.maxLayer} ===`);
+      this.luanhoiLoop(this.runId);
+      return;
+    }
+
     if (this.autoClimb) {
       this.log(`=== AUTO CLIMB MODE: NPC ${this.npcNumber} → NPC ${this.targetMaxNpc} ===`);
     }
@@ -261,6 +280,106 @@ class NpcBot {
     }
     if (this.isRunning && this.runId === runId) {
       this.mainLoop(runId);
+    }
+  }
+
+  async luanhoiLoop(runId) {
+    this.currentLayer = 1;
+
+    // Step 1: Send !luanhoi
+    await this.sendLuanhoiCommand();
+    await this.delay(2500);
+
+    if (!this.isRunning || this.runId !== runId) return;
+
+    // Check leftover cooldown from previous session
+    const initCooldown = await this.checkCooldownMessage();
+    if (initCooldown > 0) {
+      this.log(`Hồi chiêu! Chờ ${initCooldown}s...`);
+      await this.cooldownWait(initCooldown, runId);
+    }
+
+    while (this.isRunning && this.runId === runId) {
+      this.log(`\n=== LUÂN HỒI TẦNG ${this.currentLayer} ===`);
+
+      // Step 2: Select buff (skip for layer 1 - no buff popup)
+      if (this.currentLayer > 1) {
+        await this.delay(1500);
+        await this.selectBuff();
+        await this.delay(1000);
+      }
+
+      // Step 3: Roll arrow (skip for layer 1)
+      if (this.currentLayer > 1) {
+        await this.delay(1000);
+        await this.rollArrow();
+        await this.delay(1000);
+      }
+
+      // Step 4: Battle - reuse existing clickButtonsUntilEnd
+      const result = await this.clickButtonsUntilEnd(false, runId);
+
+      if (!this.isRunning || this.runId !== runId) return;
+
+      // Check loss
+      const ended = result && result.type === 'ended';
+      const isLoss = ended && result.result === 'loss';
+      const unknown = ended && result.result === 'unknown';
+
+      if (isLoss) {
+        this.log(`❌ THUA tầng ${this.currentLayer}! Kết thúc luân hồi.`);
+        this.stop();
+        return;
+      }
+
+      // Check if luân hồi ended (from Discord message)
+      const luanhoiEnded = await this.checkLuanhoiEnd();
+      if (luanhoiEnded) {
+        this.log('❌ Luân hồi kết thúc (thua). Phần thưởng sẽ được gửi về.');
+        this.stop();
+        return;
+      }
+
+      // Win or unknown (assume win to continue)
+      this.log(`✅ Thắng tầng ${this.currentLayer}!`);
+
+      // Boss layer: handle reward
+      if (this.currentLayer % 10 === 0) {
+        this.log(`🏆 BOSS tầng ${this.currentLayer}! Đang xử lý...`);
+        await this.delay(2000);
+
+        if (this.currentLayer >= this.maxLayer) {
+          // Reached max: click "Kết Thúc & Nhận FULL Phần Thưởng"
+          await this.checkBossReward();
+          await this.delay(1000);
+          this.log(`🎯 Hoàn thành luân hồi! Đã nhận thưởng ở tầng ${this.currentLayer}.`);
+          this.stop();
+          return;
+        } else {
+          // Not max yet: click "Tiếp Tục Leo Tháp"
+          const continued = await this.clickButtonInContext('tiếp tục');
+          if (continued && continued.clicked) {
+            this.log(`⬆️ Tiếp tục leo tháp...`);
+          } else {
+            this.log('⚠️ Không tìm thấy button tiếp tục, thử nhận thưởng...');
+            await this.checkBossReward();
+            this.stop();
+            return;
+          }
+        }
+      }
+
+      // Next layer
+      this.currentLayer++;
+
+      // Cooldown between layers
+      const cooldownSec = await this.checkCooldownMessage();
+      if (cooldownSec > 0) {
+        this.log(`Hồi chiêu! Chờ ${cooldownSec}s...`);
+        await this.cooldownWait(cooldownSec, runId);
+      } else {
+        await this.delay(2000);
+      }
     }
   }
 
@@ -512,12 +631,168 @@ class NpcBot {
     }
   }
 
-  async checkBattleEnd() {
+  // === LUÂN HỒI METHODS ===
+
+  async sendLuanhoiCommand() {
+    return this.sendMessage('!luanhoi');
+  }
+
+  // Generic: click button containing keyword in a recent message (after botMaxMsgId)
+  async clickButtonInContext(keyword) {
+    return await this.exec(`(() => {
+      const maxIdStr = window.botMaxMsgId || '0';
+      const maxId = BigInt(maxIdStr);
+      const skipTexts = ['Trang Bị', 'Kỹ Năng', 'Thần Khí', 'Đá Khảm', 'Vật Phẩm', 'Hành Trang'];
+      const allBtns = document.querySelectorAll('button[role="button"]');
+
+      for (const btn of allBtns) {
+        const text = btn.textContent.trim();
+        if (text.length === 0 || btn.offsetParent === null) continue;
+        if (skipTexts.includes(text)) continue;
+
+        // Check if button is in a recent message (after botMaxMsgId)
+        const msg = btn.closest('[id^="message-"]');
+        if (msg && msg.id) {
+          const parts = msg.id.split('-');
+          const idStr = parts[parts.length - 1];
+          try {
+            const id = BigInt(idStr);
+            if (id <= maxId) continue;
+          } catch(e) { continue; }
+        }
+
+        const btnText = text.toLowerCase();
+        if (btnText.includes(${JSON.stringify(keyword.toLowerCase())})) {
+          btn.click();
+          return { clicked: true, text: text };
+        }
+      }
+      return { clicked: false };
+    })()`);
+  }
+
+  // Click first new button not in excludeTexts list
+  async clickFirstNewButton(excludeTexts = []) {
+    return await this.exec(`(() => {
+      const maxIdStr = window.botMaxMsgId || '0';
+      const maxId = BigInt(maxIdStr);
+      const baseSkip = ['Trang Bị', 'Kỹ Năng', 'Thần Khí', 'Đá Khảm', 'Vật Phẩm', 'Hành Trang'];
+      const extraSkip = ${JSON.stringify(excludeTexts)};
+      const skipTexts = baseSkip.concat(extraSkip);
+      const allBtns = document.querySelectorAll('button[role="button"]');
+
+      for (const btn of allBtns) {
+        const text = btn.textContent.trim();
+        if (text.length === 0 || btn.offsetParent === null) continue;
+        if (skipTexts.some(s => text.includes(s))) continue;
+
+        const msg = btn.closest('[id^="message-"]');
+        if (msg && msg.id) {
+          const parts = msg.id.split('-');
+          const idStr = parts[parts.length - 1];
+          try {
+            const id = BigInt(idStr);
+            if (id <= maxId) continue;
+          } catch(e) { continue; }
+        }
+
+        btn.click();
+        return { clicked: true, text: text };
+      }
+      return { clicked: false };
+    })()`);
+  }
+
+  async selectBuff() {
+    const buffPriority = ['thiên', 'huyền', 'linh', 'phàm'];
+
+    for (const buff of buffPriority) {
+      const result = await this.clickButtonInContext(buff);
+      if (result && result.clicked) {
+        this.log(`🎖️ Chọn bùa: ${result.text}`);
+        return true;
+      }
+    }
+
+    this.log('⚠️ Không tìm thấy button bùa');
+    return false;
+  }
+
+  async rollArrow() {
+    const arrowKeywords = ['▲', '▼', '◄', '►', '↑', '↓', '←', '→'];
+    for (const arrow of arrowKeywords) {
+      const result = await this.clickButtonInContext(arrow);
+      if (result && result.clicked) {
+        this.log(`🎯 Quay mũi tên: ${result.text}`);
+        return true;
+      }
+    }
+
+    // Fallback: click first button that is NOT a known type
+    const excludeTexts = ['Thiên', 'Huyền', 'Linh', 'Phàm', 'Tiếp Tục', 'Kết Thúc', 'Nhận'];
+    const fallback = await this.clickFirstNewButton(excludeTexts);
+    if (fallback && fallback.clicked) {
+      this.log(`🎯 Quay mũi tên (fallback): ${fallback.text}`);
+      return true;
+    }
+
+    this.log('⚠️ Không tìm thấy button mũi tên');
+    return false;
+  }
+
+  async checkBossReward() {
+    let result = await this.clickButtonInContext('kết thúc');
+    if (result && result.clicked) {
+      this.log(`🏆 Đã nhận thưởng boss!`);
+      return true;
+    }
+
+    result = await this.clickButtonInContext('nhận');
+    if (result && result.clicked) {
+      this.log(`🏆 Đã nhận thưởng boss!`);
+      return true;
+    }
+
+    this.log('⚠️ Không tìm thấy button nhận thưởng');
+    return false;
+  }
+
+  async checkLuanhoiEnd() {
     return await this.exec(`(() => {
       const maxIdStr = window.botMaxMsgId || '0';
       const maxId = BigInt(maxIdStr);
       const msgs = document.querySelectorAll('[role="article"]');
-      const recent = Array.from(msgs).slice(-15);
+      for (const msg of msgs) {
+        if (msg.id) {
+          const parts = msg.id.split('-');
+          const idStr = parts[parts.length - 1];
+          try {
+            const id = BigInt(idStr);
+            if (id <= maxId) continue;
+          } catch(e) {}
+        }
+        if (msg.getAttribute('data-bot-seen') === 'true') continue;
+
+        const text = (msg.textContent || '').toLowerCase();
+        if (text.includes('kết thúc luân hồi') || text.includes('luân hồi kết thúc') ||
+            text.includes('thất bại') || text.includes('đã thua') ||
+            (text.includes('thua') && text.includes('luân hồi'))) {
+          msg.setAttribute('data-bot-seen', 'true');
+          return true;
+        }
+      }
+      return false;
+    })()`);
+  }
+
+  async checkBattleEnd() {
+    const username = this.username || '';
+    return await this.exec(`(() => {
+      const username = ${JSON.stringify(username)};
+      const maxIdStr = window.botMaxMsgId || '0';
+      const maxId = BigInt(maxIdStr);
+      const msgs = document.querySelectorAll('[role="article"]');
+      const recent = Array.from(msgs).slice(-20);
       for (const msg of recent.reverse()) {
         if (msg.getAttribute('data-bot-seen') === 'true') continue;
 
@@ -533,6 +808,9 @@ class NpcBot {
         const text = msg.textContent.toLowerCase();
         const rawText = msg.textContent;
         if (text.includes('kết quả trận đấu') || text.includes('battle ended') || text.includes('kết thúc')) {
+          // If username is set, only accept results mentioning our user
+          if (username && !rawText.includes(username)) continue;
+
           msg.setAttribute('data-bot-seen', 'true');
           if (msg.id) {
             const parts = msg.id.split('-');
@@ -557,7 +835,7 @@ class NpcBot {
       const maxIdStr = window.botMaxMsgId || '0';
       const maxId = BigInt(maxIdStr);
       const msgs = document.querySelectorAll('[role="article"]');
-      const recent = Array.from(msgs).slice(-8);
+      const recent = Array.from(msgs).slice(-10);
       for (const msg of recent.reverse()) {
         // Skip already-seen messages using BigInt ID comparison
         if (msg.id) {
@@ -603,7 +881,7 @@ class NpcBot {
       const maxIdStr = window.botMaxMsgId || '0';
       const maxId = BigInt(maxIdStr);
       const msgs = document.querySelectorAll('[role="article"]');
-      const recent = Array.from(msgs).slice(-5);
+      const recent = Array.from(msgs).slice(-8);
       for (const msg of recent.reverse()) {
         if (msg.getAttribute('data-bot-seen') === 'true') continue;
 
@@ -642,7 +920,7 @@ class NpcBot {
       const maxIdStr = window.botMaxMsgId || '0';
       const maxId = BigInt(maxIdStr);
       const msgs = document.querySelectorAll('[role="article"]');
-      const recent = Array.from(msgs).slice(-5);
+      const recent = Array.from(msgs).slice(-8);
       for (const msg of recent.reverse()) {
         if (msg.getAttribute('data-bot-seen') === 'true') continue;
 
@@ -666,6 +944,63 @@ class NpcBot {
         }
       }
       return false;
+    })()`);
+  }
+
+  // Find the message ID of our last !npc command by matching username in message header
+  async findMyLastNpcCommandId() {
+    const username = this.username;
+    if (!username) return '0';
+
+    return await this.exec(`(() => {
+      const username = ${JSON.stringify(username)};
+      if (!username) return '0';
+
+      const msgs = document.querySelectorAll('[role="article"]');
+      for (let i = msgs.length - 1; i >= 0; i--) {
+        const msg = msgs[i];
+        const text = msg.textContent || '';
+        if (!text.includes('!npc')) continue;
+
+        // Check if this message is from our user by looking for username in header area
+        // Discord puts author name in heading or span elements
+        const headings = msg.querySelectorAll('h2, h3, [role="heading"], h1');
+        for (const h of headings) {
+          const hText = h.textContent.trim();
+          if (hText === username || hText.includes(username)) {
+            if (msg.id) {
+              const parts = msg.id.split('-');
+              return parts[parts.length - 1];
+            }
+            return 'found';
+          }
+        }
+
+        // Fallback: check elements with username-related classes
+        const usernameEls = msg.querySelectorAll('[class*="username"], [class*="Username"], [class*="author"], [class*="Author"]');
+        for (const el of usernameEls) {
+          const elText = el.textContent.trim();
+          if (elText === username || elText.includes(username)) {
+            if (msg.id) {
+              const parts = msg.id.split('-');
+              return parts[parts.length - 1];
+            }
+            return 'found';
+          }
+        }
+
+        // Fallback 2: check if the first 80 chars of the message contain the username
+        // Discord renders: "Username — time\n!npc 14"
+        const headerPart = text.substring(0, 80);
+        if (headerPart.includes(username)) {
+          if (msg.id) {
+            const parts = msg.id.split('-');
+            return parts[parts.length - 1];
+          }
+          return 'found';
+        }
+      }
+      return '0';
     })()`);
   }
 
@@ -695,71 +1030,83 @@ class NpcBot {
     })()`);
   }
 
-  // Find skill buttons that belong to battle messages
-  // Strategy: find the LAST message with buttons, those are battle skills
+  // Find skill buttons that belong to THIS user's battle
+  // Strategy: find ALL buttons on screen, skip menu buttons (Trang Bị, Kỹ Năng...),
+  // then check if parent context is after our !npc command
   async findBattleButtons() {
     return await this.exec(`(() => {
-      // Get all messages, find ones with buttons
-      const msgs = document.querySelectorAll('[role="article"]');
-      let battleMsg = null;
-      let battleButtons = [];
+      const maxIdStr = window.botMaxMsgId || '0';
+      const maxId = BigInt(maxIdStr);
 
-      // Check last 10 messages for one that has buttons
-      const recentMsgs = Array.from(msgs).slice(-10).reverse();
-      for (const msg of recentMsgs) {
-        const btns = msg.querySelectorAll('button[role="button"]');
-        if (btns.length > 0) {
-          battleMsg = msg;
-          break;
+      // Known non-skill button texts to skip
+      const skipTexts = ['Trang Bị', 'Kỹ Năng', 'Thần Khí', 'Đá Khảm', 'Vật Phẩm', 'Hành Trang'];
+
+      const allBtns = document.querySelectorAll('button[role="button"]');
+      const skillBtns = [];
+
+      for (const btn of allBtns) {
+        const text = btn.textContent.trim();
+        if (text.length === 0 || btn.offsetParent === null) continue;
+        if (skipTexts.includes(text)) continue;
+
+        // Check if this button is inside a message-like context
+        // by looking for parent elements that contain battle-related text
+        const parent = btn.closest('[class*="message"], [class*="Message"], [role="article"], [class*="chatMessage"], [class*="bubble"]') || btn.parentElement?.parentElement;
+        if (!parent) continue;
+
+        // Check parent text for battle indicators (Xỏ lá ba que, KẾT QUẢ, etc.)
+        const parentText = parent.textContent || '';
+        const hasBattleContext = parentText.includes('Xỏ lá ba que') || parentText.includes('KẾT QUẢ') ||
+                                  parentText.includes('⚔️') || parentText.includes('skill') ||
+                                  parentText.includes('NPC') || parentText.includes('nhấp') ||
+                                  btn.closest('[id^="message-"]') || btn.closest('[data-message-id]');
+
+        if (hasBattleContext) {
+          skillBtns.push({ btn, text, parent });
         }
       }
 
-      if (!battleMsg) return { buttons: [], msgId: 'none', msgPreview: '' };
+      if (skillBtns.length === 0) return { buttons: [], msgId: 'none', msgPreview: '' };
 
-      // Get all visible buttons in this message
-      const btns = battleMsg.querySelectorAll('button[role="button"]');
-      btns.forEach((btn, idx) => {
-        const text = btn.textContent.trim();
-        if (text.length > 0 && btn.offsetParent !== null) {
-          battleButtons.push({ idx, text });
-        }
-      });
+      // Return the last group of skill buttons (most recent battle)
+      const lastGroup = skillBtns;
+      const result = lastGroup.map((s, idx) => ({ idx, text: s.text }));
 
-      const msgId = battleMsg.id || 'unknown';
-      const msgPreview = battleMsg.textContent.substring(0, 100);
+      const msgId = lastGroup[0].parent?.id || 'unknown';
+      const msgPreview = lastGroup[0].parent?.textContent?.substring(0, 100) || '';
 
-      return { buttons: battleButtons, msgId, msgPreview };
+      return { buttons: result, msgId, msgPreview };
     })()`);
   }
 
-  // Click a specific skill button (by index) in the last message that has buttons
+  // Click a specific skill button (by index) - finds buttons fresh each time
   async clickSkillButton(btnIndex) {
     return await this.exec(`(() => {
-      // Find the last message with buttons
-      const msgs = document.querySelectorAll('[role="article"]');
-      const recentMsgs = Array.from(msgs).slice(-10).reverse();
-      let targetMsg = null;
-      for (const msg of recentMsgs) {
-        const btns = msg.querySelectorAll('button[role="button"]');
-        if (btns.length > 0) {
-          targetMsg = msg;
-          break;
+      const skipTexts = ['Trang Bị', 'Kỹ Năng', 'Thần Khí', 'Đá Khảm', 'Vật Phẩm', 'Hành Trang'];
+      const allBtns = document.querySelectorAll('button[role="button"]');
+      const skillBtns = [];
+
+      for (const btn of allBtns) {
+        const text = btn.textContent.trim();
+        if (text.length === 0 || btn.offsetParent === null) continue;
+        if (skipTexts.includes(text)) continue;
+        const parent = btn.closest('[class*="message"], [class*="Message"], [role="article"], [class*="chatMessage"], [class*="bubble"]') || btn.parentElement?.parentElement;
+        if (!parent) continue;
+        const parentText = parent.textContent || '';
+        const hasBattleContext = parentText.includes('Xỏ lá ba que') || parentText.includes('KẾT QUẢ') ||
+                                  parentText.includes('⚔️') || parentText.includes('skill') ||
+                                  parentText.includes('NPC') || parentText.includes('nhấp') ||
+                                  btn.closest('[id^="message-"]') || btn.closest('[data-message-id]');
+        if (hasBattleContext) {
+          skillBtns.push(btn);
         }
       }
 
-      if (!targetMsg) return false;
-
-      const btns = targetMsg.querySelectorAll('button[role="button"]');
-      let count = 0;
-      for (const btn of btns) {
-        const text = btn.textContent.trim();
-        if (text.length > 0 && btn.offsetParent !== null) {
-          if (count === ${btnIndex}) {
-            btn.click();
-            return true;
-          }
-          count++;
-        }
+      if (${btnIndex} >= skillBtns.length) return false;
+      const btn = skillBtns[${btnIndex}];
+      if (btn) {
+        btn.click();
+        return true;
       }
       return false;
     })()`);
@@ -872,6 +1219,7 @@ class NpcBot {
   getStatus() {
     return {
       isRunning: this.isRunning,
+      username: this.username,
       battleCount: this.battleCount,
       totalBattles: this.totalBattles,
       npcNumber: this.npcNumber,
@@ -881,6 +1229,9 @@ class NpcBot {
       targetMaxNpc: this.targetMaxNpc,
       climbWinsNeeded: this.climbWinsNeeded,
       climbWinsDone: this.climbWinsDone,
+      mode: this.mode,
+      maxLayer: this.maxLayer,
+      currentLayer: this.currentLayer,
     };
   }
 }

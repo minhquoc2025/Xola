@@ -143,6 +143,10 @@
     <div id="config-section" class="panel-section">
       <h3>Config</h3>
       <div class="config-field">
+        <label for="username">Username</label>
+        <input id="username" type="text" value="Quất" placeholder="Tên Discord">
+      </div>
+      <div class="config-field">
         <label for="npc-number">NPC Number</label>
         <input id="npc-number" type="number" value="1" min="1" max="99">
       </div>
@@ -172,6 +176,17 @@
       <div class="config-field">
         <label for="target-max-npc">Target NPC (đích)</label>
         <input id="target-max-npc" type="number" value="60" min="1" max="999">
+      </div>
+      <div class="config-field" style="border-left:1px solid #1a2a4e;padding-left:10px;">
+        <label style="color:#e94560;font-weight:600;">🔄 LUÂN HỒI</label>
+        <label style="display:flex;align-items:center;gap:6px;margin-top:4px;cursor:pointer;">
+          <input id="luanhoi-mode" type="checkbox" style="width:14px;height:14px;">
+          <span style="font-size:11px;color:#ccc;">Bật Luân Hồi</span>
+        </label>
+      </div>
+      <div class="config-field">
+        <label for="max-layer">Max Layer (Boss)</label>
+        <input id="max-layer" type="number" value="20" min="10" max="100" step="10">
       </div>
     </div>
 

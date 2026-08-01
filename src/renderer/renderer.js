@@ -16,7 +16,7 @@ window.addEventListener('DOMContentLoaded', () => {
 function initWebview() {
   const webview = document.createElement('webview');
   webview.id = 'webview-main';
-  webview.setAttribute('partition', 'persist:discord-main-account');
+  webview.setAttribute('partition', 'persist:discord-npc');
   webview.src = 'https://discord.com/app';
   webview.addEventListener('dom-ready', () => onWebviewLoad(webview));
   document.getElementById('content').appendChild(webview);
@@ -82,6 +82,7 @@ function getConfig() {
   const autoClimb = document.getElementById('auto-climb').checked;
   const targetMaxNpc = parseInt(document.getElementById('target-max-npc').value) || 60;
   return {
+    username: (document.getElementById('username').value || '').trim(),
     npcNumber: parseInt(document.getElementById('npc-number').value) || 1,
     totalBattles: parseInt(document.getElementById('total-battles').value) || 5,
     cooldownMs: (parseInt(document.getElementById('cooldown-seconds').value) || 120) * 1000,
@@ -89,6 +90,8 @@ function getConfig() {
     clickPattern: clickPattern.length > 0 ? clickPattern : [3, 2, 1],
     autoClimb,
     targetMaxNpc,
+    mode: document.getElementById('luanhoi-mode').checked ? 'luanhoi' : 'npc',
+    maxLayer: parseInt(document.getElementById('max-layer').value) || 20,
   };
 }
 
