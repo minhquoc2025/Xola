@@ -9,4 +9,6 @@ contextBridge.exposeInMainWorld('api', {
   getLogs: () => ipcRenderer.invoke('get-logs'),
   clearLogs: () => ipcRenderer.invoke('clear-logs'),
   onLogMessage: (cb) => ipcRenderer.on('log-message', (e, msg) => cb(msg)),
+  sellScan: (idx) => ipcRenderer.invoke('sell-scan', idx),
+  sellSend: (idx, itemId) => ipcRenderer.invoke('sell-send', idx, itemId),
 });

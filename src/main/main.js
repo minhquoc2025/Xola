@@ -1,5 +1,8 @@
-const { app, BrowserWindow, ipcMain, webContents } = require('electron');
+const { app, BrowserWindow, ipcMain, webContents, session } = require('electron');
 const path = require('path');
+
+app.commandLine.appendSwitch('disable-site-isolation-trials');
+
 const { NpcBot } = require('./npc-bot');
 
 let mainWindow = null;
@@ -103,4 +106,16 @@ ipcMain.handle('get-logs', () => globalLogBuffer);
 ipcMain.handle('clear-logs', () => {
   globalLogBuffer = [];
   return 'cleared';
+});
+
+ipcMain.handle('sell-scan', async (e, idx) => {
+  const entry = botMap[idx];
+  if (entry) return await entry.scanSellItems();
+  return [];
+});
+
+ipcMain.handle('sell-send', async (e, idx, itemId) => {
+  const entry = botMap[idx];
+  if (entry) return await entry.sellItem(itemId);
+  return { sent: false, reason: 'no_bot' };
 });

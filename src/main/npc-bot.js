@@ -27,6 +27,9 @@ class NpcBot {
     this.rollCount = 1;
     this.rollDelayMs = 3000;
     this.rollPending = false;
+    // Sell state
+    this.pendingSellItems = new Set(); // items sent sell command, waiting decompose
+    this.sellInventory = [];
   }
 
   ts() {
@@ -55,6 +58,18 @@ class NpcBot {
 
   rand(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
+  async typeTrustedString(str) {
+    for (const ch of str) {
+      await this.wc.sendInputEvent({ type: 'char', keyCode: ch });
+      await this.delay(this.rand(60, 120));
+    }
+  }
+
+  async pressTrustedKey(keyCode) {
+    await this.wc.sendInputEvent({ type: 'keyDown', keyCode });
+    await this.wc.sendInputEvent({ type: 'keyUp', keyCode });
   }
 
   handleLock(lockInfo) {
@@ -430,6 +445,161 @@ class NpcBot {
 
     this.log(`Sent: ${cmd}`);
     return true;
+  }
+
+  async scanSellItems() {
+    try {
+      // Focus textbox via click
+      await this.exec(`document.querySelector('[role="textbox"]')?.click()`);
+      await this.delay(500);
+
+      // Clear textbox with Ctrl+A then Backspace (trusted)
+      await this.wc.sendInputEvent({ type: 'keyDown', keyCode: 'a', modifiers: ['control'] });
+      await this.wc.sendInputEvent({ type: 'keyUp', keyCode: 'a', modifiers: [] });
+      await this.delay(100);
+      await this.pressTrustedKey('Backspace');
+      await this.delay(200);
+
+      // Type "/sell " using trusted events → triggers slash command autocomplete
+      this.log(`Scan: typing '/sell '...`);
+      await this.typeTrustedString('/sell ');
+      await this.delay(2500);
+
+      // Debug: check textbox content
+      const tbText = await this.exec(`document.querySelector('[role="textbox"]')?.textContent || 'EMPTY'`);
+      this.log(`Scan: textbox = "${tbText}"`);
+
+    // Read autocomplete items from DOM
+    const items = await this.exec(`(() => {
+      const items = [];
+      const seen = new Set();
+      // Discord autocomplete popup - try many selectors
+      const popups = document.querySelectorAll('[role="listbox"] [role="option"], [class*="autocomplete"] [role="option"], [class*="command"] [role="option"], [id*="autocomplete"] [role="option"], [data-mode="autocomplete"] [role="option"]');
+      for (const opt of popups) {
+        const text = opt.textContent || '';
+        const m = text.match(/\\((\\d+)\\)\\s*(.*)/);
+        if (m) {
+          const id = m[1];
+          const rest = m[2].trim();
+          if (seen.has(id)) continue;
+          seen.add(id);
+          const colorMatch = rest.match(/^([^\w\\s]+)\\s+(.+)/);
+          if (colorMatch) {
+            items.push({ id, color: colorMatch[1], name: colorMatch[2].trim(), raw: text.trim() });
+          } else {
+            items.push({ id, color: 'other', name: rest, raw: text.trim() });
+          }
+        }
+      }
+      // Debug: also log all option elements found
+      const allOpts = document.querySelectorAll('[role="option"]');
+      const debugOpts = Array.from(allOpts).slice(0, 5).map(o => (o.textContent || '').substring(0, 100));
+      return { items, debugTotal: allOpts.length, debugOpts };
+    })()`);
+    this.log(`Sell scan: found ${items.items.length} items, ${items.debugTotal} options, debug: ${JSON.stringify(items.debugOpts || [])}`);
+
+    // Close autocomplete by pressing Escape (trusted)
+    await this.pressTrustedKey('Escape');
+    await this.delay(200);
+
+    // Clear textbox with Ctrl+A + Backspace (trusted)
+    await this.wc.sendInputEvent({ type: 'keyDown', keyCode: 'a', modifiers: ['control'] });
+    await this.wc.sendInputEvent({ type: 'keyUp', keyCode: 'a', modifiers: [] });
+    await this.delay(100);
+    await this.pressTrustedKey('Backspace');
+
+    this.sellInventory = items.items || [];
+
+    const currentIds = new Set(this.sellInventory.map(i => i.id));
+    for (const id of this.pendingSellItems) {
+      if (!currentIds.has(id)) {
+        this.pendingSellItems.delete(id);
+        this.log(`Sell: ID ${id} da het trong kho, xoa khoi danh sach cho`);
+      }
+    }
+
+    this.sellInventory = this.sellInventory.filter(i => !this.pendingSellItems.has(i.id));
+
+    this.log(`Sell: Tim thay ${this.sellInventory.length} vat pham (${this.pendingSellItems.size} dang cho phan tach)`);
+    return this.sellInventory;
+    } catch(e) {
+      this.log(`Scan error: ${e.message}`);
+      return [];
+    }
+  }
+
+  async sellItem(itemId) {
+    if (this.pendingSellItems.has(itemId)) {
+      this.log(`Sell: ID ${itemId} đã gửi lệnh bán, đang chờ quy đổi`);
+      return { sent: false, reason: 'pending' };
+    }
+
+    try {
+    // Focus textbox via click (exec is fine for this)
+    await this.exec(`document.querySelector('[role="textbox"]')?.click()`);
+    await this.delay(300);
+
+    // Clear textbox with Ctrl+A then Backspace (trusted)
+    await this.wc.sendInputEvent({ type: 'keyDown', keyCode: 'a', modifiers: ['control'] });
+    await this.wc.sendInputEvent({ type: 'keyUp', keyCode: 'a', modifiers: [] });
+    await this.delay(100);
+    await this.pressTrustedKey('Backspace');
+    await this.delay(200);
+
+    // Type "/sell " using trusted events → triggers slash command autocomplete
+    this.log(`Sell: Typing '/sell ' (trusted input)`);
+    await this.typeTrustedString('/sell ');
+    await this.delay(2000);
+
+    // Check if autocomplete options appeared
+    const options = await this.exec(`(() => {
+      const opts = document.querySelectorAll('[id^="autocomplete-"] [role="option"], [class*="autoComplete"] [role="option"], [role="listbox"] [role="option"], [data-mode="autocomplete"] [role="option"]');
+      const result = [];
+      for (const opt of opts) {
+        const text = opt.textContent || '';
+        if (text.includes('${itemId}') || text.includes('(${itemId})')) {
+          result.push(text.trim().substring(0, 80));
+        }
+      }
+      return { total: opts.length, matched: result };
+    })()`);
+    this.log(`Sell: Autocomplete: ${options.total} options, matched: ${JSON.stringify(options.matched)}`);
+
+    // Type the item ID to filter autocomplete (trusted)
+    const idStr = String(itemId);
+    this.log(`Sell: Typing ID '${idStr}' to filter`);
+    await this.typeTrustedString(idStr);
+    await this.delay(1000);
+
+    // Try clicking matching option (exec is fine for DOM click)
+    const clicked = await this.exec(`(() => {
+      const opts = document.querySelectorAll('[id^="autocomplete-"] [role="option"], [class*="autoComplete"] [role="option"], [role="listbox"] [role="option"], [data-mode="autocomplete"] [role="option"]');
+      for (const opt of opts) {
+        const text = opt.textContent || '';
+        if (text.includes('${itemId}') || text.includes('(${itemId})')) {
+          opt.click();
+          return 'clicked';
+        }
+      }
+      return 'not_found';
+    })()`);
+    this.log(`Sell: Click result: ${clicked}`);
+
+    // Press Enter to select (trusted)
+    await this.delay(300);
+    await this.pressTrustedKey('Return');
+
+    // Press Enter again to send the slash command (trusted)
+    await this.delay(500);
+    await this.pressTrustedKey('Return');
+
+    this.pendingSellItems.add(itemId);
+    this.log(`Sell: Da gui lenh ban ID ${itemId} (click=${clicked})`);
+    return { sent: true };
+    } catch(e) {
+      this.log(`Sell error: ${e.message}`);
+      return { sent: false, reason: e.message };
+    }
   }
 
   isRollTime() {
