@@ -487,19 +487,38 @@ class NpcBot {
 
         const text = msg.textContent.toLowerCase();
         const rawText = msg.textContent;
-        if (text.includes('kết quả trận đấu') || text.includes('battle ended') || text.includes('kết thúc')) {
+
+        const hasResult = text.includes('kết quả trận đấu') || text.includes('battle ended') || text.includes('kết thúc');
+        const hasWin = text.includes('chiến thắng') || text.includes('thắng npc') || 
+                       rawText.includes('✅') || text.includes('thắng!') ||
+                       rawText.includes('🥇');
+        const hasLoss = text.includes('thất bại') || text.includes('thua') ||
+                        rawText.includes('❌') || rawText.includes('💀') || rawText.includes('😵');
+
+        if (hasResult || hasWin || hasLoss) {
           msg.setAttribute('data-bot-seen', 'true');
           if (msg.id) {
             const parts = msg.id.split('-');
             window.botMaxMsgId = parts[parts.length - 1];
           }
-          // Determine win or loss
-          const isWin = text.includes('chiến thắng') || text.includes('thắng npc') || 
-                        rawText.includes('✅') || text.includes('thắng!') ||
-                        rawText.includes('🥇') || rawText.includes('thắng');
-          const isLoss = text.includes('thất bại') || text.includes('thua') ||
-                         rawText.includes('❌') || rawText.includes('💀');
-          const result = isLoss && !isWin ? 'loss' : 'win';
+
+          let result;
+          if (hasResult) {
+            // "KẾT QUẢ TRẬN ĐẤU" = battle summary (contains player result + NPC loss info)
+            // Use original logic where loss requires NO win indicators
+            result = hasLoss && !hasWin ? 'loss' : 'win';
+          } else {
+            // Direct loss/win message without result header.
+            // ✅/🥇 chỉ xuất hiện trong tin nhắn thắng.
+            // CHIẾN THẮNG có thể xuất hiện trong cả win (cho player) và loss (cho NPC).
+            if (rawText.includes('✅ Thắng') || rawText.includes('🥇')) {
+              result = 'win';
+            } else if (hasLoss) {
+              result = 'loss';
+            } else {
+              result = hasWin ? 'win' : 'unknown';
+            }
+          }
           return { ended: true, result };
         }
       }
@@ -677,12 +696,23 @@ class NpcBot {
     const username = this.username || '';
     return await this.exec(`(() => {
       const msgs = document.querySelectorAll('[role="article"]');
+      const maxIdStr = window.botMaxMsgId || '0';
+      const maxId = BigInt(maxIdStr);
       const username = ${JSON.stringify(username)};
       const recentMsgs = Array.from(msgs).slice(-30).reverse();
 
       let battleMsg = null;
       for (const msg of recentMsgs) {
+        if (msg.getAttribute('data-bot-seen') === 'true') continue;
         if (username && !msg.textContent.includes(username)) continue;
+        if (msg.id) {
+          const parts = msg.id.split('-');
+          const idStr = parts[parts.length - 1];
+          try {
+            const id = BigInt(idStr);
+            if (id <= maxId) continue;
+          } catch(e) {}
+        }
         const btns = msg.querySelectorAll('button[role="button"]');
         if (btns.length > 0) { battleMsg = msg; break; }
       }
@@ -776,10 +806,10 @@ class NpcBot {
     // buttonIndex = skills array index + 1 (because button[0] is basic attack)
     const healSkillIdx = this.healPosition - 1; // 0-based index in skills[]
 
-    // Priority 1: Heal skill at healPosition if HP < 60% (or HP unknown = -1)
-    if (healSkillIdx >= 0 && healSkillIdx < skills.length) {
+    // Priority 1: Heal skill at healPosition if HP < 60% (only when HP is readable)
+    if (healSkillIdx >= 0 && healSkillIdx < skills.length && userHpPercent >= 0) {
       const healSkill = skills[healSkillIdx];
-      if (healSkill.ready && (userHpPercent < 0 || userHpPercent < 60)) {
+      if (healSkill.ready && userHpPercent < 60) {
         const btnIndex = this.healPosition;
         this.log(`Smart: Chọn heal (position ${this.healPosition}, button ${btnIndex + 1}) - HP ${userHpPercent}%`);
         return btnIndex;
@@ -836,6 +866,8 @@ class NpcBot {
     return await this.exec(`(() => {
       // Get all messages, find ones with buttons
       const msgs = document.querySelectorAll('[role="article"]');
+      const maxIdStr = window.botMaxMsgId || '0';
+      const maxId = BigInt(maxIdStr);
       const username = ${JSON.stringify(username)};
       let battleMsg = null;
       let battleButtons = [];
@@ -843,8 +875,20 @@ class NpcBot {
       // Check last 30 messages (group chat can have many messages)
       const recentMsgs = Array.from(msgs).slice(-30).reverse();
       for (const msg of recentMsgs) {
+        if (msg.getAttribute('data-bot-seen') === 'true') continue;
+
         // If username is set, skip messages that don't contain it
         if (username && !msg.textContent.includes(username)) continue;
+
+        // Skip old messages (before current npc command)
+        if (msg.id) {
+          const parts = msg.id.split('-');
+          const idStr = parts[parts.length - 1];
+          try {
+            const id = BigInt(idStr);
+            if (id <= maxId) continue;
+          } catch(e) {}
+        }
 
         const btns = msg.querySelectorAll('button[role="button"]');
         if (btns.length > 0) {
@@ -878,12 +922,24 @@ class NpcBot {
     return await this.exec(`(() => {
       // Find the last message with buttons
       const msgs = document.querySelectorAll('[role="article"]');
+      const maxIdStr = window.botMaxMsgId || '0';
+      const maxId = BigInt(maxIdStr);
       const username = ${JSON.stringify(username)};
       const recentMsgs = Array.from(msgs).slice(-30).reverse();
       let targetMsg = null;
       for (const msg of recentMsgs) {
+        if (msg.getAttribute('data-bot-seen') === 'true') continue;
         // If username is set, skip messages that don't contain it
         if (username && !msg.textContent.includes(username)) continue;
+        // Skip old messages
+        if (msg.id) {
+          const parts = msg.id.split('-');
+          const idStr = parts[parts.length - 1];
+          try {
+            const id = BigInt(idStr);
+            if (id <= maxId) continue;
+          } catch(e) {}
+        }
 
         const btns = msg.querySelectorAll('button[role="button"]');
         if (btns.length > 0) {
@@ -915,8 +971,15 @@ class NpcBot {
     let noButtonsCount = 0;
     let lastLogCount = 0;
     let debugScanned = false;
+    const battleStartTime = Date.now();
+    const maxBattleDurationMs = 300000; // 5 phút timeout an toàn
 
     while (this.isRunning && this.runId === runId) {
+      // Safety timeout: force-end battle after 5 minutes
+      if (Date.now() - battleStartTime > maxBattleDurationMs) {
+        this.log('⚠️ Battle timeout (5 phút). Force-end...');
+        return { type: 'ended', result: 'unknown' };
+      }
       // Check if battle ended
       const battleEndResult = await this.checkBattleEnd();
       if (battleEndResult && battleEndResult.ended) {
@@ -995,7 +1058,7 @@ class NpcBot {
         const battleState = await this.readBattleState();
         if (battleState) {
           this.log(`Smart: HP ${battleState.userHpPercent}% (${battleState.userHpCurrent}/${battleState.userHpMax}) | Skills: ${battleState.skills.map(s => `pos${s.position}(${s.ready ? '✅' : '⏳' + s.cooldownTurns})`).join(' | ')}`);
-          this.log(`Smart DEBUG emojis: ${battleState.emojiDump}`);
+          this.log(`Smart DEBUG status: ${battleState.statusDump}`);
           btnIndex = this.chooseSkill(battleState);
         } else {
           this.log('Smart: Không đọc được battle state, fallback pattern');
