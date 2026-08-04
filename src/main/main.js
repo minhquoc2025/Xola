@@ -107,15 +107,3 @@ ipcMain.handle('clear-logs', () => {
   globalLogBuffer = [];
   return 'cleared';
 });
-
-ipcMain.handle('sell-scan', async (e, idx) => {
-  const entry = botMap[idx];
-  if (entry) return await entry.scanSellItems();
-  return [];
-});
-
-ipcMain.handle('sell-send', async (e, idx, itemId) => {
-  const entry = botMap[idx];
-  if (entry) return await entry.sellItem(itemId);
-  return { sent: false, reason: 'no_bot' };
-});

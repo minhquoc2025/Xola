@@ -22,14 +22,10 @@ class NpcBot {
     this.climbWinsDone = 0;    // wins done in current farming session
     // Group chat: filter by username
     this.username = ''; // Empty = no filter (solo mode)
-    // Roll schedule
-    this.rollSchedule = null; // ISO datetime string, e.g. "2026-07-28T14:30"
-    this.rollCount = 1;
-    this.rollDelayMs = 3000;
-    this.rollPending = false;
-    // Sell state
-    this.pendingSellItems = new Set(); // items sent sell command, waiting decompose
-    this.sellInventory = [];
+    // Luân Hồi mode
+    this.mode = 'npc';           // 'npc' hoặc 'luanhoi'
+    this.maxLayer = 20;          // tầng boss cuối cùng (10, 20, 30...)
+    this.currentLayer = 0;       // tầng hiện tại trong luân hồi
   }
 
   ts() {
@@ -86,18 +82,11 @@ class NpcBot {
     if (config.cooldownMs !== undefined) this.cooldownMs = config.cooldownMs;
     if (config.buttonDelayMs !== undefined) this.buttonDelayMs = config.buttonDelayMs;
     if (config.clickPattern !== undefined) this.clickPattern = config.clickPattern;
-    if (config.smartMode !== undefined) this.smartMode = config.smartMode;
-    if (config.healPosition !== undefined) this.healPosition = Math.max(1, parseInt(config.healPosition) || 3);
-    if (config.skillPriority !== undefined) {
-      const arr = config.skillPriority.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n > 0);
-      if (arr.length > 0) this.skillPriority = arr;
-    }
     if (config.autoClimb !== undefined) this.autoClimb = config.autoClimb;
     if (config.targetMaxNpc !== undefined) this.targetMaxNpc = config.targetMaxNpc;
     if (config.username !== undefined) this.username = config.username;
-    if (config.rollSchedule !== undefined) this.rollSchedule = config.rollSchedule || null;
-    if (config.rollCount !== undefined) this.rollCount = Math.max(1, parseInt(config.rollCount) || 1);
-    if (config.rollDelayMs !== undefined) this.rollDelayMs = Math.max(500, parseInt(config.rollDelayMs) || 3000);
+    if (config.mode !== undefined) this.mode = config.mode;
+    if (config.maxLayer !== undefined) this.maxLayer = config.maxLayer;
   }
 
   start() {
@@ -113,6 +102,13 @@ class NpcBot {
     if (this.username) {
       this.log(`=== GROUP MODE: Lọc tin nhắn theo "${this.username}" ===`);
     }
+
+    if (this.mode === 'luanhoi') {
+      this.log(`=== LUÂN HỒI MODE: maxLayer=${this.maxLayer} ===`);
+      this.luanhoiLoop(this.runId);
+      return;
+    }
+
     if (this.autoClimb) {
       this.log(`=== AUTO CLIMB MODE: NPC ${this.npcNumber} → NPC ${this.targetMaxNpc} ===`);
     }
@@ -122,7 +118,6 @@ class NpcBot {
   stop() {
     this.isRunning = false;
     this.runId = null;
-    this.rollPending = false;
     if (this.timeoutId) {
       clearTimeout(this.timeoutId);
       this.timeoutId = null;
@@ -151,12 +146,6 @@ class NpcBot {
       ? `NPC ${this.npcNumber} (climb ${this.climbWinsDone}/${this.climbWinsNeeded > 0 ? this.climbWinsNeeded : '?'} wins)`
       : `Battle ${this.battleCount + 1}/${this.totalBattles}`;
     this.log(`\n=== ${label} ===`);
-
-    // Roll schedule: execute if it's time
-    if (this.isRollTime()) {
-      await this.executeRoll(runId);
-      return;
-    }
 
     // Auto Climb: check lock BEFORE sendNpcCommand updates botMaxMsgId
     if (this.autoClimb) {
@@ -447,188 +436,179 @@ class NpcBot {
     return true;
   }
 
-  async scanSellItems() {
-    try {
-      // Focus textbox via click
-      await this.exec(`document.querySelector('[role="textbox"]')?.click()`);
-      await this.delay(500);
+  // === LUÂN HỒI METHODS ===
 
-      // Clear textbox with Ctrl+A then Backspace (trusted)
-      await this.wc.sendInputEvent({ type: 'keyDown', keyCode: 'a', modifiers: ['control'] });
-      await this.wc.sendInputEvent({ type: 'keyUp', keyCode: 'a', modifiers: [] });
-      await this.delay(100);
-      await this.pressTrustedKey('Backspace');
-      await this.delay(200);
+  async sendLuanhoiCommand() {
+    return this.sendMessage('!luanhoi');
+  }
 
-      // Type "/sell " using trusted events → triggers slash command autocomplete
-      this.log(`Scan: typing '/sell '...`);
-      await this.typeTrustedString('/sell ');
-      await this.delay(2500);
+  async clickButtonInContext(keyword) {
+    return await this.exec(`(() => {
+      const maxIdStr = window.botMaxMsgId || '0';
+      const maxId = BigInt(maxIdStr);
+      const skipTexts = ['Trang Bị', 'Kỹ Năng', 'Thần Khí', 'Đá Khảm', 'Vật Phẩm', 'Hành Trang'];
+      const allBtns = document.querySelectorAll('button[role="button"]');
 
-      // Debug: check textbox content
-      const tbText = await this.exec(`document.querySelector('[role="textbox"]')?.textContent || 'EMPTY'`);
-      this.log(`Scan: textbox = "${tbText}"`);
+      for (const btn of allBtns) {
+        const text = btn.textContent.trim();
+        if (text.length === 0 || btn.offsetParent === null) continue;
+        if (skipTexts.includes(text)) continue;
 
-    // Read autocomplete items from DOM
-    const items = await this.exec(`(() => {
-      const items = [];
-      const seen = new Set();
-      // Discord autocomplete popup - try many selectors
-      const popups = document.querySelectorAll('[role="listbox"] [role="option"], [class*="autocomplete"] [role="option"], [class*="command"] [role="option"], [id*="autocomplete"] [role="option"], [data-mode="autocomplete"] [role="option"]');
-      for (const opt of popups) {
-        const text = opt.textContent || '';
-        const m = text.match(/\\((\\d+)\\)\\s*(.*)/);
-        if (m) {
-          const id = m[1];
-          const rest = m[2].trim();
-          if (seen.has(id)) continue;
-          seen.add(id);
-          const colorMatch = rest.match(/^([^\w\\s]+)\\s+(.+)/);
-          if (colorMatch) {
-            items.push({ id, color: colorMatch[1], name: colorMatch[2].trim(), raw: text.trim() });
+        const msg = btn.closest('[id^="message-"]');
+        if (msg && msg.id) {
+          const parts = msg.id.split('-');
+          const idStr = parts[parts.length - 1];
+          try {
+            const id = BigInt(idStr);
+            if (id <= maxId) continue;
+          } catch(e) { continue; }
+        }
+
+        const btnText = text.toLowerCase();
+        if (btnText.includes(${JSON.stringify(keyword.toLowerCase())})) {
+          btn.click();
+          return { clicked: true, text: text };
+        }
+      }
+      return { clicked: false };
+    })()`);
+  }
+
+  async selectBuff() {
+    const buffPriority = ['thiên', 'huyền', 'linh', 'phàm'];
+
+    for (const buff of buffPriority) {
+      const result = await this.clickButtonInContext(buff);
+      if (result && result.clicked) {
+        this.log(`🎖️ Chọn bùa: ${result.text}`);
+        return true;
+      }
+    }
+
+    this.log('⚠️ Không tìm thấy button bùa');
+    return false;
+  }
+
+  async checkBossReward() {
+    let result = await this.clickButtonInContext('kết thúc');
+    if (result && result.clicked) {
+      this.log(`🏆 Đã nhận thưởng boss!`);
+      return true;
+    }
+
+    result = await this.clickButtonInContext('nhận');
+    if (result && result.clicked) {
+      this.log(`🏆 Đã nhận thưởng boss!`);
+      return true;
+    }
+
+    this.log('⚠️ Không tìm thấy button nhận thưởng');
+    return false;
+  }
+
+  async checkLuanhoiEnd() {
+    return await this.exec(`(() => {
+      const maxIdStr = window.botMaxMsgId || '0';
+      const maxId = BigInt(maxIdStr);
+      const msgs = document.querySelectorAll('[role="article"]');
+      for (const msg of msgs) {
+        if (msg.id) {
+          const parts = msg.id.split('-');
+          const idStr = parts[parts.length - 1];
+          try {
+            const id = BigInt(idStr);
+            if (id <= maxId) continue;
+          } catch(e) {}
+        }
+        if (msg.getAttribute('data-bot-seen') === 'true') continue;
+
+        const text = (msg.textContent || '').toLowerCase();
+        if (text.includes('kết thúc luân hồi') || text.includes('luân hồi kết thúc') ||
+            text.includes('thất bại') || text.includes('đã thua') ||
+            (text.includes('thua') && text.includes('luân hồi'))) {
+          msg.setAttribute('data-bot-seen', 'true');
+          return true;
+        }
+      }
+      return false;
+    })()`);
+  }
+
+  async luanhoiLoop(runId) {
+    this.currentLayer = 1;
+
+    await this.sendLuanhoiCommand();
+    await this.delay(2500);
+
+    if (!this.isRunning || this.runId !== runId) return;
+
+    const initCooldown = await this.checkCooldownMessage();
+    if (initCooldown > 0) {
+      this.log(`Hồi chiêu! Chờ ${initCooldown}s...`);
+      await this.cooldownWait(initCooldown, runId);
+    }
+
+    while (this.isRunning && this.runId === runId) {
+      this.log(`\n=== LUÂN HỒI TẦNG ${this.currentLayer} ===`);
+
+      await this.delay(1500);
+      await this.selectBuff();
+      await this.delay(1000);
+
+      const result = await this.clickButtonsUntilEnd(false, runId);
+
+      if (!this.isRunning || this.runId !== runId) return;
+
+      const ended = result && result.type === 'ended';
+      const isLoss = ended && result.result === 'loss';
+
+      if (isLoss) {
+        this.log(`❌ THUA tầng ${this.currentLayer}! Kết thúc luân hồi.`);
+        this.stop();
+        return;
+      }
+
+      const luanhoiEnded = await this.checkLuanhoiEnd();
+      if (luanhoiEnded) {
+        this.log('❌ Luân hồi kết thúc (thua). Phần thưởng sẽ được gửi về.');
+        this.stop();
+        return;
+      }
+
+      this.log(`✅ Thắng tầng ${this.currentLayer}!`);
+
+      if (this.currentLayer % 10 === 0) {
+        this.log(`🏆 BOSS tầng ${this.currentLayer}! Đang xử lý...`);
+        await this.delay(2000);
+
+        if (this.currentLayer >= this.maxLayer) {
+          await this.checkBossReward();
+          await this.delay(1000);
+          this.log(`🎯 Hoàn thành luân hồi! Đã nhận thưởng ở tầng ${this.currentLayer}.`);
+          this.stop();
+          return;
+        } else {
+          const continued = await this.clickButtonInContext('tiếp tục');
+          if (continued && continued.clicked) {
+            this.log(`⬆️ Tiếp tục leo tháp...`);
           } else {
-            items.push({ id, color: 'other', name: rest, raw: text.trim() });
+            this.log('⚠️ Không tìm thấy button tiếp tục, thử nhận thưởng...');
+            await this.checkBossReward();
+            this.stop();
+            return;
           }
         }
       }
-      // Debug: also log all option elements found
-      const allOpts = document.querySelectorAll('[role="option"]');
-      const debugOpts = Array.from(allOpts).slice(0, 5).map(o => (o.textContent || '').substring(0, 100));
-      return { items, debugTotal: allOpts.length, debugOpts };
-    })()`);
-    this.log(`Sell scan: found ${items.items.length} items, ${items.debugTotal} options, debug: ${JSON.stringify(items.debugOpts || [])}`);
 
-    // Close autocomplete by pressing Escape (trusted)
-    await this.pressTrustedKey('Escape');
-    await this.delay(200);
+      this.currentLayer++;
 
-    // Clear textbox with Ctrl+A + Backspace (trusted)
-    await this.wc.sendInputEvent({ type: 'keyDown', keyCode: 'a', modifiers: ['control'] });
-    await this.wc.sendInputEvent({ type: 'keyUp', keyCode: 'a', modifiers: [] });
-    await this.delay(100);
-    await this.pressTrustedKey('Backspace');
-
-    this.sellInventory = items.items || [];
-
-    const currentIds = new Set(this.sellInventory.map(i => i.id));
-    for (const id of this.pendingSellItems) {
-      if (!currentIds.has(id)) {
-        this.pendingSellItems.delete(id);
-        this.log(`Sell: ID ${id} da het trong kho, xoa khoi danh sach cho`);
+      const cooldownSec = await this.checkCooldownMessage();
+      if (cooldownSec > 0) {
+        this.log(`Hồi chiêu! Chờ ${cooldownSec}s...`);
+        await this.cooldownWait(cooldownSec, runId);
+      } else {
+        await this.delay(2000);
       }
-    }
-
-    this.sellInventory = this.sellInventory.filter(i => !this.pendingSellItems.has(i.id));
-
-    this.log(`Sell: Tim thay ${this.sellInventory.length} vat pham (${this.pendingSellItems.size} dang cho phan tach)`);
-    return this.sellInventory;
-    } catch(e) {
-      this.log(`Scan error: ${e.message}`);
-      return [];
-    }
-  }
-
-  async sellItem(itemId) {
-    if (this.pendingSellItems.has(itemId)) {
-      this.log(`Sell: ID ${itemId} đã gửi lệnh bán, đang chờ quy đổi`);
-      return { sent: false, reason: 'pending' };
-    }
-
-    try {
-    // Focus textbox via click (exec is fine for this)
-    await this.exec(`document.querySelector('[role="textbox"]')?.click()`);
-    await this.delay(300);
-
-    // Clear textbox with Ctrl+A then Backspace (trusted)
-    await this.wc.sendInputEvent({ type: 'keyDown', keyCode: 'a', modifiers: ['control'] });
-    await this.wc.sendInputEvent({ type: 'keyUp', keyCode: 'a', modifiers: [] });
-    await this.delay(100);
-    await this.pressTrustedKey('Backspace');
-    await this.delay(200);
-
-    // Type "/sell " using trusted events → triggers slash command autocomplete
-    this.log(`Sell: Typing '/sell ' (trusted input)`);
-    await this.typeTrustedString('/sell ');
-    await this.delay(2000);
-
-    // Check if autocomplete options appeared
-    const options = await this.exec(`(() => {
-      const opts = document.querySelectorAll('[id^="autocomplete-"] [role="option"], [class*="autoComplete"] [role="option"], [role="listbox"] [role="option"], [data-mode="autocomplete"] [role="option"]');
-      const result = [];
-      for (const opt of opts) {
-        const text = opt.textContent || '';
-        if (text.includes('${itemId}') || text.includes('(${itemId})')) {
-          result.push(text.trim().substring(0, 80));
-        }
-      }
-      return { total: opts.length, matched: result };
-    })()`);
-    this.log(`Sell: Autocomplete: ${options.total} options, matched: ${JSON.stringify(options.matched)}`);
-
-    // Type the item ID to filter autocomplete (trusted)
-    const idStr = String(itemId);
-    this.log(`Sell: Typing ID '${idStr}' to filter`);
-    await this.typeTrustedString(idStr);
-    await this.delay(1000);
-
-    // Try clicking matching option (exec is fine for DOM click)
-    const clicked = await this.exec(`(() => {
-      const opts = document.querySelectorAll('[id^="autocomplete-"] [role="option"], [class*="autoComplete"] [role="option"], [role="listbox"] [role="option"], [data-mode="autocomplete"] [role="option"]');
-      for (const opt of opts) {
-        const text = opt.textContent || '';
-        if (text.includes('${itemId}') || text.includes('(${itemId})')) {
-          opt.click();
-          return 'clicked';
-        }
-      }
-      return 'not_found';
-    })()`);
-    this.log(`Sell: Click result: ${clicked}`);
-
-    // Press Enter to select (trusted)
-    await this.delay(300);
-    await this.pressTrustedKey('Return');
-
-    // Press Enter again to send the slash command (trusted)
-    await this.delay(500);
-    await this.pressTrustedKey('Return');
-
-    this.pendingSellItems.add(itemId);
-    this.log(`Sell: Da gui lenh ban ID ${itemId} (click=${clicked})`);
-    return { sent: true };
-    } catch(e) {
-      this.log(`Sell error: ${e.message}`);
-      return { sent: false, reason: e.message };
-    }
-  }
-
-  isRollTime() {
-    if (!this.rollSchedule || this.rollPending) return false;
-    const now = new Date();
-    const target = new Date(this.rollSchedule);
-    if (isNaN(target.getTime())) return false;
-    return now >= target;
-  }
-
-  async executeRoll(runId) {
-    this.rollPending = true;
-    this.log(`🎲 Bắt đầu quay số: ${this.rollCount} lần !roll`);
-
-    for (let i = 0; i < this.rollCount; i++) {
-      if (!this.isRunning || this.runId !== runId) break;
-      await this.sendMessage('!roll');
-      this.log(`🎲 Roll ${i + 1}/${this.rollCount}`);
-      if (i < this.rollCount - 1) {
-        await this.delay(this.rollDelayMs);
-      }
-    }
-
-    this.log(`🎲 Hoàn thành quay số!`);
-    this.rollPending = false;
-    this.rollSchedule = null;
-
-    if (this.isRunning && this.runId === runId) {
-      this.mainLoop(runId);
     }
   }
 
