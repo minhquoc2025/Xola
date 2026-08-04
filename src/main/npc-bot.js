@@ -7,29 +7,29 @@ class NpcBot {
     this.battleCount = 0;
     this.totalBattles = 5;
     this.npcNumber = 1;
-    this.cooldownMs = 120000; // 2 minutes
-    this.defeatCooldownSec = 300; // 5 minutes wait after defeat
+    this.cooldownMs = 120000;
+    this.defeatCooldownSec = 300;
     this.buttonDelayMs = 1000;
-    this.clickPattern = [3, 2, 1]; // Legacy fallback
-    this.smartMode = true; // Always smart mode
-    this.healPosition = 3; //1-based position of heal/defensive skill in skills[] array (Skill4 = position 3)
-    this.skillPriority = [2, 1]; // Priority: Skill3 (Tuyệt Sát=pos2) > Skill2 (Phá Giáp=pos1)
-    this.processedLockIds = new Set(); // Track processed lock message IDs
-    // Auto Climb fields
+    this.clickPattern = [3, 2, 1];
+    this.smartMode = true;
+    this.healPosition = 3;
+    this.skillPriority = [2, 1];
+    this.processedLockIds = new Set();
     this.autoClimb = false;
     this.targetMaxNpc = 60;
-    this.climbWinsNeeded = 0;  // wins still needed for current NPC before climbing
-    this.climbWinsDone = 0;    // wins done in current farming session
-    // Group chat: filter by username
-    this.username = ''; // Empty = no filter (solo mode)
-    // Roll schedule
-    this.rollSchedule = null; // ISO datetime string, e.g. "2026-07-28T14:30"
-    this.rollCount = 1;
-    this.rollDelayMs = 3000;
-    this.rollPending = false;
-    // Sell state
-    this.pendingSellItems = new Set(); // items sent sell command, waiting decompose
-    this.sellInventory = [];
+    this.climbWinsNeeded = 0;
+    this.climbWinsDone = 0;
+    this.username = '';
+    this.stats = {
+      wins: 0,
+      losses: 0,
+      coins: 0,
+      exp: 0,
+      items: [],
+      itemCounts: {},
+      targetNpc: null,
+      lastBattle: null,
+    };
   }
 
   ts() {
@@ -60,18 +60,6 @@ class NpcBot {
     return Math.floor(Math.random() * (max - min + 1)) + min;
   }
 
-  async typeTrustedString(str) {
-    for (const ch of str) {
-      await this.wc.sendInputEvent({ type: 'char', keyCode: ch });
-      await this.delay(this.rand(60, 120));
-    }
-  }
-
-  async pressTrustedKey(keyCode) {
-    await this.wc.sendInputEvent({ type: 'keyDown', keyCode });
-    await this.wc.sendInputEvent({ type: 'keyUp', keyCode });
-  }
-
   handleLock(lockInfo) {
     this.log(`🔒 NPC ${this.npcNumber} bị khóa! → Chuyển NPC ${lockInfo.requiredNpc}, cần thắng ${lockInfo.winsLeft} lần.`);
     this.npcNumber = lockInfo.requiredNpc;
@@ -86,18 +74,9 @@ class NpcBot {
     if (config.cooldownMs !== undefined) this.cooldownMs = config.cooldownMs;
     if (config.buttonDelayMs !== undefined) this.buttonDelayMs = config.buttonDelayMs;
     if (config.clickPattern !== undefined) this.clickPattern = config.clickPattern;
-    if (config.smartMode !== undefined) this.smartMode = config.smartMode;
-    if (config.healPosition !== undefined) this.healPosition = Math.max(1, parseInt(config.healPosition) || 3);
-    if (config.skillPriority !== undefined) {
-      const arr = config.skillPriority.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n > 0);
-      if (arr.length > 0) this.skillPriority = arr;
-    }
     if (config.autoClimb !== undefined) this.autoClimb = config.autoClimb;
     if (config.targetMaxNpc !== undefined) this.targetMaxNpc = config.targetMaxNpc;
     if (config.username !== undefined) this.username = config.username;
-    if (config.rollSchedule !== undefined) this.rollSchedule = config.rollSchedule || null;
-    if (config.rollCount !== undefined) this.rollCount = Math.max(1, parseInt(config.rollCount) || 1);
-    if (config.rollDelayMs !== undefined) this.rollDelayMs = Math.max(500, parseInt(config.rollDelayMs) || 3000);
   }
 
   start() {
@@ -122,25 +101,129 @@ class NpcBot {
   stop() {
     this.isRunning = false;
     this.runId = null;
-    this.rollPending = false;
     if (this.timeoutId) {
       clearTimeout(this.timeoutId);
       this.timeoutId = null;
     }
     this.log('Bot stopped');
+    this.printStats();
+  }
+
+  resetStats() {
+    this.stats = { wins: 0, losses: 0, coins: 0, exp: 0, items: [], itemCounts: {}, targetNpc: null, lastBattle: null };
+  }
+
+  parseBattleRewards(text) {
+    const rewards = [];
+    this.log('[Rewards] Parsing: ' + text.substring(0, 200));
+
+    const allLines = text.split('\n');
+    let foundSummary = false;
+    let lastCoins = 0;
+    let lastExp = 0;
+
+    for (const line of allLines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      // Summary line: "+572    +253 XP" — two +N patterns, second ends with XP
+      const summaryMatch = trimmed.match(/^\+(\d+)\s+\+(\d+)\s*XP/i);
+      if (summaryMatch) {
+        lastCoins = parseInt(summaryMatch[1]);
+        lastExp = parseInt(summaryMatch[2]);
+        this.stats.coins += lastCoins;
+        this.stats.exp += lastExp;
+        rewards.push(`+${lastCoins}🪙`, `+${lastExp}XP`);
+        foundSummary = true;
+        this.log(`[Rewards] Summary: +${lastCoins}🪙 +${lastExp}XP`);
+        break;
+      }
+    }
+
+    // Scan for item drops
+    for (const line of allLines) {
+      const trimmed = line.trim();
+      const itemMatch = trimmed.match(/Rơi:\s*(.+?)(?:\s*(?:Thắng|Thua|✅|❌|💕|📖|Vợ|$))/i);
+      if (itemMatch) {
+        let item = itemMatch[1].trim();
+        item = item.replace(/^[^\w]+/, '').replace(/[^\w!]+$/, '').trim();
+        if (item && item.length > 1) {
+          // Track unique items list
+          if (!this.stats.items.includes(item)) {
+            this.stats.items.push(item);
+          }
+          // Track item counts
+          this.stats.itemCounts[item] = (this.stats.itemCounts[item] || 0) + 1;
+          rewards.push(`Rơi: ${item}`);
+        }
+      }
+    }
+
+    if (!foundSummary) {
+      this.log('[Rewards] No summary line found! Full text: ' + text);
+    }
+
+    // Store last battle info
+    this.stats.lastBattle = {
+      coins: lastCoins,
+      exp: lastExp,
+      items: rewards.filter(r => r.startsWith('Rơi:')).map(r => r.replace('Rơi: ', '')),
+    };
+
+    return rewards;
+  }
+
+  parseTargetNpc(text) {
+    // "🏆 Quất thắng NPC 🌙 Hằng Nga Tiên Tử!" or "💀 Quất thua NPC 🔮 Bí Ẩn Chi Linh!"
+    const winMatch = text.match(/thắng NPC\s+(.+?)!/);
+    if (winMatch) return winMatch[1].trim();
+    const lossMatch = text.match(/thua NPC\s+(.+?)!/);
+    if (lossMatch) return lossMatch[1].trim();
+    return null;
+  }
+
+  printStats() {
+    this.log('\n=== 📊 THỐNG KÊ ===');
+    this.log(`⚔️ Tổng trận: ${this.stats.wins + this.stats.losses}`);
+    this.log(`✅ Thắng: ${this.stats.wins}`);
+    this.log(`❌ Thua: ${this.stats.losses}`);
+    this.log(`💰 Coins: +${this.stats.coins}🪙`);
+    this.log(`✨ EXP: +${this.stats.exp}XP`);
+    if (this.stats.items.length > 0) {
+      this.log(`💎 Vật phẩm: ${this.stats.items.join(', ')}`);
+    }
+    if (this.stats.targetNpc) {
+      this.log(`🎯 NPC đã đánh: ${this.stats.targetNpc}`);
+    }
+    this.log('====================\n');
+  }
+
+  getStatus() {
+    return {
+      isRunning: this.isRunning,
+      battleCount: this.battleCount,
+      totalBattles: this.totalBattles,
+      npcNumber: this.npcNumber,
+      cooldownMs: this.cooldownMs,
+      clickPattern: this.clickPattern,
+      smartMode: this.smartMode,
+      autoClimb: this.autoClimb,
+      targetMaxNpc: this.targetMaxNpc,
+      climbWinsNeeded: this.climbWinsNeeded,
+      climbWinsDone: this.climbWinsDone,
+      stats: { ...this.stats },
+    };
   }
 
   async mainLoop(runId) {
     if (!this.isRunning || this.runId !== runId) return;
 
-    // Normal mode: stop after totalBattles
     if (!this.autoClimb && this.battleCount >= this.totalBattles) {
       this.log('=== COMPLETED ALL BATTLES ===');
       this.stop();
       return;
     }
 
-    // Auto Climb mode: stop when reached target NPC
     if (this.autoClimb && this.npcNumber > this.targetMaxNpc) {
       this.log(`=== AUTO CLIMB COMPLETE! Đã mở khóa đến NPC ${this.targetMaxNpc} ===`);
       this.stop();
@@ -152,13 +235,6 @@ class NpcBot {
       : `Battle ${this.battleCount + 1}/${this.totalBattles}`;
     this.log(`\n=== ${label} ===`);
 
-    // Roll schedule: execute if it's time
-    if (this.isRollTime()) {
-      await this.executeRoll(runId);
-      return;
-    }
-
-    // Auto Climb: check lock BEFORE sendNpcCommand updates botMaxMsgId
     if (this.autoClimb) {
       const lockInfo = await this.checkLockedMessage();
       if (lockInfo) {
@@ -168,13 +244,11 @@ class NpcBot {
       }
     }
 
-    // Step 1: Send !npc command
     await this.sendNpcCommand();
     await this.delay(4000);
 
     if (!this.isRunning || this.runId !== runId) return;
 
-    // Auto Climb: check lock immediately after sending command
     if (this.autoClimb) {
       const lockInfo = await this.checkLockedMessage();
       if (lockInfo) {
@@ -184,10 +258,8 @@ class NpcBot {
       }
     }
 
-    // Check cooldown
     const cooldownSec = await this.checkCooldownMessage();
     if (cooldownSec > 0) {
-      // Auto Climb: check lock BEFORE waiting cooldown
       if (this.autoClimb) {
         const lockInfo = await this.checkLockedMessage();
         if (lockInfo) {
@@ -202,7 +274,6 @@ class NpcBot {
       return;
     }
 
-    // Auto Climb: check if NPC is locked
     if (this.autoClimb) {
       const lockInfo = await this.checkLockedMessage();
       if (lockInfo) {
@@ -212,13 +283,11 @@ class NpcBot {
       }
     }
 
-    // Check already fighting
     const isAlreadyFighting = await this.checkAlreadyFighting();
     if (isAlreadyFighting) {
       this.log('⚔️ Phát hiện trận đang dở! Đang tìm nút...');
     }
 
-    // Step 2: Click buttons until battle ends
     const battleResult = await this.clickButtonsUntilEnd(isAlreadyFighting, runId);
 
     if (!this.isRunning || this.runId !== runId) return;
@@ -239,61 +308,70 @@ class NpcBot {
       return;
     }
 
-    // When timeout (no buttons found = unknown result), check if NPC is locked
     const isUnknown = typeof battleResult === 'object' && battleResult.result === 'unknown';
     if (isUnknown && this.autoClimb) {
-      // Re-check for lock message (might have appeared but missed earlier)
       const lockInfo = await this.checkLockedMessage();
       if (lockInfo) {
         this.handleLock(lockInfo);
         if (this.isRunning && this.runId === runId) this.mainLoop(runId);
         return;
       }
-      // No lock message found but no buttons either → wait and retry same NPC
       this.log(`⚠️ NPC ${this.npcNumber}: không tìm thấy nút chiến đấu. Chờ ${this.defeatCooldownSec}s rồi thử lại...`);
       await this.cooldownWait(this.defeatCooldownSec, runId);
       if (this.isRunning && this.runId === runId) this.mainLoop(runId);
       return;
     }
 
-    // Determine win/loss from { type: 'ended', result: 'win'|'loss'|'unknown' }
     const isWin = (typeof battleResult === 'object' && battleResult.type === 'ended')
       ? battleResult.result === 'win'
-      : true; // fallback
-    this.log(isWin ? '✅ THẮNG!' : '❌ THUA!');
+      : true;
+
+    // Parse rewards from battle result message
+    if (battleResult && battleResult.rewardText) {
+      this.parseBattleRewards(battleResult.rewardText);
+      const npc = this.parseTargetNpc(battleResult.rewardText);
+      if (npc) this.stats.targetNpc = npc;
+
+      // Set last battle info
+      if (this.stats.lastBattle) {
+        this.stats.lastBattle.result = isWin ? 'win' : 'loss';
+        this.stats.lastBattle.npc = npc || this.stats.targetNpc || `NPC ${this.npcNumber}`;
+      }
+    }
+
+    if (isWin) {
+      this.stats.wins++;
+      this.log('✅ THẮNG!');
+    } else {
+      this.stats.losses++;
+      this.log('❌ THUA!');
+    }
 
     if (this.autoClimb) {
       if (isWin) {
         this.climbWinsDone++;
-
         if (this.climbWinsNeeded > 0) {
-          // Farming mode: counting wins toward a specific target
           this.log(`Tiến độ farm: ${this.climbWinsDone}/${this.climbWinsNeeded} wins (NPC ${this.npcNumber})`);
           if (this.climbWinsDone >= this.climbWinsNeeded) {
-            // Farmed enough — try climbing back up
             this.npcNumber++;
             this.climbWinsNeeded = 0;
             this.climbWinsDone = 0;
             this.log(`🚀 Đủ điều kiện! Leo lên thử NPC ${this.npcNumber}...`);
           }
         } else {
-          // Exploration mode: no lock detected yet, try next NPC after every win
           this.log(`✅ Thắng NPC ${this.npcNumber}! Thử leo lên NPC ${this.npcNumber + 1}...`);
           this.npcNumber++;
           this.climbWinsDone = 0;
         }
       } else {
-        // Lost: stay on same NPC and retry (don't advance)
         this.log(`❌ Thua NPC ${this.npcNumber}. Thử lại...`);
       }
-      // Cooldown then retry
       const waitSec = isWin ? null : this.defeatCooldownSec;
       await this.cooldownWait(waitSec, runId);
       if (this.isRunning && this.runId === runId) this.mainLoop(runId);
       return;
     }
 
-    // Normal mode
     if (isWin) {
       this.battleCount++;
       this.log(`Battle ${this.battleCount}/${this.totalBattles} completed!`);
@@ -311,8 +389,6 @@ class NpcBot {
   async cooldownWait(overrideSec = null, runId = null) {
     const totalSec = overrideSec !== null ? overrideSec : Math.floor(this.cooldownMs / 1000);
     this.log(`\n--- Waiting ${totalSec}s before next battle ---`);
-
-    // Countdown every 10 seconds
     let remaining = totalSec;
     while (remaining > 0 && this.isRunning && this.runId === runId) {
       const showAt = [120, 90, 60, 30, 10, 5, 4, 3, 2, 1];
@@ -323,15 +399,12 @@ class NpcBot {
       await this.delay(sleepMs);
       remaining -= Math.floor(sleepMs / 1000);
     }
-
     if (this.isRunning && this.runId === runId) {
       this.log('Cooldown finished! Starting next battle...\n');
     }
   }
 
   async sendNpcCommand() {
-    // Record max message ID and tag existing messages so we only process new messages
-    // BUT preserve lock messages (🔒) so checkLockedMessage can still find them
     await this.exec(`(() => {
       let maxId = 0n;
       document.querySelectorAll('[role="article"]').forEach(m => {
@@ -354,55 +427,6 @@ class NpcBot {
     const cmd = `!npc ${this.npcNumber}`;
     this.log(`Typing: ${cmd}`);
 
-    // Click textbox first
-    await this.exec(`document.querySelector('[role="textbox"]')?.click()`);
-    await this.delay(this.rand(200, 400));
-
-    // Clear existing text
-    const len = await this.exec(`document.querySelector('[role="textbox"]')?.textContent?.length || 0`);
-    for (let i = 0; i < len; i++) {
-      await this.exec(`(() => {
-        const el = document.querySelector('[role="textbox"]');
-        if (!el) return;
-        el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', code: 'Backspace', keyCode: 8, which: 8, bubbles: true }));
-        el.dispatchEvent(new InputEvent('beforeinput', { inputType: 'deleteContentBackward', bubbles: true, cancelable: true }));
-        el.dispatchEvent(new InputEvent('input', { inputType: 'deleteContentBackward', bubbles: true, cancelable: true }));
-        el.dispatchEvent(new KeyboardEvent('keyup', { key: 'Backspace', code: 'Backspace', keyCode: 8, which: 8, bubbles: true }));
-      })()`);
-      await this.delay(this.rand(30, 60));
-    }
-
-    // Type each character
-    for (let i = 0; i < cmd.length; i++) {
-      const ch = cmd[i];
-      await this.exec(`(() => {
-        const el = document.querySelector('[role="textbox"]');
-        if (!el) return;
-        el.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(ch)}, code: 'Key${ch.toUpperCase()}', bubbles: true }));
-        el.dispatchEvent(new KeyboardEvent('keypress', { key: ${JSON.stringify(ch)}, code: 'Key${ch.toUpperCase()}', bubbles: true }));
-        el.dispatchEvent(new InputEvent('beforeinput', { inputType: 'insertText', data: ${JSON.stringify(ch)}, bubbles: true, cancelable: true }));
-        el.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: ${JSON.stringify(ch)}, bubbles: true, cancelable: true }));
-        el.dispatchEvent(new KeyboardEvent('keyup', { key: ${JSON.stringify(ch)}, code: 'Key${ch.toUpperCase()}', bubbles: true }));
-      })()`);
-      await this.delay(this.rand(80, 180));
-    }
-
-    await this.delay(this.rand(200, 400));
-
-    // Press Enter
-    await this.exec(`(() => {
-      const el = document.querySelector('[role="textbox"]');
-      if (!el) return;
-      el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
-      el.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
-      el.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
-    })()`);
-
-    this.log(`Sent: ${cmd}`);
-    return true;
-  }
-
-  async sendMessage(cmd) {
     await this.exec(`document.querySelector('[role="textbox"]')?.click()`);
     await this.delay(this.rand(200, 400));
 
@@ -445,191 +469,6 @@ class NpcBot {
 
     this.log(`Sent: ${cmd}`);
     return true;
-  }
-
-  async scanSellItems() {
-    try {
-      // Focus textbox via click
-      await this.exec(`document.querySelector('[role="textbox"]')?.click()`);
-      await this.delay(500);
-
-      // Clear textbox with Ctrl+A then Backspace (trusted)
-      await this.wc.sendInputEvent({ type: 'keyDown', keyCode: 'a', modifiers: ['control'] });
-      await this.wc.sendInputEvent({ type: 'keyUp', keyCode: 'a', modifiers: [] });
-      await this.delay(100);
-      await this.pressTrustedKey('Backspace');
-      await this.delay(200);
-
-      // Type "/sell " using trusted events → triggers slash command autocomplete
-      this.log(`Scan: typing '/sell '...`);
-      await this.typeTrustedString('/sell ');
-      await this.delay(2500);
-
-      // Debug: check textbox content
-      const tbText = await this.exec(`document.querySelector('[role="textbox"]')?.textContent || 'EMPTY'`);
-      this.log(`Scan: textbox = "${tbText}"`);
-
-    // Read autocomplete items from DOM
-    const items = await this.exec(`(() => {
-      const items = [];
-      const seen = new Set();
-      // Discord autocomplete popup - try many selectors
-      const popups = document.querySelectorAll('[role="listbox"] [role="option"], [class*="autocomplete"] [role="option"], [class*="command"] [role="option"], [id*="autocomplete"] [role="option"], [data-mode="autocomplete"] [role="option"]');
-      for (const opt of popups) {
-        const text = opt.textContent || '';
-        const m = text.match(/\\((\\d+)\\)\\s*(.*)/);
-        if (m) {
-          const id = m[1];
-          const rest = m[2].trim();
-          if (seen.has(id)) continue;
-          seen.add(id);
-          const colorMatch = rest.match(/^([^\w\\s]+)\\s+(.+)/);
-          if (colorMatch) {
-            items.push({ id, color: colorMatch[1], name: colorMatch[2].trim(), raw: text.trim() });
-          } else {
-            items.push({ id, color: 'other', name: rest, raw: text.trim() });
-          }
-        }
-      }
-      // Debug: also log all option elements found
-      const allOpts = document.querySelectorAll('[role="option"]');
-      const debugOpts = Array.from(allOpts).slice(0, 5).map(o => (o.textContent || '').substring(0, 100));
-      return { items, debugTotal: allOpts.length, debugOpts };
-    })()`);
-    this.log(`Sell scan: found ${items.items.length} items, ${items.debugTotal} options, debug: ${JSON.stringify(items.debugOpts || [])}`);
-
-    // Close autocomplete by pressing Escape (trusted)
-    await this.pressTrustedKey('Escape');
-    await this.delay(200);
-
-    // Clear textbox with Ctrl+A + Backspace (trusted)
-    await this.wc.sendInputEvent({ type: 'keyDown', keyCode: 'a', modifiers: ['control'] });
-    await this.wc.sendInputEvent({ type: 'keyUp', keyCode: 'a', modifiers: [] });
-    await this.delay(100);
-    await this.pressTrustedKey('Backspace');
-
-    this.sellInventory = items.items || [];
-
-    const currentIds = new Set(this.sellInventory.map(i => i.id));
-    for (const id of this.pendingSellItems) {
-      if (!currentIds.has(id)) {
-        this.pendingSellItems.delete(id);
-        this.log(`Sell: ID ${id} da het trong kho, xoa khoi danh sach cho`);
-      }
-    }
-
-    this.sellInventory = this.sellInventory.filter(i => !this.pendingSellItems.has(i.id));
-
-    this.log(`Sell: Tim thay ${this.sellInventory.length} vat pham (${this.pendingSellItems.size} dang cho phan tach)`);
-    return this.sellInventory;
-    } catch(e) {
-      this.log(`Scan error: ${e.message}`);
-      return [];
-    }
-  }
-
-  async sellItem(itemId) {
-    if (this.pendingSellItems.has(itemId)) {
-      this.log(`Sell: ID ${itemId} đã gửi lệnh bán, đang chờ quy đổi`);
-      return { sent: false, reason: 'pending' };
-    }
-
-    try {
-    // Focus textbox via click (exec is fine for this)
-    await this.exec(`document.querySelector('[role="textbox"]')?.click()`);
-    await this.delay(300);
-
-    // Clear textbox with Ctrl+A then Backspace (trusted)
-    await this.wc.sendInputEvent({ type: 'keyDown', keyCode: 'a', modifiers: ['control'] });
-    await this.wc.sendInputEvent({ type: 'keyUp', keyCode: 'a', modifiers: [] });
-    await this.delay(100);
-    await this.pressTrustedKey('Backspace');
-    await this.delay(200);
-
-    // Type "/sell " using trusted events → triggers slash command autocomplete
-    this.log(`Sell: Typing '/sell ' (trusted input)`);
-    await this.typeTrustedString('/sell ');
-    await this.delay(2000);
-
-    // Check if autocomplete options appeared
-    const options = await this.exec(`(() => {
-      const opts = document.querySelectorAll('[id^="autocomplete-"] [role="option"], [class*="autoComplete"] [role="option"], [role="listbox"] [role="option"], [data-mode="autocomplete"] [role="option"]');
-      const result = [];
-      for (const opt of opts) {
-        const text = opt.textContent || '';
-        if (text.includes('${itemId}') || text.includes('(${itemId})')) {
-          result.push(text.trim().substring(0, 80));
-        }
-      }
-      return { total: opts.length, matched: result };
-    })()`);
-    this.log(`Sell: Autocomplete: ${options.total} options, matched: ${JSON.stringify(options.matched)}`);
-
-    // Type the item ID to filter autocomplete (trusted)
-    const idStr = String(itemId);
-    this.log(`Sell: Typing ID '${idStr}' to filter`);
-    await this.typeTrustedString(idStr);
-    await this.delay(1000);
-
-    // Try clicking matching option (exec is fine for DOM click)
-    const clicked = await this.exec(`(() => {
-      const opts = document.querySelectorAll('[id^="autocomplete-"] [role="option"], [class*="autoComplete"] [role="option"], [role="listbox"] [role="option"], [data-mode="autocomplete"] [role="option"]');
-      for (const opt of opts) {
-        const text = opt.textContent || '';
-        if (text.includes('${itemId}') || text.includes('(${itemId})')) {
-          opt.click();
-          return 'clicked';
-        }
-      }
-      return 'not_found';
-    })()`);
-    this.log(`Sell: Click result: ${clicked}`);
-
-    // Press Enter to select (trusted)
-    await this.delay(300);
-    await this.pressTrustedKey('Return');
-
-    // Press Enter again to send the slash command (trusted)
-    await this.delay(500);
-    await this.pressTrustedKey('Return');
-
-    this.pendingSellItems.add(itemId);
-    this.log(`Sell: Da gui lenh ban ID ${itemId} (click=${clicked})`);
-    return { sent: true };
-    } catch(e) {
-      this.log(`Sell error: ${e.message}`);
-      return { sent: false, reason: e.message };
-    }
-  }
-
-  isRollTime() {
-    if (!this.rollSchedule || this.rollPending) return false;
-    const now = new Date();
-    const target = new Date(this.rollSchedule);
-    if (isNaN(target.getTime())) return false;
-    return now >= target;
-  }
-
-  async executeRoll(runId) {
-    this.rollPending = true;
-    this.log(`🎲 Bắt đầu quay số: ${this.rollCount} lần !roll`);
-
-    for (let i = 0; i < this.rollCount; i++) {
-      if (!this.isRunning || this.runId !== runId) break;
-      await this.sendMessage('!roll');
-      this.log(`🎲 Roll ${i + 1}/${this.rollCount}`);
-      if (i < this.rollCount - 1) {
-        await this.delay(this.rollDelayMs);
-      }
-    }
-
-    this.log(`🎲 Hoàn thành quay số!`);
-    this.rollPending = false;
-    this.rollSchedule = null;
-
-    if (this.isRunning && this.runId === runId) {
-      this.mainLoop(runId);
-    }
   }
 
   async checkBattleEnd() {
@@ -640,10 +479,9 @@ class NpcBot {
       const username = ${JSON.stringify(username)};
       const msgs = document.querySelectorAll('[role="article"]');
       const recent = Array.from(msgs).slice(-30);
+      let rewardText = '';
       for (const msg of recent.reverse()) {
         if (msg.getAttribute('data-bot-seen') === 'true') continue;
-
-        // If username is set, skip messages that don't contain it
         if (username && !msg.textContent.includes(username)) continue;
 
         if (msg.id) {
@@ -659,7 +497,7 @@ class NpcBot {
         const rawText = msg.textContent;
 
         const hasResult = text.includes('kết quả trận đấu') || text.includes('battle ended') || text.includes('kết thúc');
-        const hasWin = text.includes('chiến thắng') || text.includes('thắng npc') || 
+        const hasWin = text.includes('chiến thắng') || text.includes('thắng npc') ||
                        rawText.includes('✅') || text.includes('thắng!') ||
                        rawText.includes('🥇');
         const hasLoss = text.includes('thất bại') || text.includes('thua') ||
@@ -674,13 +512,8 @@ class NpcBot {
 
           let result;
           if (hasResult) {
-            // "KẾT QUẢ TRẬN ĐẤU" = battle summary (contains player result + NPC loss info)
-            // Use original logic where loss requires NO win indicators
             result = hasLoss && !hasWin ? 'loss' : 'win';
           } else {
-            // Direct loss/win message without result header.
-            // ✅/🥇 chỉ xuất hiện trong tin nhắn thắng.
-            // CHIẾN THẮNG có thể xuất hiện trong cả win (cho player) và loss (cho NPC).
             if (rawText.includes('✅ Thắng') || rawText.includes('🥇')) {
               result = 'win';
             } else if (hasLoss) {
@@ -689,7 +522,11 @@ class NpcBot {
               result = hasWin ? 'win' : 'unknown';
             }
           }
-          return { ended: true, result };
+
+          // Collect reward text from nearby messages
+          rewardText = rawText;
+
+          return { ended: true, result, rewardText };
         }
       }
       return null;
@@ -721,7 +558,6 @@ class NpcBot {
 
         msg.setAttribute('data-bot-seen', 'true');
 
-        // Extract required NPC: "giết NPC X" or "giết npc X"
         let requiredNpc = null;
         const gietNpcIdx = text.toLowerCase().indexOf('giết npc');
         if (gietNpcIdx >= 0) {
@@ -730,14 +566,11 @@ class NpcBot {
           if (numMatch) requiredNpc = parseInt(numMatch[1]);
         }
 
-        // Extract progress: find "X lần" then "giết: Y" or "giết:Y"
         let winsLeft = 15;
         const textLower = text.toLowerCase();
         const lanIdx = textLower.indexOf('lần');
-        // Find "giết:" (with colon) specifically for done count
         const gietColonIdx = textLower.indexOf('giết:');
         if (lanIdx >= 0) {
-          // Total: scan backwards from "lần" to find digits
           let total = 0;
           for (let j = lanIdx - 1; j >= Math.max(0, lanIdx - 15); j--) {
             if (/[0-9]/.test(text[j])) {
@@ -750,7 +583,6 @@ class NpcBot {
               break;
             }
           }
-          // Done: scan forward from "giết:" to find digits
           let done = 0;
           if (gietColonIdx >= 0) {
             for (let j = gietColonIdx; j < Math.min(text.length, gietColonIdx + 10); j++) {
@@ -861,7 +693,6 @@ class NpcBot {
     })()`);
   }
 
-  // ===== SMART MODE: Read battle state from DOM =====
   async readBattleState() {
     const username = this.username || '';
     return await this.exec(`(() => {
@@ -890,7 +721,6 @@ class NpcBot {
 
       const text = battleMsg.textContent;
 
-      // HP
       const hpMatch = text.match(/(\\d[\\d,.]*)\\s*\\/\\s*(\\d[\\d,.]*)\\s*\\((\\d+)%\\)/);
       let userHpPercent = -1, userHpCurrent = -1, userHpMax = -1;
       if (hpMatch) {
@@ -899,7 +729,6 @@ class NpcBot {
         userHpPercent = parseInt(hpMatch[3]);
       }
 
-      // Buttons
       const btns = battleMsg.querySelectorAll('button[role="button"]');
       const buttonTexts = [];
       btns.forEach(btn => {
@@ -907,10 +736,8 @@ class NpcBot {
         if (t.length > 0 && btn.offsetParent !== null) buttonTexts.push(t);
       });
 
-      // Skill count = buttons - 1 (skip basic at [0])
       const skillCount = Math.max(0, buttonTexts.length - 1);
 
-      // Collect ONLY ✅/⏳ status icons in order from emoji stream
       const allEmoji = Array.from(battleMsg.querySelectorAll('img[data-name]'));
       const emojiSeq = allEmoji.map(e => (e.getAttribute('data-name') || '').toLowerCase());
 
@@ -925,13 +752,10 @@ class NpcBot {
         if (/white_check_mark|check_mark_button|heavy_check_mark/.test(name)) {
           statusList.push({ ready: true, cooldownTurns: 0 });
         } else if (/hourglass/.test(name)) {
-          // ⏳ is img element, text won't contain it. 
-          // Find cooldown number: look for digit紧跟在⏳img后面 in DOM
           let cooldownTurns = 1;
           const imgEls = battleMsg.querySelectorAll('img[data-name]');
           for (const img of imgEls) {
             if (/hourglass/.test((img.getAttribute('data-name') || '').toLowerCase())) {
-              // Check next sibling text or parent text after this img
               let nextText = '';
               let node = img.nextSibling;
               while (node && nextText.length < 5) {
@@ -939,7 +763,7 @@ class NpcBot {
                 else break;
                 node = node.nextSibling;
               }
-              const numMatch = nextText.match(/(\d+)/);
+              const numMatch = nextText.match(/(\\d+)/);
               if (numMatch) { cooldownTurns = parseInt(numMatch[1]); break; }
             }
           }
@@ -947,7 +771,6 @@ class NpcBot {
         }
       }
 
-      // Map status to skills: first N status icons = skill readiness
       const skills = [];
       for (let i = 0; i < skillCount; i++) {
         const s = statusList[i] || { ready: true, cooldownTurns: 0 };
@@ -962,21 +785,14 @@ class NpcBot {
     })()`);
   }
 
-  // Choose best skill index based on battle state
-  // Returns 0-based index to click, or -1 if no skill available
   chooseSkill(battleState) {
     if (!battleState || !battleState.skills || battleState.skills.length === 0) {
       return -1;
     }
 
     const { skills, userHpPercent, buttonCount } = battleState;
+    const healSkillIdx = this.healPosition - 1;
 
-    // Position-based: healPosition is 1-based index in skills array
-    // skills[0] → button 1, skills[1] → button 2, etc.
-    // buttonIndex = skills array index + 1 (because button[0] is basic attack)
-    const healSkillIdx = this.healPosition - 1; // 0-based index in skills[]
-
-    // Priority 1: Heal skill at healPosition if HP < 60% (only when HP is readable)
     if (healSkillIdx >= 0 && healSkillIdx < skills.length && userHpPercent >= 0) {
       const healSkill = skills[healSkillIdx];
       if (healSkill.ready && userHpPercent < 60) {
@@ -986,23 +802,20 @@ class NpcBot {
       }
     }
 
-    // Priority 2+: Other skills by skillPriority order (skip healPosition)
     for (const pos of this.skillPriority) {
       if (pos < 1 || pos > skills.length || pos === this.healPosition) continue;
       const skill = skills[pos - 1];
       if (skill && skill.ready) {
-        const btnIndex = pos; // pos1 → button[1], pos2 → button[2]
+        const btnIndex = pos;
         this.log(`Smart: Chọn skill position ${pos} (button ${btnIndex + 1}) - Sẵn sàng`);
         return btnIndex;
       }
     }
 
-    // Fallback: basic attack (button 0)
     this.log('Smart: Không có skill nào sẵn sàng → click skill 1 (Kiếm cơ bản)');
     return 0;
   }
 
-  // Scan ALL buttons on screen with full context for debugging
   async scanAllButtons() {
     return await this.exec(`(() => {
       const allBtns = document.querySelectorAll('button[role="button"]');
@@ -1011,7 +824,6 @@ class NpcBot {
         const text = btn.textContent.trim();
         if (text.length === 0 || btn.offsetParent === null) return;
 
-        // Get context: parent message info
         const msg = btn.closest('[role="article"]');
         const msgId = msg ? msg.id : null;
         const msgText = msg ? msg.textContent.substring(0, 80) : '';
@@ -1028,13 +840,9 @@ class NpcBot {
     })()`);
   }
 
-  // Find skill buttons that belong to battle messages
-  // Strategy: find the LAST message with buttons, those are battle skills
-  // If username is set, only look at messages containing the username
   async findBattleButtons() {
     const username = this.username || '';
     return await this.exec(`(() => {
-      // Get all messages, find ones with buttons
       const msgs = document.querySelectorAll('[role="article"]');
       const maxIdStr = window.botMaxMsgId || '0';
       const maxId = BigInt(maxIdStr);
@@ -1042,15 +850,11 @@ class NpcBot {
       let battleMsg = null;
       let battleButtons = [];
 
-      // Check last 30 messages (group chat can have many messages)
       const recentMsgs = Array.from(msgs).slice(-30).reverse();
       for (const msg of recentMsgs) {
         if (msg.getAttribute('data-bot-seen') === 'true') continue;
-
-        // If username is set, skip messages that don't contain it
         if (username && !msg.textContent.includes(username)) continue;
 
-        // Skip old messages (before current npc command)
         if (msg.id) {
           const parts = msg.id.split('-');
           const idStr = parts[parts.length - 1];
@@ -1069,7 +873,6 @@ class NpcBot {
 
       if (!battleMsg) return { buttons: [], msgId: 'none', msgPreview: '' };
 
-      // Get all visible buttons in this message
       const btns = battleMsg.querySelectorAll('button[role="button"]');
       btns.forEach((btn, idx) => {
         const text = btn.textContent.trim();
@@ -1085,12 +888,9 @@ class NpcBot {
     })()`);
   }
 
-  // Click a specific skill button (by index) in the last message that has buttons
-  // If username is set, only click buttons in messages containing the username
   async clickSkillButton(btnIndex) {
     const username = this.username || '';
     return await this.exec(`(() => {
-      // Find the last message with buttons
       const msgs = document.querySelectorAll('[role="article"]');
       const maxIdStr = window.botMaxMsgId || '0';
       const maxId = BigInt(maxIdStr);
@@ -1099,9 +899,7 @@ class NpcBot {
       let targetMsg = null;
       for (const msg of recentMsgs) {
         if (msg.getAttribute('data-bot-seen') === 'true') continue;
-        // If username is set, skip messages that don't contain it
         if (username && !msg.textContent.includes(username)) continue;
-        // Skip old messages
         if (msg.id) {
           const parts = msg.id.split('-');
           const idStr = parts[parts.length - 1];
@@ -1142,24 +940,22 @@ class NpcBot {
     let lastLogCount = 0;
     let debugScanned = false;
     const battleStartTime = Date.now();
-    const maxBattleDurationMs = 300000; // 5 phút timeout an toàn
+    const maxBattleDurationMs = 300000;
 
     while (this.isRunning && this.runId === runId) {
-      // Safety timeout: force-end battle after 5 minutes
       if (Date.now() - battleStartTime > maxBattleDurationMs) {
         this.log('⚠️ Battle timeout (5 phút). Force-end...');
         return { type: 'ended', result: 'unknown' };
       }
-      // Check if battle ended
+
       const battleEndResult = await this.checkBattleEnd();
       if (battleEndResult && battleEndResult.ended) {
         this.log(`>>> BATTLE ENDED: ${battleEndResult.result === 'win' ? '✅ THẮNG' : '❌ THUA'} <<<`);
-        return { type: 'ended', result: battleEndResult.result };
+        return { type: 'ended', result: battleEndResult.result, rewardText: battleEndResult.rewardText };
       }
 
       const cooldownSec = await this.checkCooldownMessage();
       if (cooldownSec > 0) {
-        // Auto Climb: check lock BEFORE returning cooldown
         if (this.autoClimb) {
           const lockInfo = await this.checkLockedMessage();
           if (lockInfo) {
@@ -1171,13 +967,11 @@ class NpcBot {
         return { type: 'cooldown', sec: cooldownSec };
       }
 
-      // === NEW: Find battle buttons from message context ===
       const battleInfo = await this.findBattleButtons();
 
       if (!battleInfo || !battleInfo.buttons || battleInfo.buttons.length === 0) {
         noButtonsCount++;
 
-        // Debug: scan ALL buttons on first failure to help identify issue
         if (!debugScanned && noButtonsCount === 3) {
           debugScanned = true;
           const allBtns = await this.scanAllButtons();
@@ -1198,7 +992,7 @@ class NpcBot {
         if (noButtonsCount % 10 === 0) {
           this.log(`Waiting for buttons... (${noButtonsCount})`);
         }
-        
+
         if (isResuming && noButtonsCount % 3 === 0) {
           await this.exec(`(() => {
             const scrollers = document.querySelectorAll('div[class*="scroller_"]');
@@ -1207,7 +1001,7 @@ class NpcBot {
             }
           })()`);
         }
-        
+
         await this.delay(1000);
         continue;
       }
@@ -1215,7 +1009,6 @@ class NpcBot {
       noButtonsCount = 0;
       debugScanned = false;
 
-      // Log buttons found (only when count changes)
       if (battleInfo.buttons.length !== lastLogCount) {
         this.log(`Found ${battleInfo.buttons.length} skills: ${battleInfo.buttons.map(b => b.text).join(' | ')}`);
         lastLogCount = battleInfo.buttons.length;
@@ -1224,11 +1017,11 @@ class NpcBot {
       let btnIndex = -1;
 
       if (this.smartMode) {
-        // Smart mode: read battle state and choose skill intelligently
         const battleState = await this.readBattleState();
         if (battleState) {
-          this.log(`Smart: HP ${battleState.userHpPercent}% (${battleState.userHpCurrent}/${battleState.userHpMax}) | Skills: ${battleState.skills.map(s => `pos${s.position}(${s.ready ? '✅' : '⏳' + s.cooldownTurns})`).join(' | ')}`);
-          this.log(`Smart DEBUG status: ${battleState.statusDump}`);
+          const skillStr = battleState.skills.map(s => 'pos' + s.position + '(' + (s.ready ? '✅' : '⏳' + s.cooldownTurns) + ')').join(' | ');
+          this.log('Smart: HP ' + battleState.userHpPercent + '% (' + battleState.userHpCurrent + '/' + battleState.userHpMax + ') | Skills: ' + skillStr);
+          this.log('Smart DEBUG status: ' + battleState.statusDump);
           btnIndex = this.chooseSkill(battleState);
         } else {
           this.log('Smart: Không đọc được battle state, fallback pattern');
@@ -1236,7 +1029,6 @@ class NpcBot {
       }
 
       if (btnIndex === -1) {
-        // Legacy mode or smart mode fallback: use click pattern
         const pos = this.clickPattern[patternIndex % this.clickPattern.length];
         btnIndex = pos - 1;
         if (!this.smartMode) {
@@ -1248,7 +1040,6 @@ class NpcBot {
         const btn = battleInfo.buttons[btnIndex];
         this.log(`Click [${btnIndex + 1}]: "${btn.text}"`);
 
-        // Click skill button in the battle message
         const clicked = await this.clickSkillButton(btnIndex);
         if (!clicked) {
           this.log(`Failed to click button at position ${btnIndex + 1}`);
@@ -1264,22 +1055,6 @@ class NpcBot {
     }
 
     return false;
-  }
-
-  getStatus() {
-    return {
-      isRunning: this.isRunning,
-      battleCount: this.battleCount,
-      totalBattles: this.totalBattles,
-      npcNumber: this.npcNumber,
-      cooldownMs: this.cooldownMs,
-      clickPattern: this.clickPattern,
-      smartMode: this.smartMode,
-      autoClimb: this.autoClimb,
-      targetMaxNpc: this.targetMaxNpc,
-      climbWinsNeeded: this.climbWinsNeeded,
-      climbWinsDone: this.climbWinsDone,
-    };
   }
 }
 

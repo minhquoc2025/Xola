@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, webContents, session } = require('electron');
+const { app, BrowserWindow, ipcMain, webContents } = require('electron');
 const path = require('path');
 
 app.commandLine.appendSwitch('disable-site-isolation-trials');
@@ -82,6 +82,7 @@ ipcMain.handle('register-webview', async (e, idx, wcId) => {
 
   console.log(`[MAIN] register-webview(${idx}): creating NpcBot`);
   const bot = new NpcBot(wc, idx);
+
   bot.log = (...args) => {
     const msg = `[${bot.ts()}] [Bot ${idx}] ${args.join(' ')}`;
     console.log(msg);
@@ -108,14 +109,19 @@ ipcMain.handle('clear-logs', () => {
   return 'cleared';
 });
 
-ipcMain.handle('sell-scan', async (e, idx) => {
+ipcMain.handle('bot-get-stats', async (e, idx) => {
   const entry = botMap[idx];
-  if (entry) return await entry.scanSellItems();
-  return [];
+  if (entry) {
+    return entry.getStatus();
+  }
+  return null;
 });
 
-ipcMain.handle('sell-send', async (e, idx, itemId) => {
+ipcMain.handle('bot-reset-stats', async (e, idx) => {
   const entry = botMap[idx];
-  if (entry) return await entry.sellItem(itemId);
-  return { sent: false, reason: 'no_bot' };
+  if (entry) {
+    entry.resetStats();
+    return 'reset';
+  }
+  return 'not_found';
 });

@@ -1,11 +1,18 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
   <title>Discord NPC Auto</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
     body {
       font: 13px/1.4 'Segoe UI', sans-serif;
       background: #1a1a2e;
@@ -17,123 +24,327 @@
     }
 
     #bar {
-      display: flex; align-items: center; gap: 8px;
-      padding: 0 10px; background: #16213e;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 10px;
+      background: #16213e;
       border-bottom: 1px solid #0f3460;
-      height: 40px; flex-shrink: 0;
+      height: 40px;
+      flex-shrink: 0;
     }
-    #bar h1 { font-size: 14px; color: #e94560; white-space: nowrap; }
 
-
+    #bar h1 {
+      font-size: 14px;
+      color: #e94560;
+      white-space: nowrap;
+    }
 
     #content {
-      flex: 1; position: relative; background: #0a0a1a;
+      flex: 1;
+      position: relative;
+      background: #0a0a1a;
     }
-    #content webview { width: 100%; height: 100%; border: none; }
-    #content webview.wv-hidden { display: none; }
+
+    #content webview {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+
+    #content webview.wv-hidden {
+      display: none;
+    }
 
     #control-panel {
-      height: 180px; flex-shrink: 0;
-      background: #0d1b2e; border-top: 1px solid #1a3a5e;
-      display: flex; gap: 8px; padding: 8px;
+      height: 240px;
+      flex-shrink: 0;
+      background: #0d1b2e;
+      border-top: 1px solid #1a3a5e;
+      display: flex;
+      gap: 6px;
+      padding: 6px;
     }
 
     .panel-section {
-      display: flex; flex-direction: column;
+      display: flex;
+      flex-direction: column;
     }
+
     .panel-section h3 {
-      font-size: 11px; color: #556688; text-transform: uppercase;
-      letter-spacing: 1px; margin-bottom: 8px;
+      font-size: 11px;
+      color: #556688;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 6px;
     }
 
-    #config-section {
-      flex: 1; display: grid;
-      grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1fr;
-      gap: 6px; align-content: start;
+    /* === NPC Panel (25%) === */
+    #npc-panel {
+      flex: 0.25;
+      border: 1px solid #1a2a4e;
+      border-radius: 6px;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
     }
+
+    .config-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 3px;
+      flex: 1;
+      align-content: start;
+    }
+
     .config-field label {
-      display: block; font-size: 10px; color: #888; margin-bottom: 3px;
+      display: block;
+      font-size: 9px;
+      color: #888;
+      margin-bottom: 1px;
     }
+
     .config-field input {
-      width: 100%; padding: 6px 8px;
-      background: #0a0a1a; border: 1px solid #1a1a4e; border-radius: 4px;
-      color: #eee; font-size: 12px; outline: none;
-    }
-    .config-field input:focus { border-color: #e94560; }
-
-    #action-section {
-      flex-shrink: 0; display: flex; flex-direction: column; gap: 6px;
-    }
-    #action-section button {
-      padding: 8px 20px; border: none; border-radius: 4px;
-      font-size: 13px; font-weight: 600; cursor: pointer;
-    }
-    .btn-start { background: #1a5a2e; color: #fff; }
-    .btn-start:hover { background: #2a7a3e; }
-    .btn-stop { background: #5a1a1a; color: #fff; }
-    .btn-stop:hover { background: #7a2a2a; }
-    .btn-secondary { background: #2a2a4a; color: #aaa; }
-    .btn-secondary:hover { background: #3a3a5a; }
-
-    #status-section {
-      flex-shrink: 0; width: 180px;
-    }
-    .status-row {
-      display: flex; justify-content: space-between;
-      font-size: 11px; margin-bottom: 4px;
-    }
-    .status-label { color: #888; }
-    .status-value { color: #4ecca3; font-weight: 600; }
-
-    #log-section {
-      flex: 0.5; display: flex; flex-direction: column;
-      min-width: 160px;
-    }
-    #log-area {
-      flex: 1; background: #0a0a1a; border: 1px solid #1a1a3e;
-      border-radius: 4px; padding: 6px; font: 11px/1.4 monospace;
-      color: #aaa; overflow-y: auto; white-space: pre-wrap;
-    }
-    #log-area .log-entry { margin-bottom: 1px; }
-    #log-controls {
-      display: flex; gap: 4px; margin-top: 4px;
-    }
-    #log-controls button {
-      background: #2a2a4a; color: #aaa; border: 1px solid #3a3a5a;
-      padding: 3px 10px; border-radius: 3px; cursor: pointer; font-size: 10px;
-    }
-    #log-controls button:hover { background: #3a3a5a; }
-
-    #sell-section {
-      flex: 1; display: none; flex-direction: column; gap: 6px;
-      overflow: hidden;
-    }
-    #sell-section.active { display: flex; }
-    #sell-filters { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
-    #sell-filters label { display: flex; align-items: center; gap: 3px; font-size: 11px; cursor: pointer; }
-    #sell-filters input[type="checkbox"] { width: 13px; height: 13px; }
-    #sell-item-list {
-      flex: 1; overflow-y: auto; background: #0a0a1a; border: 1px solid #1a1a3e;
-      border-radius: 4px; padding: 4px; font-size: 11px;
-    }
-    #sell-item-list .sell-item {
-      display: flex; align-items: center; gap: 6px; padding: 3px 4px;
+      width: 100%;
+      padding: 3px 5px;
+      background: #0a0a1a;
+      border: 1px solid #1a1a4e;
       border-radius: 3px;
+      color: #eee;
+      font-size: 11px;
+      outline: none;
     }
-    #sell-item-list .sell-item:hover { background: #1a1a3e; }
-    #sell-actions { display: flex; gap: 4px; flex-shrink: 0; }
-    #sell-actions button {
-      padding: 5px 12px; border: none; border-radius: 3px;
-      font-size: 11px; font-weight: 600; cursor: pointer;
+
+    .config-field input:focus {
+      border-color: #e94560;
     }
-    .btn-auto-sell { background: #6a1a1a; color: #fff; }
-    .btn-auto-sell:hover { background: #8a2a2a; }
-    .btn-stop-auto { background: #8a3a3a; color: #fff; }
-    .btn-stop-auto:hover { background: #a44a4a; }
-    #sell-color-all { background: #3a3a3a; color: #ccc; }
-    #sell-color-all:hover { background: #4a4a4a; }
+
+    .btn-start {
+      background: #1a5a2e;
+      color: #fff;
+      margin-top: 4px;
+    }
+
+    .btn-start:hover {
+      background: #2a7a3e;
+    }
+
+    .btn-stop {
+      background: #5a1a1a;
+      color: #fff;
+      margin-top: 4px;
+    }
+
+    .btn-stop:hover {
+      background: #7a2a2a;
+    }
+
+    .btn-secondary {
+      background: #2a2a4a;
+      color: #aaa;
+    }
+
+    .btn-secondary:hover {
+      background: #3a3a5a;
+    }
+
+    /* === Stats Panel (50%) === */
+    #stats-panel {
+      flex: 0.5;
+      border: 1px solid #1a2a4e;
+      border-radius: 6px;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      overflow-y: auto;
+    }
+
+    .stats-top {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 4px;
+    }
+
+    .stat-box {
+      background: #0a1628;
+      border: 1px solid #1a2a4e;
+      border-radius: 6px;
+      padding: 6px 4px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .stat-box-icon {
+      font-size: 10px;
+    }
+
+    .stat-box-label {
+      font-size: 9px;
+      color: #888;
+    }
+
+    .stat-box-value {
+      font-size: 14px;
+      font-weight: 700;
+      color: #4ecca3;
+    }
+
+    .stat-box-value.target {
+      color: #ccc;
+    }
+
+    .stat-box-value.win {
+      color: #5ae05a;
+    }
+
+    .stat-box-value.loss {
+      color: #e94560;
+    }
+
+    .stat-box-value.coin {
+      color: #ffd700;
+    }
+
+    .stat-box-value.exp {
+      color: #87ceeb;
+    }
+
+    .stat-box-value.item {
+      color: #c084fc;
+    }
+
+    .stats-bottom {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .stats-section {
+      background: #0a1628;
+      border: 1px solid #1a2a4e;
+      border-radius: 6px;
+      padding: 6px;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+
+    .stats-section h4 {
+      font-size: 10px;
+      color: #556688;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 4px;
+      padding-bottom: 3px;
+      border-bottom: 1px solid #1a2a4e;
+    }
+
+    .stats-section-body {
+      flex: 1;
+      overflow-y: auto;
+      font-size: 11px;
+    }
+
+    .last-battle-result {
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 2px;
+    }
+
+    .last-battle-result.win {
+      color: #5ae05a;
+    }
+
+    .last-battle-result.loss {
+      color: #e94560;
+    }
+
+    .last-battle-npc {
+      color: #aaa;
+      font-size: 10px;
+      margin-bottom: 3px;
+    }
+
+    .last-battle-rewards {
+      color: #4ecca3;
+      font-size: 11px;
+    }
+
+    .item-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 2px 0;
+      border-bottom: 1px solid #0f1a2e;
+      font-size: 10px;
+    }
+
+    .item-name {
+      color: #ccc;
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .item-count {
+      color: #c084fc;
+      font-weight: 600;
+      margin-left: 4px;
+      white-space: nowrap;
+    }
+
+    /* === Log Panel (25%) === */
+    #log-section {
+      flex: 0.25;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #log-area {
+      flex: 1;
+      background: #0a0a1a;
+      border: 1px solid #1a1a3e;
+      border-radius: 4px;
+      padding: 6px;
+      font: 10px/1.4 monospace;
+      color: #aaa;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+
+    #log-area .log-entry {
+      margin-bottom: 1px;
+    }
+
+    #log-controls {
+      display: flex;
+      gap: 4px;
+      margin-top: 4px;
+    }
+
+    #log-controls button {
+      background: #2a2a4a;
+      color: #aaa;
+      border: 1px solid #3a3a5a;
+      padding: 3px 10px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 10px;
+    }
+
+    #log-controls button:hover {
+      background: #3a3a5a;
+    }
   </style>
 </head>
+
 <body>
   <div id="bar">
     <h1>Discord NPC Auto</h1>
@@ -141,91 +352,142 @@
 
   <div id="content"></div>
   <div id="control-panel">
-    <div id="config-section" class="panel-section">
-      <h3>Config</h3>
-      <div class="config-field">
-        <label for="npc-number">NPC Number</label>
-        <input id="npc-number" type="number" value="1" min="1" max="99">
+    <!-- NPC Panel (25%) -->
+    <div id="npc-panel"
+         class="panel-section">
+      <h3>⚔️ Auto Farm NPC</h3>
+      <div class="config-grid">
+        <div class="config-field">
+          <label for="npc-number">NPC Number</label>
+          <input id="npc-number"
+                 type="number"
+                 value="1"
+                 min="1"
+                 max="99">
+        </div>
+        <div class="config-field">
+          <label for="username">Username</label>
+          <input id="username"
+                 type="text"
+                 value="Quất"
+                 placeholder="Tên Discord">
+        </div>
+        <div class="config-field">
+          <label for="total-battles">Total Battles</label>
+          <input id="total-battles"
+                 type="number"
+                 value="5"
+                 min="1"
+                 max="999">
+        </div>
+        <div class="config-field">
+          <label for="cooldown-seconds">Cooldown (sec)</label>
+          <input id="cooldown-seconds"
+                 type="number"
+                 value="110"
+                 min="10"
+                 max="600">
+        </div>
+        <div class="config-field">
+          <label for="button-delay">Delay (sec)</label>
+          <input id="button-delay"
+                 type="number"
+                 value="3"
+                 min="0.5"
+                 max="10"
+                 step="0.5">
+        </div>
+        <div class="config-field">
+          <label for="click-pattern">Click Pattern</label>
+          <input id="click-pattern"
+                 type="text"
+                 value="3,2,1"
+                 placeholder="3,2,1">
+        </div>
+        <div class="config-field">
+          <label style="color:#e94560;font-weight:600;font-size:9px;">AUTO CLIMB</label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input id="auto-climb"
+                   type="checkbox"
+                   style="width:13px;height:13px;">
+            <span style="font-size:10px;color:#ccc;">Bật</span>
+          </label>
+        </div>
+        <div class="config-field">
+          <label for="target-max-npc">Target NPC</label>
+          <input id="target-max-npc"
+                 type="number"
+                 value="60"
+                 min="1"
+                 max="999">
+        </div>
       </div>
-      <div class="config-field">
-        <label for="username">Username</label>
-        <input id="username" type="text" value="Quất" placeholder="Tên Discord">
+      <button id="btn-npc-toggle"
+              class="btn-start"
+              onclick="toggleNpc()">▶ START</button>
+    </div>
+
+    <!-- Stats Panel (50%) -->
+    <div id="stats-panel"
+         class="panel-section">
+      <h3>📊 Thống Kê Trận Đấu</h3>
+      <div class="stats-top">
+        <div class="stat-box">
+          <p class="stat-box-label"><span class="stat-box-icon">🎯</span> Target</p>
+          <span class="stat-box-value target"
+                id="stat-total">0 trận</span>
+        </div>
+        <div class="stat-box">
+          <p class="stat-box-label"><span class="stat-box-icon">🏆</span> Chiến Thắng</p>
+          <span class="stat-box-value win"
+                id="stat-wins">0</span>
+        </div>
+        <div class="stat-box">
+          <p class="stat-box-label"><span class="stat-box-icon">✕</span> Thất Bại</p>
+          <span class="stat-box-value loss"
+                id="stat-losses">0</span>
+        </div>
+        <div class="stat-box">
+          <p class="stat-box-label"><span class="stat-box-icon">💰</span> Coins</p>
+          <span class="stat-box-value coin"
+                id="stat-coins">0</span>
+        </div>
+        <div class="stat-box">
+          <p class="stat-box-label"><span class="stat-box-icon">✨</span> XP</p>
+          <span class="stat-box-value exp"
+                id="stat-exp">0</span>
+        </div>
+        <div class="stat-box">
+          <p class="stat-box-label"><span class="stat-box-icon">💎</span> Vật Phẩm</p>
+          <span class="stat-box-value item"
+                id="stat-items-count">0</span>
+        </div>
       </div>
-      <div class="config-field">
-        <label for="total-battles">Total Battles</label>
-        <input id="total-battles" type="number" value="5" min="1" max="999">
-      </div>
-      <div class="config-field">
-        <label for="cooldown-seconds">Cooldown (sec)</label>
-        <input id="cooldown-seconds" type="number" value="120" min="10" max="600">
-      </div>
-      <div class="config-field">
-        <label for="button-delay">Button Delay (sec)</label>
-        <input id="button-delay" type="number" value="5" min="0.5" max="10" step="0.5">
-      </div>
-      <div class="config-field" style="border-left:1px solid #1a2a4e;padding-left:6px;">
-        <label style="color:#4ecca3;font-weight:600;">SMART MODE</label>
-        <span style="font-size:10px;color:#4ecca3;margin-top:4px;">ON - Đọc turn real-time</span>
-        <label for="heal-position" style="font-size:9px;color:#888;margin-top:3px;">Heal Pos</label>
-        <input id="heal-position" type="number" value="3" min="1" max="4" style="width:46px;">
-        <label for="skill-priority" style="font-size:9px;color:#888;margin-top:3px;">Skill Order</label>
-        <input id="skill-priority" type="text" value="2,1,3" style="width:64px;font-size:10px;">
-        <span style="font-size:8px;color:#666;margin-top:1px;">Thứ tự ưu tiên (pos)</span>
-      </div>
-      <div class="config-field" style="border-left:1px solid #1a2a4e;padding-left:6px;">
-        <label style="color:#e94560;font-weight:600;">🚀 AUTO CLIMB</label>
-        <label style="display:flex;align-items:center;gap:6px;margin-top:4px;cursor:pointer;">
-          <input id="auto-climb" type="checkbox" style="width:14px;height:14px;">
-          <span style="font-size:11px;color:#ccc;">Bật Auto Climb</span>
-        </label>
-      </div>
-      <div class="config-field">
-        <label for="target-max-npc">Target NPC (đích)</label>
-        <input id="target-max-npc" type="number" value="60" min="1" max="999">
-      </div>
-      <div class="config-field" style="border-left:1px solid #1a2a4e;padding-left:6px;">
-        <label style="color:#ffcc00;font-weight:600;">🎲 ROLL SCHEDULE</label>
-        <div style="display:flex;gap:4px;margin-top:3px;align-items:center;">
-          <div style="flex:1;">
-            <label for="roll-date" style="font-size:9px;color:#888;">Ngày</label>
-            <input id="roll-date" type="text" value="" placeholder="20260728" style="width:100%;font-size:10px;">
+      <div class="stats-bottom">
+        <div class="stats-section">
+          <h4>Trận Gần Nhất</h4>
+          <div class="stats-section-body"
+               id="last-battle-info">
+            <div style="color:#666;font-size:10px;">Chưa có trận nào...</div>
           </div>
-          <div style="flex:1;">
-            <label for="roll-time" style="font-size:9px;color:#888;">Giờ</label>
-            <input id="roll-time" type="text" value="" placeholder="2300" style="width:100%;font-size:10px;">
+        </div>
+        <div class="stats-section">
+          <h4>Vật Phẩm Rơi</h4>
+          <div class="stats-section-body"
+               id="items-list">
+            <div style="color:#666;font-size:10px;">Chưa có vật phẩm...</div>
           </div>
-          <div style="flex:0 0 auto;">
-            <label for="roll-count" style="font-size:9px;color:#888;">SL</label>
-            <input id="roll-count" type="number" value="1" min="1" max="99" style="width:40px;font-size:10px;">
-          </div>
+          <button id="btn-reset-stats"
+                  class="btn-secondary"
+                  onclick="resetStats()"
+                  style="margin-top:4px;width:100%;font-size:9px;padding:2px;">Reset Stats</button>
         </div>
       </div>
     </div>
 
-    <div id="action-section" class="panel-section">
-      <h3>Actions</h3>
-      <button id="btn-toggle" class="btn-start" onclick="toggleBot()">▶ START</button>
-      <button id="btn-sell-toggle" class="btn-secondary" onclick="toggleSellPanel()">💸 Sell</button>
-      <button class="btn-secondary" onclick="clearLogs()">Clear Logs</button>
-    </div>
-
-    <div id="sell-section" class="panel-section">
-      <h3>Sell Items</h3>
-      <div id="sell-filters">
-        <label><input type="checkbox" id="filter-blue" checked onchange="renderSellItems()"> 🔵</label>
-        <label><input type="checkbox" id="filter-yellow" checked onchange="renderSellItems()"> 🟡</label>
-        <label><input type="checkbox" id="filter-green" checked onchange="renderSellItems()"> 🟢</label>
-        <label><input type="checkbox" id="filter-purple" checked onchange="renderSellItems()"> 🟣</label>
-        <label><input type="checkbox" id="filter-red" checked onchange="renderSellItems()"> 🔴</label>
-        <button id="sell-color-all" onclick="toggleSellAllColors()">All</button>
-      </div>
-      <div id="sell-item-list"></div>
-      <div id="sell-actions">
-        <button id="btn-auto-sell" class="btn-auto-sell" onclick="toggleAutoSell()">🔴 Auto Sell</button>
-      </div>
-    </div>
-
-    <div id="log-section" class="panel-section">
+    <!-- Log Panel (25%) -->
+    <div id="log-section"
+         class="panel-section">
       <h3>Logs</h3>
       <div id="log-area"></div>
       <div id="log-controls">
@@ -237,4 +499,5 @@
 
   <script src="renderer.js"></script>
 </body>
+
 </html>
