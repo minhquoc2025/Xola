@@ -40,6 +40,26 @@
       white-space: nowrap;
     }
 
+    #btn-mute {
+      margin-left: auto;
+      background: #2a2a4a;
+      color: #eee;
+      border: 1px solid #3a3a5a;
+      border-radius: 4px;
+      padding: 4px 10px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    #btn-mute:hover {
+      background: #3a3a5a;
+    }
+
+    #btn-mute.muted {
+      background: #5a1a1a;
+      border-color: #7a2a2a;
+    }
+
     #content {
       flex: 1;
       position: relative;
@@ -348,6 +368,9 @@
 <body>
   <div id="bar">
     <h1>Discord NPC Auto</h1>
+    <button id="btn-mute"
+            title="Bật/Tắt tiếng toàn bộ âm thanh"
+            onclick="toggleMute()">🔊</button>
   </div>
 
   <div id="content"></div>

@@ -1,5 +1,6 @@
 let isNpcRunning = false;
 let isWebviewRegistered = false;
+let isMuted = false;
 
 window.addEventListener('DOMContentLoaded', () => {
   initWebview();
@@ -25,6 +26,20 @@ function onWebviewLoad(webview) {
   const wcId = webview.getWebContentsId();
   window.api.registerWebview(0, wcId);
   isWebviewRegistered = true;
+}
+
+function toggleMute() {
+  const webview = document.getElementById('webview-main');
+  if (!webview || typeof webview.setAudioMuted !== 'function') {
+    appendLog('[🔇] Webview chưa sẵn sàng!');
+    return;
+  }
+  isMuted = !isMuted;
+  webview.setAudioMuted(isMuted);
+  const btn = document.getElementById('btn-mute');
+  btn.textContent = isMuted ? '🔇' : '🔊';
+  btn.classList.toggle('muted', isMuted);
+  appendLog(isMuted ? '[🔇] Đã tắt tiếng toàn bộ âm thanh' : '[🔊] Đã bật tiếng');
 }
 
 // === NPC MODE ===
