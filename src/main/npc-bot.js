@@ -19,6 +19,9 @@ class NpcBot {
     this.targetMaxNpc = 60;
     this.climbWinsNeeded = 0;
     this.climbWinsDone = 0;
+    this.tuLuyen = false;
+    this.tuLuyenStartCmd = '!tuluyen';
+    this.tuLuyenEndCmd = '!ketthuc';
     this.username = '';
     this.stats = {
       wins: 0,
@@ -76,6 +79,9 @@ class NpcBot {
     if (config.clickPattern !== undefined) this.clickPattern = config.clickPattern;
     if (config.autoClimb !== undefined) this.autoClimb = config.autoClimb;
     if (config.targetMaxNpc !== undefined) this.targetMaxNpc = config.targetMaxNpc;
+    if (config.tuLuyen !== undefined) this.tuLuyen = config.tuLuyen;
+    if (config.tuLuyenStartCmd !== undefined) this.tuLuyenStartCmd = config.tuLuyenStartCmd;
+    if (config.tuLuyenEndCmd !== undefined) this.tuLuyenEndCmd = config.tuLuyenEndCmd;
     if (config.username !== undefined) this.username = config.username;
   }
 
@@ -209,6 +215,7 @@ class NpcBot {
       smartMode: this.smartMode,
       autoClimb: this.autoClimb,
       targetMaxNpc: this.targetMaxNpc,
+      tuLuyen: this.tuLuyen,
       climbWinsNeeded: this.climbWinsNeeded,
       climbWinsDone: this.climbWinsDone,
       stats: { ...this.stats },
@@ -326,6 +333,12 @@ class NpcBot {
       ? battleResult.result === 'win'
       : true;
 
+    const confirmedEnd = typeof battleResult === 'object' && battleResult.type === 'ended' &&
+      (battleResult.result === 'win' || battleResult.result === 'loss');
+    if (!confirmedEnd) {
+      this.log('⚠️ Không xác nhận được kết thúc trận (unknown). Bỏ qua tu luyện.');
+    }
+
     // Parse rewards from battle result message
     if (battleResult && battleResult.rewardText) {
       this.parseBattleRewards(battleResult.rewardText);
@@ -367,7 +380,7 @@ class NpcBot {
         this.log(`❌ Thua NPC ${this.npcNumber}. Thử lại...`);
       }
       const waitSec = isWin ? null : this.defeatCooldownSec;
-      await this.cooldownWait(waitSec, runId);
+      await this.cooldownWait(waitSec, runId, { tuLuyen: confirmedEnd });
       if (this.isRunning && this.runId === runId) this.mainLoop(runId);
       return;
     }
@@ -379,15 +392,23 @@ class NpcBot {
       this.log(`❌ Thua! Không tính vào target. Thử lại...`);
     }
     if (this.battleCount < this.totalBattles) {
-      await this.cooldownWait(isWin ? null : this.defeatCooldownSec, runId);
+      await this.cooldownWait(isWin ? null : this.defeatCooldownSec, runId, { tuLuyen: confirmedEnd });
     }
     if (this.isRunning && this.runId === runId) {
       this.mainLoop(runId);
     }
   }
 
-  async cooldownWait(overrideSec = null, runId = null) {
+  async cooldownWait(overrideSec = null, runId = null, opts = {}) {
+    const useTuLuyen = !!opts.tuLuyen && this.tuLuyen;
     const totalSec = overrideSec !== null ? overrideSec : Math.floor(this.cooldownMs / 1000);
+
+    if (useTuLuyen) {
+      this.log('Tu luyen bat dau...');
+      await this.sendChat(this.tuLuyenStartCmd);
+      await this.delay(this.rand(1000, 1500));
+    }
+
     this.log(`\n--- Waiting ${totalSec}s before next battle ---`);
     let remaining = totalSec;
     while (remaining > 0 && this.isRunning && this.runId === runId) {
@@ -399,12 +420,20 @@ class NpcBot {
       await this.delay(sleepMs);
       remaining -= Math.floor(sleepMs / 1000);
     }
+
+    if (useTuLuyen && this.isRunning && this.runId === runId) {
+      this.log('Ket thuc tu luyen...');
+      await this.sendChat(this.tuLuyenEndCmd);
+      await this.delay(this.rand(1000, 1500));
+      this.log('Tu luyen xong!');
+    }
+
     if (this.isRunning && this.runId === runId) {
       this.log('Cooldown finished! Starting next battle...\n');
     }
   }
 
-  async sendNpcCommand() {
+  async sendChat(cmd) {
     await this.exec(`(() => {
       let maxId = 0n;
       document.querySelectorAll('[role="article"]').forEach(m => {
@@ -424,7 +453,6 @@ class NpcBot {
       window.botMaxMsgId = maxId.toString();
     })()`);
 
-    const cmd = `!npc ${this.npcNumber}`;
     this.log(`Typing: ${cmd}`);
 
     await this.exec(`document.querySelector('[role="textbox"]')?.click()`);
@@ -469,6 +497,10 @@ class NpcBot {
 
     this.log(`Sent: ${cmd}`);
     return true;
+  }
+
+  async sendNpcCommand() {
+    return this.sendChat(`!npc ${this.npcNumber}`);
   }
 
   async checkBattleEnd() {

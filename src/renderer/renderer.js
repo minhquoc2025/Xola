@@ -58,6 +58,9 @@ function getNpcConfig() {
     clickPattern: clickPattern.length > 0 ? clickPattern : [3, 2, 1],
     autoClimb: document.getElementById('auto-climb').checked,
     targetMaxNpc: parseInt(document.getElementById('target-max-npc').value) || 60,
+    tuLuyen: document.getElementById('tu-luyen').checked,
+    tuLuyenStartCmd: '!tuluyen',
+    tuLuyenEndCmd: '!ketthuc',
   };
 }
 

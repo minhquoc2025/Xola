@@ -19,3 +19,22 @@ Tầng 2----
 18 Xuong
 19      sai lên xuong
 20      sai lên
+
+Tầng 2----
+1 PHẢI
+2 PHẢI
+3 Trai
+4 Trai
+5 Xuống
+6 Trai
+7 PHẢI
+8 LÊN
+9 Trai
+10 LÊN
+11 Xuong
+12 Trái
+13 LÊN
+14 PHẢI
+15 LÊN
+16 LÊN
+17      sai len
