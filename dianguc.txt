@@ -1,29 +1,30 @@
-Tầng 2----
-1 PHẢI
-2 PHẢI
-3 Trai
-4 Trai
-5 Xuong
-6 Trai
-7 PHẢI
-8 LÊN
-9 Trai
-10 LÊN
-11 Xuong
-12 Trai
-13 LÊN
-14 PHẢI
-15 LÊN
-16 LÊN
-17 Xuong
-18 Xuong
-19 PHẢI
-20 PHẢI
-21 PHẢI
-22 PHẢI
-23 Trai
-24 LÊN
-25 Xuong
-26 Trai
-27 LÊN
-28      sai xuong
+Tầng 3----
+1       sai len
+2 
+3 
+4 
+5 
+6 
+7 
+8 
+9 
+10 
+11 
+12 
+13 
+14 
+15 
+16 
+17 
+18 
+19 
+20 
+21 
+22 
+23 
+24 
+25 
+26 
+27 
+28 
+30 
