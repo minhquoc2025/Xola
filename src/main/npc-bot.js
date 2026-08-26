@@ -22,6 +22,8 @@ class NpcBot {
     this.tuLuyen = false;
     this.tuLuyenStartCmd = '!tuluyen';
     this.tuLuyenEndCmd = '!ketthuc';
+    this.tuLuyenAfterTarget = true;
+    this._tuLuyenActive = false;
     this.username = '';
     this.stats = {
       wins: 0,
@@ -82,11 +84,17 @@ class NpcBot {
     if (config.tuLuyen !== undefined) this.tuLuyen = config.tuLuyen;
     if (config.tuLuyenStartCmd !== undefined) this.tuLuyenStartCmd = config.tuLuyenStartCmd;
     if (config.tuLuyenEndCmd !== undefined) this.tuLuyenEndCmd = config.tuLuyenEndCmd;
+    if (config.tuLuyenAfterTarget !== undefined) this.tuLuyenAfterTarget = config.tuLuyenAfterTarget;
     if (config.username !== undefined) this.username = config.username;
   }
 
-  start() {
-    if (this.isRunning) return;
+  async start() {
+    if (this.isRunning) {
+      if (!this._tuLuyenActive) return;
+      // Đang idle tu luyện sau target → kết thúc tu luyện rồi farm tiếp vòng mới
+      this.log('🔄 Yêu cầu Start khi đang tu luyện — kết thúc tu luyện, farm tiếp...');
+      await this.endTuLuyen();
+    }
     this.isRunning = true;
     this.runId = Date.now();
     this.battleCount = 0;
@@ -104,15 +112,43 @@ class NpcBot {
     this.mainLoop(this.runId);
   }
 
-  stop() {
+  async stop() {
+    const wasRunning = this.isRunning;
     this.isRunning = false;
     this.runId = null;
     if (this.timeoutId) {
       clearTimeout(this.timeoutId);
       this.timeoutId = null;
     }
-    this.log('Bot stopped');
-    this.printStats();
+    if (this._tuLuyenActive) {
+      await this.endTuLuyen();
+    }
+    if (wasRunning) {
+      this.log('Bot stopped');
+      this.printStats();
+    }
+  }
+
+  // Gửi lệnh bắt đầu tu luyện (dùng sau khi hoàn thành target)
+  async startTuLuyenAfterTarget() {
+    if (!this.tuLuyenAfterTarget || this._tuLuyenActive) return;
+    try {
+      this.log(`🧘 Hoàn thành target! Bắt đầu tu luyện: ${this.tuLuyenStartCmd}`);
+      await this.sendChat(this.tuLuyenStartCmd);
+      this._tuLuyenActive = true;
+    } catch (e) {
+      this.log('⚠️ Gửi lệnh tu luyện lỗi:', e.message);
+    }
+  }
+
+  // Gửi lệnh kết thúc tu luyện
+  async endTuLuyen() {
+    if (!this._tuLuyenActive) return;
+    try {
+      await this.sendChat(this.tuLuyenEndCmd);
+    } catch (e) { }
+    this._tuLuyenActive = false;
+    this.log('🧘 Đã kết thúc tu luyện.');
   }
 
   resetStats() {
@@ -128,41 +164,58 @@ class NpcBot {
     let lastCoins = 0;
     let lastExp = 0;
 
+    // Summary là dòng TỔNG ở cuối ("💰 +532 🪙 ✨ +235 XP" hoặc "+572 +253 XP").
+    // Bỏ qua các dòng breakdown có tên phía trước ("💰 Quất: +350🪙 +159XP") — chứa ':' trước số.
+    // Lấy dòng hợp lệ CUỐI CÙNG vì tổng luôn nằm dưới các dòng cộng dồn từng nguồn.
     for (const line of allLines) {
       const trimmed = line.trim();
       if (!trimmed) continue;
 
-      // Summary line: "+572    +253 XP" — two +N patterns, second ends with XP
-      const summaryMatch = trimmed.match(/^\+(\d+)\s+\+(\d+)\s*XP/i);
+      let summaryMatch = trimmed.match(/^\+(\d+)\s+\+(\d+)\s*XP/i);
+      if (!summaryMatch) {
+        const m = trimmed.match(/^([^:+]*)\+([\d.,]+)\s*🪙[^+]*\+\s*([\d.,]+)\s*XP/i);
+        if (m && !m[1].includes(':')) {
+          summaryMatch = [trimmed, m[2], m[3]];
+        }
+      }
       if (summaryMatch) {
-        lastCoins = parseInt(summaryMatch[1]);
-        lastExp = parseInt(summaryMatch[2]);
-        this.stats.coins += lastCoins;
-        this.stats.exp += lastExp;
-        rewards.push(`+${lastCoins}🪙`, `+${lastExp}XP`);
+        lastCoins = parseInt(String(summaryMatch[1]).replace(/[.,]/g, ''));
+        lastExp = parseInt(String(summaryMatch[2]).replace(/[.,]/g, ''));
         foundSummary = true;
-        this.log(`[Rewards] Summary: +${lastCoins}🪙 +${lastExp}XP`);
-        break;
       }
     }
 
-    // Scan for item drops
+    if (foundSummary) {
+      this.stats.coins += lastCoins;
+      this.stats.exp += lastExp;
+      rewards.push(`+${lastCoins}🪙`, `+${lastExp}XP`);
+      this.log(`[Rewards] Summary: +${lastCoins}🪙 +${lastExp}XP`);
+    }
+
+    // Scan for item drops.
+    // Game list cùng vật phẩm ở NHIỀU chỗ trong 1 tin (dòng log trận + mục "🎁 Chiến Lợi Phẩm")
+    // → dedupe theo tên TRONG CÙNG trận, mỗi loại chỉ +1.
+    const battleDrops = [];
     for (const line of allLines) {
       const trimmed = line.trim();
       const itemMatch = trimmed.match(/Rơi:\s*(.+?)(?:\s*(?:Thắng|Thua|✅|❌|💕|📖|Vợ|$))/i);
       if (itemMatch) {
         let item = itemMatch[1].trim();
         item = item.replace(/^[^\w]+/, '').replace(/[^\w!]+$/, '').trim();
-        if (item && item.length > 1) {
-          // Track unique items list
-          if (!this.stats.items.includes(item)) {
-            this.stats.items.push(item);
-          }
-          // Track item counts
-          this.stats.itemCounts[item] = (this.stats.itemCounts[item] || 0) + 1;
-          rewards.push(`Rơi: ${item}`);
+        if (item && item.length > 1 && !battleDrops.includes(item)) {
+          battleDrops.push(item);
         }
       }
+    }
+    for (const item of battleDrops) {
+      // Track unique items list
+      if (!this.stats.items.includes(item)) {
+        this.stats.items.push(item);
+      }
+      // Track item counts
+      this.stats.itemCounts[item] = (this.stats.itemCounts[item] || 0) + 1;
+      rewards.push(`Rơi: ${item}`);
+      this.log(`[Rewards] Item: Rơi: ${item} (tổng x${this.stats.itemCounts[item]})`);
     }
 
     if (!foundSummary) {
@@ -216,6 +269,8 @@ class NpcBot {
       autoClimb: this.autoClimb,
       targetMaxNpc: this.targetMaxNpc,
       tuLuyen: this.tuLuyen,
+      tuLuyenAfterTarget: this.tuLuyenAfterTarget,
+      tuLuyenActive: this._tuLuyenActive,
       climbWinsNeeded: this.climbWinsNeeded,
       climbWinsDone: this.climbWinsDone,
       stats: { ...this.stats },
@@ -227,12 +282,24 @@ class NpcBot {
 
     if (!this.autoClimb && this.battleCount >= this.totalBattles) {
       this.log('=== COMPLETED ALL BATTLES ===');
+      await this.startTuLuyenAfterTarget();
+      if (this._tuLuyenActive) {
+        this.printStats();
+        this.log(`😴 Bot chuyển sang CHẾ ĐỘ TU LUYỆN. Stop = ${this.tuLuyenEndCmd}, Start = farm tiếp.`);
+        return;
+      }
       this.stop();
       return;
     }
 
     if (this.autoClimb && this.npcNumber > this.targetMaxNpc) {
       this.log(`=== AUTO CLIMB COMPLETE! Đã mở khóa đến NPC ${this.targetMaxNpc} ===`);
+      await this.startTuLuyenAfterTarget();
+      if (this._tuLuyenActive) {
+        this.printStats();
+        this.log(`😴 Bot chuyển sang CHẾ ĐỘ TU LUYỆN. Stop = ${this.tuLuyenEndCmd}, Start = farm tiếp.`);
+        return;
+      }
       this.stop();
       return;
     }
