@@ -107,6 +107,41 @@
       padding: 8px;
       display: flex;
       flex-direction: column;
+      min-width: 220px;
+    }
+
+    /* === Tabs cho panel điều khiển === */
+    #mode-tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 8px;
+    }
+
+    #mode-tabs button {
+      flex: 1;
+      padding: 5px 4px;
+      background: #0a1628;
+      color: #aaa;
+      border: 1px solid #1a2a4e;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 10px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    #mode-tabs button.active {
+      background: #16213e;
+      color: #e94560;
+      border-color: #e94560;
+    }
+
+    .mode-config {
+      display: none;
+    }
+
+    .mode-config.active {
+      display: flex;
     }
 
     .config-grid {
@@ -115,6 +150,10 @@
       gap: 3px;
       flex: 1;
       align-content: start;
+    }
+
+    .config-field.full {
+      grid-column: 1 / -1;
     }
 
     .config-field label {
@@ -378,85 +417,161 @@
     <!-- NPC Panel (25%) -->
     <div id="npc-panel"
          class="panel-section">
-      <h3>⚔️ Auto Farm NPC</h3>
-      <div class="config-grid">
-        <div class="config-field">
-          <label for="npc-number">NPC Number</label>
-          <input id="npc-number"
-                 type="number"
-                 value="1"
-                 min="1"
-                 max="99">
-        </div>
-        <div class="config-field">
-          <label for="username">Username</label>
-          <input id="username"
-                 type="text"
-                 value="Quất"
-                 placeholder="Tên Discord">
-        </div>
-        <div class="config-field">
-          <label for="total-battles">Total Battles</label>
-          <input id="total-battles"
-                 type="number"
-                 value="5"
-                 min="1"
-                 max="999">
-        </div>
-        <div class="config-field">
-          <label for="cooldown-seconds">Cooldown (sec)</label>
-          <input id="cooldown-seconds"
-                 type="number"
-                 value="100"
-                 min="10"
-                 max="600">
-        </div>
-        <div class="config-field">
-          <label for="button-delay">Delay (sec)</label>
-          <input id="button-delay"
-                 type="number"
-                 value="3"
-                 min="0.5"
-                 max="10"
-                 step="0.5">
-        </div>
-        <div class="config-field">
-          <label for="click-pattern">Click Pattern</label>
-          <input id="click-pattern"
-                 type="text"
-                 value="3,2,1"
-                 placeholder="3,2,1">
-        </div>
-        <div class="config-field">
-          <label style="color:#e94560;font-weight:600;font-size:9px;">AUTO CLIMB</label>
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-            <input id="auto-climb"
-                   type="checkbox"
-                   style="width:13px;height:13px;">
-            <span style="font-size:10px;color:#ccc;">Bật</span>
-          </label>
-        </div>
-        <div class="config-field">
-          <label for="target-max-npc">Target NPC</label>
-          <input id="target-max-npc"
-                 type="number"
-                 value="60"
-                 min="1"
-                 max="999">
-        </div>
-        <div class="config-field">
-          <label style="color:#e94560;font-weight:600;font-size:9px;">TU LUYỆN</label>
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-            <input id="tu-luyen"
-                   type="checkbox"
-                   style="width:13px;height:13px;">
-            <span style="font-size:10px;color:#ccc;">Sau mỗi trận</span>
-          </label>
+      <div id="mode-tabs">
+        <button id="tab-npc"
+                class="active"
+                onclick="setMode('npc')">⚔️ Auto Farm NPC</button>
+        <button id="tab-luanhoi"
+                onclick="setMode('luanhoi')">🌀 Luân Hồi</button>
+      </div>
+      <!-- === AUTO FARM NPC CONFIG === -->
+      <div id="config-npc"
+           class="mode-config active">
+        <div class="config-grid">
+          <div class="config-field full">
+            <button id="btn-npc-toggle"
+                    style="width: 100%;"
+                    class="btn-start"
+                    onclick="toggleBot()">▶ START</button>
+          </div>
+          <div class="config-field">
+            <label for="username">Username</label>
+            <input id="username"
+                   type="text"
+                   value="Quất Bất Lực"
+                   placeholder="Tên Discord">
+          </div>
+          <div class="config-field">
+            <label for="npc-number">NPC Number</label>
+            <input id="npc-number"
+                   type="number"
+                   value="1"
+                   min="1"
+                   max="99">
+          </div>
+          <div class="config-field">
+            <label for="cooldown-seconds">Cooldown (sec)</label>
+            <input id="cooldown-seconds"
+                   type="number"
+                   value="90"
+                   min="10"
+                   max="600">
+          </div>
+          <div class="config-field">
+            <label for="total-battles">Total Battles</label>
+            <input id="total-battles"
+                   type="number"
+                   value="5"
+                   min="1"
+                   max="999">
+          </div>
+          <div class="config-field"
+               hidden>
+            <label for="button-delay">Delay (sec)</label>
+            <input id="button-delay"
+                   type="number"
+                   value="3"
+                   min="0.5"
+                   max="10"
+                   step="0.5">
+          </div>
+          <div class="config-field"
+               hidden>
+            <label for="click-pattern">Click Pattern</label>
+            <input id="click-pattern"
+                   type="text"
+                   value="3,2,1"
+                   placeholder="3,2,1">
+          </div>
+          <div class="config-field">
+            <label style="color:#e94560;font-weight:600;font-size:9px;">AUTO CLIMB</label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input id="auto-climb"
+                     type="checkbox"
+                     style="width:13px;height:13px;">
+              <span style="font-size:10px;color:#ccc;">Bật</span>
+            </label>
+          </div>
+          <div class="config-field">
+            <label for="target-max-npc">Target NPC</label>
+            <input id="target-max-npc"
+                   type="number"
+                   value="60"
+                   min="1"
+                   max="999">
+          </div>
+          <div class="config-field">
+            <label style="color:#e94560;font-weight:600;font-size:9px;">TU LUYỆN</label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input id="tu-luyen"
+                     type="checkbox"
+                     style="width:13px;height:13px;">
+              <span style="font-size:10px;color:#ccc;">Sau mỗi trận</span>
+            </label>
+          </div>
         </div>
       </div>
-      <button id="btn-npc-toggle"
-              class="btn-start"
-              onclick="toggleNpc()">▶ START</button>
+
+      <!-- === LUÂN HỒI CONFIG === -->
+      <div id="config-luanhoi"
+           class="mode-config">
+        <div class="config-grid">
+          <div class="config-field full">
+            <button id="btn-luanhoi-toggle"
+                    style="width: 100%;"
+                    class="btn-start"
+                    onclick="toggleBot()">▶ START</button>
+          </div>
+          <div class="config-field">
+            <label for="username-lh">Username</label>
+            <input id="username-lh"
+                   type="text"
+                   value="Quất Bất Lực"
+                   placeholder="Tên Discord">
+          </div>
+          <div class="config-field">
+            <label for="luanhoi-target">Tầng Dừng (Target)</label>
+            <select id="luanhoi-target"
+                    style="width:100%;padding:3px 5px;background:#0a0a1a;border:1px solid #1a1a4e;border-radius:3px;color:#eee;font-size:11px;outline:none;">
+              <option value="10">10</option>
+              <option value="20">20</option>
+              <option value="30">30</option>
+              <option value="40">40</option>
+              <option value="50">50</option>
+              <option value="60">60</option>
+              <option value="70">70</option>
+              <option value="80">80</option>
+              <option value="90">90</option>
+              <option value="100">100</option>
+              <option value="110">110</option>
+              <option value="120">120</option>
+              <option value="130">130</option>
+              <option value="140">140</option>
+              <option value="150">150</option>
+              <option value="160">160</option>
+              <option value="170">170</option>
+              <option value="180">180</option>
+              <option value="190">190</option>
+              <option value="200">200</option>
+            </select>
+          </div>
+          <div class="config-field">
+            <label for="luanhoi-cmd">Lệnh Tham Gia</label>
+            <input id="luanhoi-cmd"
+                   type="text"
+                   value="!luanhoi">
+          </div>
+          <div class="config-field">
+            <label for="button-delay-lh">Delay (sec)</label>
+            <input id="button-delay-lh"
+                   type="number"
+                   value="3"
+                   min="0.5"
+                   max="10"
+                   step="0.5">
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Stats Panel (50%) -->

@@ -42,6 +42,19 @@ function toggleMute() {
   appendLog(isMuted ? '[🔇] Đã tắt tiếng toàn bộ âm thanh' : '[🔊] Đã bật tiếng');
 }
 
+// === MODE ===
+
+let currentMode = 'npc';
+
+function setMode(mode) {
+  currentMode = mode;
+  document.getElementById('tab-npc').classList.toggle('active', mode === 'npc');
+  document.getElementById('tab-luanhoi').classList.toggle('active', mode === 'luanhoi');
+  document.getElementById('config-npc').classList.toggle('active', mode === 'npc');
+  document.getElementById('config-luanhoi').classList.toggle('active', mode === 'luanhoi');
+  updateBotButton();
+}
+
 // === NPC MODE ===
 
 function getNpcConfig() {
@@ -64,30 +77,56 @@ function getNpcConfig() {
   };
 }
 
-async function toggleNpc() {
+function getLuanHoiConfig() {
+  const skillsEl = document.getElementById('luanhoi-skills');
+  const skillsStr = (skillsEl && skillsEl.value) || '';
+  const skills = skillsStr.split(',').map(s => s.trim()).filter(s => s.length > 0);
+  return {
+    mode: 'luanhoi',
+    luanhoi: true,
+    username: (document.getElementById('username-lh').value || 'Quất Bất Lực').trim(),
+    luanhoiTarget: parseInt(document.getElementById('luanhoi-target').value) || 10,
+    luanhoiCmd: (document.getElementById('luanhoi-cmd').value || '!luanhoi').trim(),
+    buttonDelayMs: (parseFloat(document.getElementById('button-delay-lh').value) || 1) * 1000,
+    luanhoiSkillNames: skills.length > 0
+      ? skills
+      : ['Vạn Kiếm Quy Tông', 'Hỗn Nguyên Hộ Thể', 'Kiếm Khí Xung Thiên', 'Thái Cực Dưỡng Sinh'],
+  };
+}
+
+function getActiveConfig() {
+  return currentMode === 'luanhoi' ? getLuanHoiConfig() : getNpcConfig();
+}
+
+async function toggleBot() {
   if (isNpcRunning) {
     window.api.botStop(0);
     isNpcRunning = false;
-    appendLog('[NPC] ⏹ Stopped');
+    appendLog('[BOT] ⏹ Stopped');
   } else {
     if (!isWebviewRegistered) return;
-    const config = getNpcConfig();
+    const config = getActiveConfig();
     await window.api.botUpdateConfig(0, config);
     window.api.botStart(0);
     isNpcRunning = true;
-    appendLog('[NPC] ▶ Started');
+    const label = config.mode === 'luanhoi' ? 'Luân Hồi' : 'NPC';
+    appendLog(`[${label}] ▶ Started`);
   }
-  updateNpcButton();
+  updateBotButton();
 }
 
-function updateNpcButton() {
-  const btn = document.getElementById('btn-npc-toggle');
-  if (isNpcRunning) {
-    btn.textContent = '⏹ STOP';
-    btn.className = 'btn-stop';
-  } else {
-    btn.textContent = '▶ START';
-    btn.className = 'btn-start';
+function updateBotButton() {
+  const isLH = currentMode === 'luanhoi';
+  const btns = [document.getElementById('btn-npc-toggle'), document.getElementById('btn-luanhoi-toggle')];
+  for (const btn of btns) {
+    if (!btn) continue;
+    if (isNpcRunning) {
+      btn.textContent = '⏹ STOP';
+      btn.className = 'btn-stop';
+    } else {
+      btn.textContent = '▶ START';
+      btn.className = 'btn-start';
+    }
   }
 }
 
@@ -116,7 +155,11 @@ async function updateStats() {
     const totalBattles = status.totalBattles || 0;
 
     // Top row stats - Target shows battle progress
-    if (totalBattles > 0) {
+    if (status.mode === 'luanhoi') {
+      const cur = status.lastLuanhoiTarget != null ? status.lastLuanhoiTarget : 0;
+      const tgt = status.luanhoiTarget || 0;
+      document.getElementById('stat-total').textContent = `Tầng ${cur}/${tgt}`;
+    } else if (totalBattles > 0) {
       const remaining = totalBattles - battleCount;
       document.getElementById('stat-total').textContent = `${battleCount}/${totalBattles} (${remaining} còn lại)`;
     } else {

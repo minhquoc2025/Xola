@@ -25,6 +25,15 @@ class NpcBot {
     this.tuLuyenAfterTarget = true;
     this._tuLuyenActive = false;
     this.username = '';
+    this.mode = 'npc';
+    this.luanhoi = false;
+    this.luanhoiTarget = 10;
+    this.luanhoiCmd = '!luanhoi';
+    this.luanhoiSkillNames = ['Vạn Kiếm Quy Tông', 'Hỗn Nguyên Hộ Thể', 'Kiếm Khí Xung Thiên', 'Thái Cực Dưỡng Sinh'];
+    this.luanhoiSkillIdx = 0;
+    this.luanhoiCurrentTier = 0;
+    this.luanhoiBuffInit = false;
+    this.lastLuanhoiTarget = null;
     this.stats = {
       wins: 0,
       losses: 0,
@@ -86,6 +95,11 @@ class NpcBot {
     if (config.tuLuyenEndCmd !== undefined) this.tuLuyenEndCmd = config.tuLuyenEndCmd;
     if (config.tuLuyenAfterTarget !== undefined) this.tuLuyenAfterTarget = config.tuLuyenAfterTarget;
     if (config.username !== undefined) this.username = config.username;
+    if (config.mode !== undefined) this.mode = config.mode;
+    if (config.luanhoi !== undefined) this.luanhoi = config.luanhoi;
+    if (config.luanhoiTarget !== undefined) this.luanhoiTarget = config.luanhoiTarget;
+    if (config.luanhoiCmd !== undefined) this.luanhoiCmd = config.luanhoiCmd;
+    if (config.luanhoiSkillNames !== undefined) this.luanhoiSkillNames = config.luanhoiSkillNames;
   }
 
   async start() {
@@ -101,7 +115,14 @@ class NpcBot {
     this.climbWinsNeeded = 0;
     this.climbWinsDone = 0;
     this.processedLockIds = new Set();
+    this.luanhoiSkillIdx = 0;
+    this.lastLuanhoiTarget = null;
     this.log('Bot started');
+    if (this.mode === 'luanhoi') {
+      this.log(`=== LUÂN HỒI MODE: Target tầng ${this.luanhoiTarget} ===`);
+      this.luanhoiLoop(this.runId);
+      return;
+    }
     this.log('=== SMART MODE: Đọc turn real-time ===');
     if (this.username) {
       this.log(`=== GROUP MODE: Lọc tin nhắn theo "${this.username}" ===`);
@@ -165,7 +186,7 @@ class NpcBot {
     let lastExp = 0;
 
     // Summary là dòng TỔNG ở cuối ("💰 +532 🪙 ✨ +235 XP" hoặc "+572 +253 XP").
-    // Bỏ qua các dòng breakdown có tên phía trước ("💰 Quất: +350🪙 +159XP") — chứa ':' trước số.
+    // Bỏ qua các dòng breakdown có tên phía trước ("💰 Quất Bất Lực: +350🪙 +159XP") — chứa ':' trước số.
     // Lấy dòng hợp lệ CUỐI CÙNG vì tổng luôn nằm dưới các dòng cộng dồn từng nguồn.
     for (const line of allLines) {
       const trimmed = line.trim();
@@ -233,7 +254,7 @@ class NpcBot {
   }
 
   parseTargetNpc(text) {
-    // "🏆 Quất thắng NPC 🌙 Hằng Nga Tiên Tử!" or "💀 Quất thua NPC 🔮 Bí Ẩn Chi Linh!"
+    // "🏆 Quất Bất Lực thắng NPC 🌙 Hằng Nga Tiên Tử!" or "💀 Quất Bất Lực thua NPC 🔮 Bí Ẩn Chi Linh!"
     const winMatch = text.match(/thắng NPC\s+(.+?)!/);
     if (winMatch) return winMatch[1].trim();
     const lossMatch = text.match(/thua NPC\s+(.+?)!/);
@@ -260,7 +281,10 @@ class NpcBot {
   getStatus() {
     return {
       isRunning: this.isRunning,
+      mode: this.mode,
       battleCount: this.battleCount,
+      luanhoiTarget: this.luanhoiTarget,
+      lastLuanhoiTarget: this.lastLuanhoiTarget,
       totalBattles: this.totalBattles,
       npcNumber: this.npcNumber,
       cooldownMs: this.cooldownMs,
@@ -626,6 +650,139 @@ class NpcBot {
           rewardText = rawText;
 
           return { ended: true, result, rewardText };
+        }
+      }
+      return null;
+    })()`);
+  }
+
+  // Phiên bản checkBattleEnd riêng cho Luân Hồi: bỏ qua message đang trận (có nút "Chiến đấu")
+  // Kiểm tra trận có kết thúc không. advance/win/loss detection đơn giản bằng match + /i.
+  async checkLuanhoiBattleEnd() {
+    const username = this.username || '';
+    return await this.exec(`(() => {
+      const username = ${JSON.stringify(username)};
+      const knownTier = window.luanhoiBuffTierClicked || 0;
+      const msgs = document.querySelectorAll('[role="article"]');
+      const recent = Array.from(msgs).slice(-30);
+      for (const msg of recent.reverse()) {
+        if (username && !msg.textContent.includes(username)) {
+          // Cho phép message Luân Hồi (không chứa username nhưng có từ khóa đặc trưng)
+          const rawTextChk = msg.textContent || '';
+          if (!/(?:luân hồi|luanhoi|tầng|thap|hạ gục|han guc|đánh bại|boss|tiếp tục|ket thuc)/i.test(rawTextChk)) continue;
+        }
+        const rawText = msg.textContent || '';
+        const text = rawText.toLowerCase();
+
+        const hasWin = /chiến thắng|thắng!/.test(text);
+        const hasLoss = /thất bại|bạn đã thua|thua!/.test(text);
+
+        const btns = msg.querySelectorAll('button, [role="button"]');
+        const tNames = ['pham', 'linh', 'huyen', 'thien'];
+        let hasBuff = false;
+        for (const b of btns) {
+          const rawTxt = (b.textContent || '').trim();
+          if (!rawTxt || /[@|!]/.test(rawTxt)) continue;
+          const clean = rawTxt.replace(/:[a-z_0-9]+:/g, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (tNames.includes(clean)) { hasBuff = true; break; }
+        }
+
+        const isLuanhoi = hasBuff ||
+          /luân hồi tháp|luanhoi thap|tháp luân hồi|thap luanhoi|thắng boss|kết thúc luân hồi|ket thuc luan hoi|tiếp tục leo tháp|tiep tuc leo thap|chọn 1 cổng|chon 1 cong|hạ gục boss|han guc boss|đánh bại boss|danh bai boss|chọn độ khó|chon do kho|kết thúc nhận|ket thuc nhan/i.test(rawText);
+        if (!isLuanhoi) continue;
+
+        // Advance: message buff tầng mới > tầng đã click
+        if (hasBuff && !hasWin && !hasLoss && knownTier > 0) {
+          const tm = rawText.match(/(?:tầng|tầng luân hồi|tier)\s*([0-9]{1,3})/i);
+          if (tm && parseInt(tm[1]) > knownTier) {
+            return { ended: true, result: 'advance', rewardText: rawText };
+          }
+        }
+
+        // Thắng BOSS mốc: nút "Tiếp tục leo tháp"
+        if (!hasWin && !hasLoss) {
+          const contKeywords = ['tiếp tục leo tháp', 'tiep tuc leo thap', 'tiếp tục leo', 'tiep tuc leo', 'leo tháp', 'leo thap', 'tiếp tục', 'tiep tuc'];
+          for (const b of btns) {
+            const rawTxt = (b.textContent || '').trim();
+            if (!rawTxt || /[@|!]/.test(rawTxt)) continue;
+            const t0 = rawTxt.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+            if (contKeywords.some(k => t0.includes(k))) {
+              return { ended: true, result: 'win', rewardText: rawText };
+            }
+          }
+        }
+
+         // Thắng BOSS mốc khác: nút "Tiếp Tục"/"Kết Thúc" + "hạ gục boss"
+         if (!hasWin && !hasLoss) {
+           const bossHit = /hạ gục boss|han guc boss|đánh bại boss|danh bai boss/.test(rawText);
+           let hasCont = false, hasStop = false;
+           for (const b of btns) {
+             const rawTxt = (b.textContent || '').trim();
+             if (!rawTxt || /[@|!]/.test(rawTxt)) continue;
+             const t0 = rawTxt.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/:[a-z_0-9]+:/g, '');
+             if (/tiếp|tiep/.test(t0)) hasCont = true;   // "Tiếp Tục" → "tiep tu"
+             if (/kết thúc|ket thuc|dừng|dung/.test(t0)) hasStop = true;
+           }
+           if ((hasCont || hasStop) && bossHit) {
+             return { ended: true, result: 'win', rewardText: rawText };
+           }
+         }
+
+        // Nếu message có nút "Chiến đấu" và KHÔNG có buff → đang trận → chưa kết thúc
+        let hasFightBtn = false;
+        for (const b of btns) {
+          const t = (b.textContent || '').trim().toLowerCase();
+          if (t === 'chiến đấu') { hasFightBtn = true; break; }
+        }
+        if (hasFightBtn) continue;
+
+        if (!hasWin && !hasLoss) continue;
+
+        if (msg.id) {
+          const parts = msg.id.split('-');
+          window.botMaxMsgId = parts[parts.length - 1];
+        }
+
+        let result;
+        if (hasWin && !hasLoss) result = 'win';
+        else if (hasLoss && !hasWin) result = 'loss';
+        else result = 'unknown';
+
+        return { ended: true, result, rewardText: rawText };
+      }
+      return null;
+    })()`);
+  }
+
+  // Chuyên scan message buff tầng MỚI (đã qua tầng). Dùng match + /i đơn giản (như readLuanhoiTier).
+  async checkLuanhoiAdvance() {
+    const username = this.username || '';
+    return await this.exec(`(() => {
+      const username = ${JSON.stringify(username)};
+      const clickedTier = window.luanhoiBuffTierClicked || 0;
+      const tierWords = ['pham', 'linh', 'huyen', 'thien'];
+      const msgs = document.querySelectorAll('[role="article"]');
+      const recent = Array.from(msgs).slice(-40).reverse();
+      for (const msg of recent) {
+        if (username && !msg.textContent.includes(username)) {
+          const rawTextChk = msg.textContent || '';
+          if (!/(?:luân hồi|luanhoi|tầng|thap|hạ gục|han guc|đánh bại|boss|tiếp tục|ket thuc)/i.test(rawTextChk)) continue;
+        }
+        const rawText = msg.textContent || '';
+        const tm = rawText.match(/(?:tầng|tầng luân hồi|tier)\s*([0-9]{1,3})/i);
+        const newTier = tm ? parseInt(tm[1]) : null;
+        const btns = msg.querySelectorAll('button, [role="button"]');
+        let hasBuff = false;
+        for (const b of btns) {
+          const raw = (b.textContent || '').trim();
+          if (!raw || /[@|!]/.test(raw)) continue;
+          const clean = raw.replace(/:[a-z_0-9]+:/g, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (tierWords.includes(clean)) { hasBuff = true; break; }
+        }
+        if (!hasBuff) continue;
+        // clickedTier≥1 (window tăng mỗi lần click buff). Advance khi thấy tầng mới > đã click.
+        if (newTier !== null && newTier > clickedTier && clickedTier > 0) {
+          return { ended: true, result: 'advance', rewardText: rawText };
         }
       }
       return null;
@@ -1153,6 +1310,517 @@ class NpcBot {
       await this.delay(this.buttonDelayMs);
     }
 
+    return false;
+  }
+
+  // ================= LUÂN HỒI MODE =================
+
+  async luanhoiLoop(runId) {
+    if (!this.isRunning || this.runId !== runId) return;
+
+    // RESET trạng thái tầng mỗi run mới — không để giá trị cũ (từ run trước) làm sai logic
+    // advance/click buff (window.luanhoiBuffTierClicked phải về 0 để tầng 1 được chọn lại).
+    this.luanhoiCurrentTier = 0;
+    await this.exec('window.luanhoiBuffTierClicked = 0; true;');
+
+    this.log(`\n=== 🌀 LUÂN HỒI: ${this.luanhoiCmd} ===`);
+    await this.sendChat(this.luanhoiCmd);
+    await this.delay(this.rand(3000, 4000));
+
+    // DEBUG: in text các message gần đây để xác định UI thật của game
+    const msgsDebug = await this.exec(`(() => {
+      const msgs = document.querySelectorAll('[role="article"]');
+      return Array.from(msgs).slice(-6).map((m, i) => {
+        const btns = Array.from(m.querySelectorAll('button, [role="button"]')).map((b, bi) => {
+          return 'btn' + bi + '={' + (b.textContent || '').trim() + '|cls=' + (b.className || '').toString().substring(0, 40) + '|dis=' + (b.disabled ? 1 : 0) + '}';
+        });
+        return 'txt=' + (m.textContent || '').replace(/\\s+/g, ' ').substring(0, 400) + ' || BUTTONS:' + btns.join(' ; ');
+      });
+    })()`);
+    if (msgsDebug && msgsDebug.length) {
+      this.log('---- [DEBUG UI] 6 message gần nhất ----');
+      msgsDebug.forEach((m, i) => this.log(`  [msg${i}] ${m.substring(0, 800)}`));
+      this.log('---------------------------------------');
+    }
+
+    await this.cooldownWait(this.rand(5, 8), runId);
+
+    if (this.isRunning && this.runId === runId) {
+      this.luanhoiFightLoop(runId);
+    }
+  }
+
+  async luanhoiFightLoop(runId) {
+    if (!this.isRunning || this.runId !== runId) return;
+
+    this.log('\n=== ⚔️ Chiến đấu luân hồi ===');
+
+    // PRE-BATTLE: game tự di chuyển tới tầng kế và hiện màn chọn cửa (boss 10/20/30) + buff.
+    // Đợi tới khi thấy buff (hoặc cửa) xuất hiện rồi chọn. Chỉ click khi nút hiện.
+    const preTimeout = Date.now() + 15000; // tối đa 15s chờ chọn buff
+    let entered = false;
+    while (this.isRunning && this.runId === runId && Date.now() < preTimeout) {
+      if (await this.clickDoor('up')) {
+        this.log('🚪 Đã chọn cửa hướng lên (boss mốc).');
+        await this.delay(this.rand(1200, 2000));
+      }
+      const b = await this.clickBuffByPriority();
+      if (b) {
+        this.log(`⚡ Đã chọn buff: "${b}"`);
+        entered = true;
+        const tierNow = await this.readLuanhoiTier();
+        if (tierNow > 0) this.luanhoiCurrentTier = tierNow;
+        break;
+      }
+      // Nếu buff đã chọn từ trước (khi advance giữa trận sang tầng mới) hoặc đã trong trận
+      const curTier = await this.readLuanhoiTier();
+      const clickedTier = await this.exec('window.luanhoiBuffTierClicked || 0');
+      if (clickedTier > 0 && (curTier === 0 || clickedTier >= curTier)) {
+        entered = true;
+        break;
+      }
+      const isFighting = await this.checkAlreadyFighting();
+      if (isFighting) {
+        entered = true;
+        break;
+      }
+      // Fallback: kiểm tra xem có nút skill không (nghĩa là đã trong trận)
+      const hasSkill = await this.clickNextLuanhoiSkill();
+      if (hasSkill) {
+        this.log(`🌀 Phát hiện skill giữa pre-battle: "${hasSkill}" → đã trong trận!`);
+        entered = true;
+        break;
+      }
+      await this.delay(this.rand(2000, 3000));
+    }
+
+    if (!entered) {
+      this.log('⚠️ Luân hồi: quá lâu không thấy màn chọn buff. Thử lại vòng kế...');
+      await this.cooldownWait(10, runId);
+      if (this.isRunning && this.runId === runId) this.luanhoiFightLoop(runId);
+      return;
+    }
+
+    await this.delay(this.rand(1500, 2500));
+
+    const isAlreadyFighting = await this.checkAlreadyFighting();
+    const battleResult = await this.luanhoiBattle(isAlreadyFighting, runId);
+
+    if (!this.isRunning || this.runId !== runId) return;
+
+    if (typeof battleResult === 'object' && battleResult.ended !== true) {
+      this.log('⚠️ Luân hồi: kết thúc ngoài ý muốn, thử lại...');
+      await this.cooldownWait(10, runId);
+      if (this.isRunning && this.runId === runId) this.luanhoiFightLoop(runId);
+      return;
+    }
+
+    // 'win' hoặc 'advance' (sang tầng) đều coi là thắng tầng đó
+    const isWin = battleResult && battleResult.ended && battleResult.result === 'win';
+    const isAdvance = battleResult && battleResult.ended && battleResult.result === 'advance';
+
+    if (isWin) {
+      this.stats.wins++;
+      this.log('✅ THẮNG BOSS!');
+    } else if (isAdvance) {
+      this.stats.wins++;
+      this.log('⏩ THẮNG TẦNG / SANG TẦNG KẾ!');
+    } else {
+      this.stats.losses++;
+      this.log('❌ THUA BOSS!');
+    }
+
+    // Đợi game cập nhật message kết quả
+    await this.delay(this.rand(2500, 3500));
+
+    const currentTier = await this.readLuanhoiTier();
+    this.lastLuanhoiTarget = currentTier;
+    if (currentTier > 0) this.luanhoiCurrentTier = currentTier;
+
+    if (currentTier >= this.luanhoiTarget && isWin) {
+      this.log(`✅ Đã đạt tầng mục tiêu ${this.luanhoiTarget} (hiện tại ${currentTier}). Chọn DỪNG nhận thưởng.`);
+      const stopResult = await this.clickContinueOrStop('stop');
+      this.log(`[DỪNG] clickContinueOrStop('stop') returned: ${stopResult}`);
+      this.printStats();
+      this.stop();
+      return;
+    }
+
+    // Boss mốc (tầng 10, 20, 30...) không tự sang tầng: cần bấm "Tiếp tục leo tháp".
+    if (currentTier > 0 && currentTier % 10 === 0) {
+      this.log(`🔄 Thắng BOSS tầng ${currentTier} — cần bấm "Tiếp tục leo tháp" để đi tiếp.`);
+      let cont = null;
+      for (let attempt = 1; attempt <= 6; attempt++) {
+        if (!this.isRunning || this.runId !== runId) return;
+        cont = await this.clickContinueOrStop('continue');
+        if (cont) break;
+        await this.delay(this.rand(2500, 3500));
+      }
+      if (cont) this.log(`✅ Đã click nút tiếp tục (${cont}).`);
+      else this.log('⚠️ [Debug] Không tìm thấy nút Tiếp tục leo tháp.');
+    } else {
+      this.log(`🔄 Tầng thường ${currentTier} — game tự sang tầng kế, chờ chọn buff tiếp...`);
+    }
+
+    await this.delay(this.rand(2500, 3500));
+
+    if (this.isRunning && this.runId === runId) {
+      this.luanhoiFightLoop(runId);
+    }
+  }
+
+  // Chiến đấu luân hồi: game tự đánh nên chỉ cần chờ trận kết thúc
+  async luanhoiBattle(isResuming = false, runId = null) {
+    const battleStartTime = Date.now();
+    const maxBattleDurationMs = 180000;
+
+    // Trong khi chờ trận xong, cứ vài vòng gọi click skill (nếu game cần click). Không force-advance
+    // vội: chỉ thoát khi checkLuanhoiBattleEnd xác nhận trận đã kết thúc (buff tầng mới / win / loss).
+    let noSkillSince = null;
+
+    while (this.isRunning && this.runId === runId) {
+      if (Date.now() - battleStartTime > maxBattleDurationMs) {
+        this.log('⚠️ Luân hồi: battle timeout, force-end.');
+        return { ended: true, result: 'unknown' };
+      }
+
+      // Nếu màn chọn buff xuất hiện (màn buff giữa trận / sang tầng mới), chọn ngay và advance
+      const buffClicked = await this.clickBuffByPriority();
+      if (buffClicked) {
+        this.log(`⚡ Đã chọn buff giữa trận/sang tầng: "${buffClicked}"`);
+        return { ended: true, result: 'advance' };
+      }
+
+      const adv = await this.checkLuanhoiAdvance();
+      if (adv && adv.ended) {
+        this.log('>>> BATTLE END: ✅ advance (buff tầng mới) <<<');
+        return { ended: true, result: 'advance', rewardText: adv.rewardText };
+      }
+
+      const end = await this.checkLuanhoiBattleEnd();
+      if (end && end.ended) {
+        this.log(`>>> BATTLE END: ${end.result === 'win' ? '✅ THẮNG' : (end.result === 'loss' ? '❌ THUA' : '?')} <<<`);
+        return { ended: true, result: end.result, rewardText: end.rewardText };
+      }
+
+      const cooldown = await this.checkCooldownMessage();
+      if (cooldown > 0) {
+        this.log(`>>> COOLDOWN: ${cooldown}s <<<`);
+        return { ended: false, cooldown: cooldown };
+      }
+
+      // Click skill mỗi lượt (nếu game cần). Không tìm thấy skill chỉ là trễ giữa các lượt — cứ chờ.
+      const clicked = await this.clickNextLuanhoiSkill();
+      if (clicked) {
+        this.log(`🌀 Click skill luân hồi: "${clicked}"`);
+        noSkillSince = null;
+      } else if (noSkillSince === null) {
+        noSkillSince = Date.now();
+      } else if (Date.now() - noSkillSince > 30000) {
+        noSkillSince = Date.now();
+      }
+
+      await this.delay(this.rand(2000, 3000));
+    }
+
+    return { ended: false };
+  }
+
+  // Tìm skill luân hồi theo TÊN (bỏ qua nút buff Phàm/Linh/Huyền/Thiên và skill mặc định), click luân phiên
+  async clickNextLuanhoiSkill() {
+    const username = this.username || '';
+    const names = this.luanhoiSkillNames;
+    const tierWords = ['pham', 'linh', 'huyen', 'thien'];
+
+    // Lấy tên skill cần click lần này (luân phiên đảo thứ tự)
+    const name = names[this.luanhoiSkillIdx % names.length];
+    this.luanhoiSkillIdx++;
+
+    const clicked = await this.exec(`(() => {
+      const removeVN = s => (s || '').normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\u0111/g, 'd').replace(/\u0110/g, 'd')
+        .replace(/\u01A1/g, 'o').replace(/\u01A0/g, 'o')
+        .replace(/\u01B0/g, 'u').replace(/\u01AF/g, 'u')
+        .toLowerCase();
+      const username = ${JSON.stringify(username)};
+      const name = ${JSON.stringify(name)};
+      const nameNoD = removeVN(name);
+      const userFirstWord = removeVN(username).split(' ')[0];
+      const tierWords = ${JSON.stringify(tierWords)};
+      const msgs = document.querySelectorAll('[role="article"]');
+      const recent = Array.from(msgs).slice(-40).reverse();
+      for (const msg of recent) {
+        const rawText = msg.textContent || '';
+        const norm = removeVN(rawText);
+        if (userFirstWord && !norm.includes(userFirstWord) && !norm.includes('luan') && !norm.includes('thap')) continue;
+        const btns = msg.querySelectorAll('button, [role="button"]');
+        if (btns.length === 0) continue;
+        for (const btn of btns) {
+          if (btn.disabled) continue;
+          const txt = (btn.textContent || '').trim();
+          if (!txt || /[@|!]/.test(txt)) continue;
+          const noD = removeVN(txt);
+          const clean = noD.replace(/[^a-z0-9]/g, '');
+          if (tierWords.includes(clean)) continue;
+          if (noD.includes(nameNoD)) {
+            btn.click();
+            return txt;
+          }
+        }
+      }
+      return null;
+    })()`);
+
+    if (clicked) return clicked;
+
+    // Fallback: click nút skill luân hồi đầu tiên còn sẵn (không phải buff)
+    const any = await this.exec(`(() => {
+      const removeVN = s => (s || '').normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\u0111/g, 'd').replace(/\u0110/g, 'd')
+        .replace(/\u01A1/g, 'o').replace(/\u01A0/g, 'o')
+        .replace(/\u01B0/g, 'u').replace(/\u01AF/g, 'u')
+        .toLowerCase();
+      const username = ${JSON.stringify(username)};
+      const userFirstWord = removeVN(username).split(' ')[0];
+      const names = ${JSON.stringify(names)};
+      const namesNoD = names.map(n => removeVN(n).replace(/[^a-z0-9]/g, ''));
+      const tierWords = ${JSON.stringify(tierWords)};
+      const msgs = document.querySelectorAll('[role="article"]');
+      const recent = Array.from(msgs).slice(-40).reverse();
+      for (const msg of recent) {
+        const rawText = msg.textContent || '';
+        const norm = removeVN(rawText);
+        if (userFirstWord && !norm.includes(userFirstWord) && !norm.includes('luan') && !norm.includes('thap')) continue;
+        const btns = msg.querySelectorAll('button, [role="button"]');
+        if (btns.length === 0) continue;
+        for (const btn of btns) {
+          if (btn.disabled) continue;
+          const txt = (btn.textContent || '').trim();
+          if (!txt || /[@|!]/.test(txt)) continue;
+          const noD = removeVN(txt).replace(/[^a-z0-9]/g, '');
+          if (tierWords.includes(noD)) continue;
+          for (const n of namesNoD) {
+            if (noD.includes(n)) {
+              btn.click();
+              return txt;
+            }
+          }
+        }
+      }
+      return null;
+    })()`);
+
+    if (any) return any;
+
+    // Debug: in toàn bộ button/role=button 1 lần duy nhất (tránh spam log mỗi vòng lặp)
+    if (this.luanhoiSkillDebugCount === undefined) this.luanhoiSkillDebugCount = 0;
+    this.luanhoiSkillDebugCount++;
+    if (this.luanhoiSkillDebugCount <= 1) {
+      const dump = await this.exec(`(() => {
+        const nd = s => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'd').replace(/ơ/g, 'o').replace(/Ơ/g, 'o').replace(/ư/g, 'u').replace(/Ư/g, 'u').toLowerCase();
+        const username = ${JSON.stringify(username)};
+        const userFirstWord = nd(username).split(' ')[0];
+        const results = [];
+        const msgs = document.querySelectorAll('[role="article"]');
+        const recent = Array.from(msgs).slice(-8).reverse();
+        for (const msg of recent) {
+          if (userFirstWord && !nd(msg.textContent).includes(userFirstWord)) continue;
+          const btns = msg.querySelectorAll('button, [role="button"]');
+          if (btns.length === 0) continue;
+          const labels = [];
+          btns.forEach(b => {
+            const t = (b.textContent || '').trim();
+            if (t && t.length < 80) labels.push(t + '|dis=' + (b.disabled ? 1 : 0));
+          });
+          if (labels.length > 0) results.push(labels.join(' ; '));
+        }
+        return results;
+      })()`);
+      if (dump && dump.length > 0) {
+        this.log('⚠️ [Debug] Các nút lân cận không click được (lần đầu):');
+        dump.forEach(d => this.log('   [btn] ' + d));
+      }
+    }
+    return null;
+  }
+
+  // Đọc tầng hiện tại từ message (dùng match + /i như checkLuanhoiAdvance/battleEnd)
+  async readLuanhoiTier() {
+     const username = this.username || '';
+     const val = await this.exec(`(() => {
+       const username = ${JSON.stringify(username)};
+       const msgs = document.querySelectorAll('[role="article"]');
+       const recent = Array.from(msgs).slice(-40).reverse();
+       let bestTier = null;
+       for (const msg of recent) {
+         if (username && !msg.textContent.includes(username)) {
+           const rawTextChk = msg.textContent || '';
+           if (!/(?:luân hồi|luanhoi|tầng|thap)/i.test(rawTextChk)) continue;
+         }
+         const text = msg.textContent;
+         const m = text.match(/(?:tầng|tầng luân hồi|tier)\s*([0-9]{1,3})/i);
+         if (m && m[1]) {
+           const t = parseInt(m[1]);
+           if (bestTier === null || t > bestTier) bestTier = t;
+         }
+       }
+       if (bestTier !== null) return bestTier;
+       // Fallback: dùng tầng đã click buff gần nhất
+       const w = window.luanhoiBuffTierClicked || 0;
+       return w > 0 ? w : null;
+     })()`);
+
+     if (val === null || val === undefined) {
+      this.log('⚠️ [Debug] Không đọc được tầng hiện tại từ message.');
+      const preview = await this.exec(`(() => {
+        const msgs = document.querySelectorAll('[role="article"]');
+        return Array.from(msgs).slice(-6).map(m => (m.textContent || '').substring(0, 120));
+      })()`);
+      if (preview) {
+        preview.forEach(p => this.log('   [tier debug] ' + p));
+      }
+      return 0;
+    }
+    this.log(`🗼 Tầng hiện tại: ${val}`);
+    return val;
+  }
+
+  // Click nút "Tiếp tục" hoặc "Dừng nhận thưởng"
+  async clickContinueOrStop(which) {
+    const contKeywords = ['tiếp tục leo tháp', 'tiep tuc leo thap', 'tiếp tục leo', 'tiep tuc leo', 'tiếp tục', 'tiep tuc', 'leo tháp', 'leo thap', 'tiếp', 'tiep'];
+      const stopKeywords = ['ket thuc', 'kết thúc', 'dừng', 'dung', 'nhận thưởng'];
+
+    return await this.exec(`(() => {
+      const which = ${JSON.stringify(which)};
+      const contKeywords = ${JSON.stringify(contKeywords)};
+      const stopKeywords = ${JSON.stringify(stopKeywords)};
+       const nd = s => s.replace(/:[a-z_0-9]+:/g, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+       const msgs = document.querySelectorAll('[role="article"]');
+       const recent = Array.from(msgs).slice(-30).reverse();
+       for (const msg of recent) {
+         const btns = msg.querySelectorAll('button, [role="button"]');
+         if (btns.length === 0) continue;
+         for (const btn of btns) {
+           const raw = (btn.textContent || '').trim();
+           if (!raw) continue;
+           if (/[@|!]/.test(raw)) continue;
+           const txt = nd(raw);
+           if (!txt) continue;
+            if (which === 'stop') {
+              if (txt.includes('ket thuc') && txt.includes('thuong')) {
+               btn.disabled = false;
+               btn.click();
+               return 'stop-clicked: ' + raw;
+             }
+           } else {
+             if (contKeywords.some(k => txt.includes(k))) {
+               btn.disabled = false;
+               btn.click();
+               return 'continue-clicked: ' + raw;
+             }
+           }
+         }
+       }
+        if (which === 'stop') return 'stop-null: ' + Array.from(recent).slice(-5).map(m => m.textContent.substring(0,60)).join(' || ');
+        return null;
+     })()`);
+  }
+
+  // Click nút cửa theo hướng (mặc định up)
+  async clickDoor(direction) {
+    const username = this.username || '';
+    const dirMap = {
+      up: ['lên', 'len', 'trên', 'tren', 'lên trên', 'len tren', '↑', '⬆'],
+      down: ['xuống', 'xuong', 'dưới', 'duoi', '↓', '⬇'],
+      left: ['trái', 'trai', '←', '⬅'],
+      right: ['phải', 'phai', '→', '➡'],
+    };
+    const keys = dirMap[direction] || dirMap.up;
+
+     return await this.exec(`(() => {
+       const username = ${JSON.stringify(username)};
+       const keys = ${JSON.stringify(keys)};
+       const nd = s => s.replace(/:[a-z_0-9]+:/g, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+       const msgs = document.querySelectorAll('[role="article"]');
+       const recent = Array.from(msgs).slice(-30).reverse();
+       for (const msg of recent) {
+         if (username && !msg.textContent.includes(username)) {
+           const rawTextChk = msg.textContent || '';
+           if (!/(?:luân hồi|luanhoi|tầng|thap|hạ gục|han guc|đánh bại|boss|tiếp tục|ket thuc)/i.test(rawTextChk)) continue;
+         }
+         const btns = msg.querySelectorAll('button, [role="button"]');
+        if (btns.length === 0) continue;
+        for (const btn of btns) {
+          const raw = (btn.textContent || '').trim();
+          if (!raw) continue;
+          if (/[@|!]/.test(raw)) continue;
+          const txt = nd(raw);
+          if (!txt) continue;
+          if (keys.some(k => txt.includes(nd(k)))) {
+            btn.disabled = false;
+            btn.click();
+            return raw;
+          }
+        }
+      }
+      return null;
+    })()`);
+  }
+
+  // Chọn buff ưu tiên Thiên > Huyền > Linh > Phàm. Dùng window.luanhoiBuffTierClicked làm guard chính.
+  async clickBuffByPriority() {
+    const username = this.username || '';
+    const clicked = await this.exec(`(() => {
+      const tierOf = { 'thien': 3, 'huyen': 2, 'linh': 1, 'pham': 0 };
+      const tierNames = ['pham', 'linh', 'huyen', 'thien'];
+      const username = ${JSON.stringify(username)};
+      const msgs = document.querySelectorAll('[role="article"]');
+      const recent = Array.from(msgs).slice(-40).reverse();
+
+       for (const msg of recent) {
+         const rawText = msg.textContent || '';
+         if (username && !rawText.includes(username)) {
+           if (!/(?:luân hồi|luanhoi|tầng|thap|hạ gục|han guc|đánh bại|boss)/i.test(rawText)) continue;
+         }
+         const btns = msg.querySelectorAll('button, [role="button"]');
+        if (btns.length === 0) continue;
+        let maxP = -1, bestBtn = null, bestText = '';
+        for (const b of btns) {
+          if (b.disabled) continue;
+          const raw = (b.textContent || '').trim();
+          if (!raw) continue;
+          const merged = (b.textContent || '').replace(/\s+/g, ' ').trim();
+          if (/[@|!]/.test(raw)) continue;
+          const clean = raw.replace(/:[a-z_0-9]+:/g, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (!tierNames.includes(clean)) continue;
+          const p = tierOf[clean];
+          if (p > maxP) { maxP = p; bestBtn = b; bestText = merged; }
+        }
+        if (!bestBtn) continue;
+
+        // Parse tầng từ message (match + /i)
+        let msgTier = 0;
+        const tm = rawText.match(/(?:tầng|tầng luân hồi|tier)\s*([0-9]{1,3})/i);
+        if (tm && tm[1]) msgTier = parseInt(tm[1]);
+
+        // Nếu đã click buff cho tầng này rồi → bỏ qua
+        const clickedTier = window.luanhoiBuffTierClicked || 0;
+        if (msgTier > 0 && msgTier <= clickedTier) continue;
+
+        bestBtn.disabled = false;
+        bestBtn.click();
+        window.luanhoiBuffTierClicked = Math.max(window.luanhoiBuffTierClicked || 0, msgTier > 0 ? msgTier : (window.luanhoiBuffTierClicked || 0) + 1);
+        return { text: bestText, tier: msgTier };
+      }
+      return null;
+    })()`);
+
+    if (clicked) {
+      this.log(`🎯 Chọn buff: "${clicked.text}" (ưu tiên, tầng ${clicked.tier || '?'}).`);
+      return clicked.text;
+    }
     return false;
   }
 }

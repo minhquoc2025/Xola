@@ -23,8 +23,8 @@ const REAL_MSG = `🏆 KẾT QUẢ TRẬN ĐẤU
 🏆 Thích Anh Hiệp v2 CHIẾN THẮNG! 🎉
 
 --------------------
-🏆 Quất thắng NPC 🐲 Hắc Kỳ Lân! 🎉
-💰 Quất: +350🪙 +159XP
+🏆 Quất Bất Lực thắng NPC 🐲 Hắc Kỳ Lân! 🎉
+💰 Quất Bất Lực: +350🪙 +159XP
 💕 🗡️ Ác Quỷ: +318XP
 🐾 Buzzwole (Buzzwole): +318XP
 📖 Codex: +182🪙 (+52%)
@@ -32,7 +32,7 @@ const REAL_MSG = `🏆 KẾT QUẢ TRẬN ĐẤU
 
 ⚒️ Rơi: 🟡 Giày Lính Đánh Thuê!
 ✅ Thắng
-🥇 Quất CHIẾN THẮNG!
+🥇 Quất Bất Lực CHIẾN THẮNG!
 💰 +532 🪙 ✨ +235 XP
 ❌ Thua
 🐲 Hắc Kỳ Lân — 💀 Thất bại!
@@ -42,7 +42,7 @@ const REAL_MSG = `🏆 KẾT QUẢ TRẬN ĐẤU
 💕 🗡️ Ác Quỷ: +318XP`;
 
 const bot = new NpcBot(null, 0);
-bot.log = () => {};
+bot.log = () => { };
 bot.parseBattleRewards(REAL_MSG);
 
 console.log(JSON.stringify({
