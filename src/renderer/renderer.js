@@ -230,3 +230,36 @@ function clearLogs() {
   window.api.clearLogs();
   document.getElementById('log-area').innerHTML = '';
 }
+
+function copyLogs() {
+  const logArea = document.getElementById('log-area');
+  const entries = logArea.querySelectorAll('.log-entry');
+  const text = Array.from(entries).map(e => e.textContent).join('\n');
+  const btn = document.getElementById('btn-copy-log');
+
+  if (!text.trim()) {
+    btn.textContent = '⚠️ Log trống';
+    setTimeout(() => { btn.textContent = '📋 Copy Log'; }, 1500);
+    return;
+  }
+
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = '✅ Đã copy!';
+    btn.style.background = '#1a5a2e';
+    btn.style.borderColor = '#2a7a3e';
+    setTimeout(() => {
+      btn.textContent = '📋 Copy Log';
+      btn.style.background = '';
+      btn.style.borderColor = '';
+    }, 2000);
+  }).catch(() => {
+    btn.textContent = '❌ Lỗi copy';
+    btn.style.background = '#5a1a1a';
+    btn.style.borderColor = '#7a2a2a';
+    setTimeout(() => {
+      btn.textContent = '📋 Copy Log';
+      btn.style.background = '';
+      btn.style.borderColor = '';
+    }, 2000);
+  });
+}

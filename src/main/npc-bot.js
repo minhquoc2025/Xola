@@ -1433,7 +1433,7 @@ class NpcBot {
     // Đợi game cập nhật message kết quả
     await this.delay(this.rand(2500, 3500));
 
-    const currentTier = await this.readLuanhoiTier();
+    let currentTier = await this.readLuanhoiTier();
     this.lastLuanhoiTarget = currentTier;
     if (currentTier > 0) this.luanhoiCurrentTier = currentTier;
 
@@ -1450,14 +1450,25 @@ class NpcBot {
     if (currentTier > 0 && currentTier % 10 === 0) {
       this.log(`🔄 Thắng BOSS tầng ${currentTier} — cần bấm "Tiếp tục leo tháp" để đi tiếp.`);
       let cont = null;
-      for (let attempt = 1; attempt <= 6; attempt++) {
+      for (let attempt = 1; attempt <= 3; attempt++) {
         if (!this.isRunning || this.runId !== runId) return;
         cont = await this.clickContinueOrStop('continue');
         if (cont) break;
         await this.delay(this.rand(2500, 3500));
       }
-      if (cont) this.log(`✅ Đã click nút tiếp tục (${cont}).`);
-      else this.log('⚠️ [Debug] Không tìm thấy nút Tiếp tục leo tháp.');
+      if (cont) {
+        this.log(`✅ Đã click nút tiếp tục (${cont}).`);
+      } else {
+        // Không tìm thấy nút "Tiếp tục" → readLuanhoiTier() đã đọc sai tầng (cao hơn thực tế).
+        // Thực tế người chơi đang ở tầng trước đó, chưa thắng boss mốc.
+        // Cập nhật lại tầng = currentTier - 1 để khớp thực tế.
+        const correctedTier = currentTier - 1;
+        this.log(`⚠️ [Debug] Không tìm thấy nút Tiếp tục leo tháp.`);
+        this.log(`🔧 [Sửa tầng] readLuanhoiTier() trả về ${currentTier} nhưng thực tế chưa qua boss mốc. Cập nhật tầng: ${currentTier} → ${correctedTier}`);
+        currentTier = correctedTier;
+        this.luanhoiCurrentTier = correctedTier;
+        this.lastLuanhoiTarget = correctedTier;
+      }
     } else {
       this.log(`🔄 Tầng thường ${currentTier} — game tự sang tầng kế, chờ chọn buff tiếp...`);
     }
@@ -1653,7 +1664,6 @@ class NpcBot {
        const username = ${JSON.stringify(username)};
        const msgs = document.querySelectorAll('[role="article"]');
        const recent = Array.from(msgs).slice(-40).reverse();
-       let bestTier = null;
        for (const msg of recent) {
          if (username && !msg.textContent.includes(username)) {
            const rawTextChk = msg.textContent || '';
@@ -1662,11 +1672,9 @@ class NpcBot {
          const text = msg.textContent;
          const m = text.match(/(?:tầng|tầng luân hồi|tier)\s*([0-9]{1,3})/i);
          if (m && m[1]) {
-           const t = parseInt(m[1]);
-           if (bestTier === null || t > bestTier) bestTier = t;
+           return parseInt(m[1]);
          }
        }
-       if (bestTier !== null) return bestTier;
        // Fallback: dùng tầng đã click buff gần nhất
        const w = window.luanhoiBuffTierClicked || 0;
        return w > 0 ? w : null;
