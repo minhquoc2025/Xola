@@ -1,0 +1,62 @@
+# ============================================================
+# QUIZ BOT CONFIGURATION
+# ============================================================
+# Chạy song song với bot NPC/Boss bằng user-data-dir riêng.
+# Lần đầu chạy, đăng nhập Discord vào profile này.
+
+DISCORD_URL=https://discord.com/channels/@me
+EDGE_USER_DATA_DIR=edge_quiz_profile
+EDGE_PROFILE_DIR=Default
+
+TEXTBOX_SELECTOR=div[role="textbox"]
+MESSAGE_SELECTOR=li[id^="chat-messages-"]
+
+BOT_NAME=Xỏ lá ba que
+PLAYER_NAME=Thích Gáy Đểu
+
+QUESTION_MARKER=CÂU HỎI NHANH!
+CORRECT_MARKER=CHÍNH XÁC!
+TIMEOUT_MARKER=HẾT GIỜ!
+ANSWER_MARKER=Đáp án:
+UNKNOWN_ANSWER=khầy chùa
+
+SCAN_INTERVAL=0.1
+MAX_MESSAGES=80
+ACTIVE_QUESTION_TTL=180
+
+# LƯU Ý (bản tối ưu tốc độ):
+# Bot dùng MutationObserver để phát hiện message mới GẦN NHƯ TỨC THÌ
+# (không còn polling cố định theo SCAN_INTERVAL nữa). SCAN_INTERVAL giờ
+# chỉ còn 2 vai trò:
+#   1. Ngưỡng "thức dậy" tối đa để kiểm tra lệnh (stop/reload/crawl...)
+#      ngay cả khi không có message mới.
+#   2. Chu kỳ polling DỰ PHÒNG - chỉ dùng khi MutationObserver bị lỗi.
+
+# Thời gian (mili-giây) chờ thêm SAU KHI phát hiện DOM thay đổi, TRƯỚC
+# KHI đọc nội dung message. Cần thiết vì Discord (React) thường dựng
+# khung message trước rồi mới đổ chữ vào sau qua nhiều bước - đọc quá
+# sớm có thể bắt phải nội dung chưa đầy đủ. Giảm số này -> phản hồi
+# nhanh hơn nhưng tăng rủi ro đọc thiếu chữ; tăng lên -> an toàn hơn
+# nhưng chậm hơn. 20ms là mức cân bằng hợp lý, không nên đặt dưới 10.
+RENDER_SETTLE_MS=20
+
+# CHẾ ĐỘ GỬI ĐÁP ÁN - đánh đổi TỐC ĐỘ vs ĐỘ TIN CẬY:
+#   selenium (mặc định, AN TOÀN) - gõ phím thật qua Selenium (click +
+#       send_keys). Đáng tin cậy 100%, đã dùng ổn định từ trước.
+#   js (NHANH HƠN, có rủi ro) - "bơm" chữ trực tiếp vào ô chat bằng
+#       JavaScript (execCommand insertText + bắn sự kiện Enter), bỏ qua
+#       việc gõ phím thật -> nhanh hơn vì gộp hết vào 1 round-trip. CÓ
+#       XÁC MINH: sau khi bắn Enter, code tự kiểm tra ô chat đã trống
+#       chưa (dấu hiệu Discord đã nhận); nếu không xác nhận được trong
+#       300ms, sẽ TỰ ĐỘNG rơi về cách "selenium" để đảm bảo không mất
+#       câu trả lời. Rủi ro còn lại: editor của Discord dựa trên React,
+#       một số phiên bản/trạng thái trình duyệt có thể khiến JS không
+#       kích hoạt đúng sự kiện input như gõ phím thật - dù đã có xác minh
+#       + fallback, vẫn khuyến nghị theo dõi log vài chục câu đầu sau khi
+#       bật để chắc chắn ổn định trên máy bạn trước khi tin tưởng hoàn toàn.
+SEND_MODE=js
+
+# Crawl
+CRAWL_SCROLL_WAIT=0.6
+CRAWL_STABLE_ROUNDS=3
+CRAWL_DEBUG=true

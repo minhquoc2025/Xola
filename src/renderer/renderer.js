@@ -51,9 +51,11 @@ function setMode(mode) {
   document.getElementById('tab-npc').classList.toggle('active', mode === 'npc');
   document.getElementById('tab-luanhoi').classList.toggle('active', mode === 'luanhoi');
   document.getElementById('tab-bicanh').classList.toggle('active', mode === 'bicanh');
+  document.getElementById('tab-dianguc').classList.toggle('active', mode === 'dianguc');
   document.getElementById('config-npc').classList.toggle('active', mode === 'npc');
   document.getElementById('config-luanhoi').classList.toggle('active', mode === 'luanhoi');
   document.getElementById('config-bicanh').classList.toggle('active', mode === 'bicanh');
+  document.getElementById('config-dianguc').classList.toggle('active', mode === 'dianguc');
   updateBotButton();
 }
 
@@ -80,9 +82,8 @@ function getNpcConfig() {
 }
 
 function getLuanHoiConfig() {
-  const skillsEl = document.getElementById('luanhoi-skills');
-  const skillsStr = (skillsEl && skillsEl.value) || '';
-  const skills = skillsStr.split(',').map(s => s.trim()).filter(s => s.length > 0);
+  const configuredOrder = localStorage.getItem('bicanhSkillOrder') || '';
+  const skills = resolveSkillNames(configuredOrder);
   return {
     mode: 'luanhoi',
     luanhoi: true,
@@ -105,7 +106,39 @@ function getBicanhConfig() {
   };
 }
 
+function resolveSkillNames(value) {
+  const raw = Array.isArray(value) ? value : String(value || '').split(',');
+  return raw.map(item => {
+    const token = String(item).trim();
+    const stt = Number(token);
+    return Number.isInteger(stt) && stt >= 1 && stt <= ALL_SKILLS.length
+      ? ALL_SKILLS[stt - 1].name
+      : token;
+  }).filter(Boolean);
+}
+
+function getDiangucConfig() {
+  const configuredOrder = localStorage.getItem('bicanhSkillOrder') || '';
+  const inputValue = document.getElementById('dianguc-skills').value || '';
+  const skillNames = resolveSkillNames(configuredOrder || inputValue);
+  const resolvedSkills = skillNames.length > 0
+    ? skillNames
+    : ['Vạn Kiếm Quy Tông', 'Hỗn Nguyên Hộ Thể', 'Kiếm Khí Xung Thiên', 'Thái Cực Dưỡng Sinh'];
+  return {
+    mode: 'dianguc',
+    dianguc: true,
+    username: (document.getElementById('username-dianguc').value || 'Quất Bất Lực').trim(),
+    diangucCmd: (document.getElementById('dianguc-cmd').value || '!dianguc').trim(),
+    luanhoiSkillNames: resolvedSkills,
+    diangucDelayMs: 1500,
+    diangucChoiceDelayMs: 1500,
+    diangucSkillDelayMs: 1700,
+    diangucWinDelayMs: 3000,
+  };
+}
+
 function getActiveConfig() {
+  if (currentMode === 'dianguc') return getDiangucConfig();
   if (currentMode === 'bicanh') return getBicanhConfig();
   return currentMode === 'luanhoi' ? getLuanHoiConfig() : getNpcConfig();
 }
@@ -121,7 +154,7 @@ async function toggleBot() {
     await window.api.botUpdateConfig(0, config);
     window.api.botStart(0);
     isNpcRunning = true;
-    const label = config.mode === 'luanhoi' ? 'Luân Hồi' : (config.mode === 'bicanh' ? 'Bicanh' : 'NPC');
+    const label = config.mode === 'luanhoi' ? 'Luân Hồi' : (config.mode === 'bicanh' ? 'Bicanh' : (config.mode === 'dianguc' ? 'Địa Ngục' : 'NPC'));
     appendLog(`[${label}] ▶ Started`);
   }
   updateBotButton();
@@ -130,7 +163,7 @@ async function toggleBot() {
 function updateBotButton() {
   const isLH = currentMode === 'luanhoi';
   const isBC = currentMode === 'bicanh';
-  const btns = [document.getElementById('btn-npc-toggle'), document.getElementById('btn-luanhoi-toggle'), document.getElementById('btn-bicanh-toggle')];
+  const btns = [document.getElementById('btn-npc-toggle'), document.getElementById('btn-luanhoi-toggle'), document.getElementById('btn-bicanh-toggle'), document.getElementById('btn-dianguc-toggle')];
   for (const btn of btns) {
     if (!btn) continue;
     if (isNpcRunning) {
@@ -259,7 +292,9 @@ async function updateStats() {
     const totalBattles = status.totalBattles || 0;
 
      // Top row stats - Target shows battle progress
-     if (status.mode === 'bicanh') {
+     if (status.mode === 'dianguc') {
+       document.getElementById('stat-total').textContent = `Tầng ${status.diangucFloor || 0}, bước ${status.diangucStep || 0}`;
+     } else if (status.mode === 'bicanh') {
        document.getElementById('stat-total').textContent = `⚔️ Đang spam skill...`;
      } else if (status.mode === 'luanhoi') {
       const cur = status.lastLuanhoiTarget != null ? status.lastLuanhoiTarget : 0;

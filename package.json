@@ -17,7 +17,9 @@
       "package.json"
     ],
     "win": {
-      "target": ["dir"],
+      "target": [
+        "dir"
+      ],
       "sign": false
     }
   },
@@ -25,5 +27,8 @@
   "devDependencies": {
     "electron": "^41.7.1",
     "electron-builder": "^25.1.8"
+  },
+  "dependencies": {
+    "xlsx": "^0.18.5"
   }
 }

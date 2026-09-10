@@ -1,0 +1,53 @@
+# ============================================================
+# GAME BOT CONFIG (dùng chung cho npc_bot.py và boss_bot.py)
+# ============================================================
+# Mỗi dòng dạng KEY=VALUE. Không cần dấu ngoặc kép.
+# File này khớp đúng DEFAULT_CONFIG trong bot_common.py — nếu xoá file
+# này, chạy npc_bot.py hoặc boss_bot.py lần đầu sẽ tự tạo lại y hệt.
+
+DEFAULT_NPC_ID=25
+LOOP_INTERVAL=120
+BATTLE_DURATION=120
+SKILL_INTERVAL=1
+
+TEXTBOX_SELECTOR=div[role="textbox"]
+MESSAGE_SELECTOR=li[id^="chat-messages-"]
+
+# Profile Edge dùng CHUNG cho NPC + Boss (KHÔNG dùng chung với Quiz).
+# Đường dẫn tương đối -> tự resolve theo thư mục chứa file .py, không phụ
+# thuộc nơi bạn chạy lệnh "python npc_bot.py".
+GAME_EDGE_USER_DATA_DIR=edge_game_profile
+GAME_PROFILE_DIR=Default
+
+# Cổng remote debugging cố định để npc_bot.py và boss_bot.py cùng attach
+# vào 1 cửa sổ Edge (không cần đăng nhập lại 2 lần). Đổi nếu port này bị
+# phần mềm khác chiếm trên máy bạn.
+GAME_DEBUG_PORT=9333
+
+# Để trống sẽ tự dò các đường dẫn cài Edge phổ biến (Program Files /
+# LOCALAPPDATA). Chỉ điền nếu Edge cài ở nơi khác thường lệ, ví dụ:
+# EDGE_BINARY_PATH=D:\Apps\Microsoft\Edge\Application\msedge.exe
+EDGE_BINARY_PATH=
+
+PLAYER_NAME=Thích Gáy Đểu
+BOSS_USER_NAME=Xỏ lá ba que
+MAX_LOOK_BACK=20
+
+# NPC: thời gian (giây) chờ message battle mới xuất hiện sau khi gửi !npc.
+NPC_MESSAGE_WAIT=10
+# NPC: cộng thêm vài giây buffer sau khi hết cooldown trước khi gửi lại !npc.
+NPC_COOLDOWN_BUFFER=1
+
+# Boss: thời gian chờ giữa các lần thử click lại khi click skill thất bại,
+# và khi đang "chết/hồi sinh".
+BOSS_MESSAGE_WAIT=10
+BOSS_CLICK_RETRY=3
+
+# Các đoạn text đặc biệt của Boss — sửa nếu game đổi wording.
+DISMISS_TEXT=Dissmiss message
+BOSS_DEAD_TEXT=Đang chết, hồi sinh sau
+BOSS_ONLY_YOU_TEXT=Only you can see this
+BOSS_END_TEXT=Trận Boss Kết Thúc!
+
+# Bật "1"/"true" để in thêm log debug chi tiết khi tìm/click skill.
+DEBUG_LOG=0

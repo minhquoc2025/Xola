@@ -445,6 +445,8 @@
                 onclick="setMode('luanhoi')">🌀 Luân Hồi</button>
         <button id="tab-bicanh"
                 onclick="setMode('bicanh')">⚔️ Bicanh</button>
+        <button id="tab-dianguc"
+          onclick="setMode('dianguc')">🔥 Địa Ngục</button>
         <button id="btn-config-modal" onclick="toggleSkillModal()" style="background:#2a2a4a;color:#eee;border:1px solid #3a3a5a;padding:5px 12px;border-radius:4px;cursor:pointer;font-size:11px;">⚙️</button>
       </div>
       <div id="skill-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:1000;justify-content:center;align-items:center;">
@@ -613,6 +615,39 @@
                    min="0.5"
                    max="10"
                    step="0.5">
+           </div>
+         </div>
+       </div>
+
+       <!-- === ĐỊA NGỤC CONFIG === -->
+      <div id="config-dianguc"
+            class="mode-config">
+         <div class="config-grid">
+           <div class="config-field full">
+             <button id="btn-dianguc-toggle"
+                     style="width: 100%;"
+                     class="btn-start"
+                     onclick="toggleBot()">▶ START</button>
+           </div>
+           <div class="config-field">
+             <label for="username-dianguc">Username</label>
+             <input id="username-dianguc"
+                    type="text"
+                    value="Quất Bất Lực"
+                    placeholder="Tên Discord">
+           </div>
+           <div class="config-field">
+             <label for="dianguc-cmd">Lệnh tham gia</label>
+             <input id="dianguc-cmd"
+                    type="text"
+                    value="!dianguc">
+           </div>
+           <div class="config-field full">
+                  <label for="dianguc-skills">Skill Luân Hồi dùng khi đánh quái</label>
+             <input id="dianguc-skills"
+                    type="text"
+                    value="Vạn Kiếm Quy Tông,Hỗn Nguyên Hộ Thể,Kiếm Khí Xung Thiên,Thái Cực Dưỡng Sinh"
+                    placeholder="Skill cách nhau bằng dấu phẩy">
            </div>
          </div>
        </div>

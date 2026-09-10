@@ -1,0 +1,17 @@
+# Thư viện ngoài duy nhất mà npc_bot.py / boss_bot.py / bot_common.py /
+# quiz_bot.py cần. Toàn bộ import còn lại (os, re, time, threading, queue,
+# unicodedata, urllib, subprocess, datetime) đều là thư viện chuẩn của
+# Python, không cần cài thêm.
+#
+# Selenium >= 4.6 có kèm "Selenium Manager", tự động tải đúng bản
+# msedgedriver khớp với phiên bản Edge đang cài trên máy — KHÔNG cần cài
+# thêm webdriver-manager hay tự tải msedgedriver thủ công.
+selenium>=4.15,<5
+openpyxl
+
+# Cài bằng:
+#   pip install -r requirements.txt
+#
+# Yêu cầu môi trường (không cài qua pip):
+#   - Python 3.9+ (khuyến nghị 3.10+)
+#   - Microsoft Edge đã cài sẵn trên máy (Windows)

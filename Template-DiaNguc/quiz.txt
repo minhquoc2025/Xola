@@ -1,0 +1,486 @@
+'!' sau biến trong TypeScript nghĩa là gì?|non-null assertion
+'any' trong TypeScript có nghĩa là gì?|bất kỳ kiểu dữ liệu nào
+'as' trong TypeScript dùng để làm gì?|type assertion
+'It works on my machine' nghĩa là gì?|chạy được trên máy tôi
+'never' trong TypeScript đại diện cho gì?|kiểu không bao giờ xảy ra
+'strictNullChecks' trong tsconfig làm gì?|kiểm tra null và undefined chặt chẽ
+'unknown' khác 'any' như thế nào?|unknown an toàn hơn phải kiểm tra kiểu trước khi dùng
+'void' trong TypeScript dùng cho cái gì?|hàm không trả về giá trị
+'www' là viết tắt của từ gì?|world wide web
+*ngFor dùng để làm gì?|lặp qua mảng
+*ngIf là directive loại gì?|structural
+1 tấn = ? kg|1000
+100 : 4 = ?|25
+15% của 200 là?|30
+1km = ? mét|1000
+2 mũ 10 bằng bao nhiêu?|1024
+25% của 400 là?|100
+4 tính chất của OOP là gì?|đóng gói kế thừa đa hình trừu tượng
+7 × 8 = ?|56
+[ngClass] là directive loại gì?|attribute
+Abstract class trong TypeScript có thể khởi tạo trực tiếp không?|không
+Active skill thần khí có CD bao nhiêu?|4
+Ai là người sáng lập ra Microsoft?|bill gates
+Ai là người tạo ra JavaScript?|brendan eich
+Ai là tác giả Truyện Kiều?|nguyễn du
+Ai phát minh ra bóng đèn điện?|edison
+Ai sáng lập ra Apple?|steve jobs
+Ai viết 'Nhật ký trong tù'?|Hồ Chí Minh
+Ai vẽ bức tranh Mona Lisa?|leonardo da vinci
+Ai được mệnh danh là 'Vua nhạc Pop'?|michael jackson
+Angular dùng ngôn ngữ gì là chính?|typescript
+Angular là framework của hãng nào?|google
+async await dùng để làm gì?|xử lý bất đồng bộ
+AVG() là hàm gì?|tính trung bình
+Bao tay 6 sao tên là gì?|thiên ma thủ
+Biển nào nhỏ nhất thế giới?|biển marmara
+Bug là gì?|tính năng bất ngờ
+Bí cảnh có bao nhiêu tầng?|100
+Bí cảnh có tên là gì?|vực sâu xỏ lá
+Băng Phong đóng băng mấy lượt?|1
+C# chạy trên nền tảng gì?|.net
+Class Chó Điên có perk gì?|rage boost
+Class nào có DEF cao nhất? (tên)|thiết giáp
+Class nào có nhiều máu nhất?|trùm cuối
+Class nào có perk 'first_strike'?|siêu nhân
+Class nào có perk 'last_stand_boost'?|hộ pháp
+Class nào có perk 'lifesteal_boost'?|ám ảnh
+COALESCE trong SQL dùng để làm gì?|trả về giá trị đầu tiên khác null
+Code chạy lần đầu gọi là gì?|phép màu
+Comment trong code để làm gì?|để dev sau này đọc mà vẫn không hiểu
+COMMIT dùng để làm gì?|lưu thay đổi
+Component dùng decorator gì?|@Component
+Composition khác inheritance thế nào?|composition là has-a inheritance là is-a
+Con gì có cổ dài nhất?|hươu cao cổ
+Con gì luôn đi theo lập trình viên?|con bug
+Con vật nào nhanh nhất trên cạn?|báo
+Con vật nào được gọi là 'vua của muôn loài'?|sư tử
+Cooldown giữa 2 lần tulyen là bao lâu (phút)?|30
+COUNT() là hàm gì?|đếm số dòng
+CPU là viết tắt của từ gì? (tiếng Anh)|central processing unit
+CSS dùng để làm gì?|định dạng giao diện
+Ctrl+C Ctrl+V là gì?|kỹ năng quan trọng nhất của developer
+Câu lệnh INSERT dùng để làm gì?|thêm dữ liệu
+Câu lệnh UPDATE dùng để làm gì?|cập nhật dữ liệu
+Câu nói nổi tiếng nhất của dev là gì?|trên máy tôi chạy mà
+Căn bậc 2 của 144 là?|12
+Cường hóa tối đa được bao nhiêu sao?|9
+Cảnh giới tu luyện đầu tiên là gì?|luyện khí
+Cầu thủ nào được mệnh danh là 'Vua bóng đá'?|pele
+Cố đô Huế thuộc tỉnh nào?|Thừa Thiên Huế
+D trong SOLID là gì?|dependency inversion
+Delegate trong C# là gì?|con trỏ hàm type-safe
+Dependency Injection trong Angular dùng gì?|constructor
+Design pattern Factory dùng để làm gì?|tạo object mà không cần chỉ định class cụ thể
+Design pattern Observer dùng để làm gì?|một đối tượng thay đổi thông báo cho các đối tượng khác
+Design pattern Singleton đảm bảo gì?|chỉ có một instance duy nhất
+Design pattern Strategy dùng để làm gì?|chọn thuật toán tại runtime
+DI (Dependency Injection) là gì?|tiêm phụ thuộc từ bên ngoài thay vì tự tạo
+Dictionary trong C# là gì?|tập hợp key-value
+Directive có mấy loại trong Angular?|3
+DISTINCT dùng để làm gì?|loại bỏ giá trị trùng lặp
+Dây lưng 6 sao tên là gì?|kim long tỏa
+Email gửi đi qua giao thức nào?|smtp
+Encapsulation là gì?|đóng gói dữ liệu và phương thức
+Enum trong TypeScript dùng từ khóa gì?|enum
+Event binding dùng cú pháp gì?|(event)
+Event trong C# dùng từ khóa gì?|event
+FOREIGN KEY là gì?|khóa ngoại liên kết bảng
+Form trong Angular có mấy loại?|2
+Garbage Collection trong C# làm gì?|tự động giải phóng bộ nhớ
+Ghép 1 món Set Luân Hồi cần bao nhiêu mảnh?|100
+GIL trong Python là gì?|global interpreter lock
+git branch dùng để làm gì?|tạo hoặc liệt kê branch
+git clone dùng để làm gì?|sao chép repository về local
+git commit dùng để làm gì?|lưu thay đổi vào local repository
+git merge dùng để làm gì?|hợp nhất branch
+git pull dùng để làm gì?|kéo code từ remote về
+git push dùng để làm gì?|đẩy code lên remote
+Giày 6 sao tên là gì?|lôi thần tốc
+Hackathon là gì?|code xuyên đêm rồi sáng hối hận
+Hoa gì là quốc hoa của Việt Nam?|hoa sen
+HTML dùng để làm gì?|tạo cấu trúc trang web
+HTTP status 200 nghĩa là gì?|thành công
+HTTP status 201 nghĩa là gì?|đã tạo thành công
+HTTP status 404 nghĩa là gì?|không tìm thấy
+HTTP status 500 nghĩa là gì?|lỗi server
+HttpClient trong Angular thuộc module nào?|HttpClientModule
+Hành tinh nào lớn nhất hệ mặt trời?|mộc tinh
+Hộ Kiên 6 sao có tên là gì?|khiên hồn giáp
+I trong SOLID là gì?|interface segregation
+INNER JOIN trả về gì?|các dòng khớp ở cả 2 bảng
+Interface khác abstract class thế nào?|interface chỉ khai báo abstract class có thể implement
+Interface trong C# dùng từ khóa gì?|interface
+Interpolation dùng cú pháp gì?|{{ }}
+IoC (Inversion of Control) là gì?|đảo ngược quyền kiểm soát
+JSON là viết tắt của gì?|javascript object notation
+Junior dev khác Senior dev thế nào?|junior sợ bug senior sợ junior
+Khi khách hàng bảo 'chỉ là thay đổi nhỏ thôi' nghĩa là gì?|viết lại toàn bộ hệ thống
+Kiểu dữ liệu nào không thể thay đổi được trong Python?|tuple
+Kích hoạt thần khí cần bao nhiêu coin?|100000
+Ký hiệu '#' trong code thường gọi là gì?|hash
+Ký hiệu hóa học của sắt là gì?|fe
+Ký hiệu hóa học của đồng là gì?|cu
+Ký tự gì đánh dấu optional property trong TS?|?
+L trong SOLID là gì?|liskov substitution
+Lambda expression trong C# dùng ký hiệu gì?|=>
+Lazy loading trong Angular dùng thuộc tính gì?|loadChildren
+Level bao nhiêu mới vào được bí cảnh?|7
+Lifecycle hook ngOnDestroy chạy khi nào?|trước khi component bị hủy
+Lifecycle hook ngOnInit chạy khi nào?|sau khi component được khởi tạo
+Lifecycle hook nào chạy đầu tiên?|ngOnChanges
+Linh thạch (soul stone) tối đa level bao nhiêu?|10
+Liên Hoàn Kích đánh mấy đòn?|2
+Loài chim nào lớn nhất thế giới?|đà điểu
+Lương lập trình viên cao nhất khi nào?|lúc phỏng vấn
+Lệnh CLI nào tạo component trong Angular?|ng generate component
+Lệnh Docker nào dừng container?|docker stop
+Lệnh Docker nào xóa image?|rmi
+Lệnh git nào thêm file vào stage?|git add
+Lệnh git nào xem nội dung thay đổi?|git diff
+Lệnh Linux nào di chuyển file?|mv
+Lệnh Linux nào liệt kê file?|ls
+Lệnh Linux nào tìm file theo tên?|find
+Lệnh Linux nào xem cổng đang mở?|netstat
+Lệnh Linux nào xóa file?|rm
+Lệnh nào biên dịch file .ts sang .js?|tsc
+Lệnh nào để cài TypeScript global?|npm install -g typescript
+Lệnh để cường hóa trang bị là gì?|cuonghoa
+Lệnh để xem shop là gì?|shop
+Lệnh để xem thần khí là gì?|thankhi
+Lệnh để xem túi đồ là gì?|inv
+Max level của waifu là bao nhiêu?|không giới hạn
+Method overloading là gì?|nhiều method cùng tên khác tham số
+Middleware trong Express.js là gì?|hàm xử lý request trước khi đến route
+Module trong TypeScript dùng từ khóa gì để export?|export
+Máu Bò hồi bao nhiêu % HP?|100
+Máu Gà giá bao nhiêu coin?|300
+Máu Gà hồi bao nhiêu % HP?|50
+Môn thể thao vua là môn gì?|bóng đá
+Môn võ truyền thống của Việt Nam là gì?|vovinam
+Mặt trăng quay quanh gì?|trái đất
+Mặt trời mọc hướng nào?|đông
+Mốc cường hóa +7 mở slot số mấy?|2
+Mốc cường hóa +9 mở slot số mấy?|3
+Mỗi lần dùng Bùa Xỏ Lá được bao nhiêu trận?|3
+Mỗi ngày mua tối đa mấy vé bí cảnh?|2
+Mỗi sao thần khí tăng bao nhiêu % sát thương?|15%
+Namespace trong TypeScript dùng từ khóa gì?|namespace
+Nguyên tố nào khắc Hỏa?|thủy
+Nguyên tố nào khắc Kim?|hỏa
+Nguyên tố nào khắc Mộc?|hỏa
+Nguyên tố nào khắc Thủy?|thổ
+Nguyên tố nào nhẹ nhất?|hydro
+Nhẫn 6 sao có tên là gì?|nhẫn vũ trụ
+Nobel là giải thưởng do ai sáng lập?|alfred nobel
+Node.js chạy JavaScript ở đâu?|server
+Normalization trong SQL là gì?|chuẩn hóa cơ sở dữ liệu
+NPC level 120 tên là gì?|thiên đình đại thánh
+NPC đầu tiên (level 1) tên là gì?|chuột cống
+npm là viết tắt của gì?|node package manager
+Né Tránh có tỉ lệ né bao nhiêu %?|15
+Núi nào cao nhất Việt Nam?|fansipan
+Năm 2024 là năm con gì?|rồng
+Nước nào có dân số đông nhất thế giới?|ấn độ
+Nước sôi ở bao nhiêu độ C?|100
+O trong SOLID là gì?|open closed
+Omit<T, K> trong TypeScript làm gì?|loại bỏ property khỏi type
+ORDER BY dùng để làm gì?|sắp xếp kết quả
+Partial<T> trong TypeScript làm gì?|biến tất cả property thành optional
+Phá Giáp giảm bao nhiêu % DEF địch?|30
+Phím nào dùng để xóa ký tự phía sau con trỏ?|backspace
+Phương thức init trong Python là gì?|constructor
+Pipe trong Angular dùng để làm gì?|biến đổi dữ liệu hiển thị
+Polymorphism là gì?|đa hình cùng phương thức hành vi khác nhau
+Production là gì?|nơi bug được phát hiện
+Quest Đấu Sĩ Ba Que thắng mấy trận PvP?|2
+Quốc gia nào được gọi là 'đất nước mặt trời mọc'?|nhật bản
+Reactive form dùng class gì?|FormGroup
+Readonly<T> trong TypeScript là gì?|utility type chỉ đọc
+Refactor code nghĩa là gì?|sửa code cũ thành bug mới
+REST API dùng phương thức gì để cập nhật?|put
+REST API dùng phương thức gì để lấy dữ liệu?|get
+REST API dùng phương thức gì để tạo mới?|post
+REST API dùng phương thức gì để xóa?|delete
+ROLLBACK dùng để làm gì?|hủy thay đổi
+Route parameter lấy bằng service gì?|ActivatedRoute
+Router trong Angular dùng module gì?|RouterModule
+S trong SOLID là gì?|single responsibility
+Sa mạc lớn nhất thế giới là gì?|sahara
+Set bonus Huyền Thoại cần bao nhiêu sao?|45
+Set bonus Thần Thoại cần bao nhiêu sao?|54
+Set Đồng Nát cần bao nhiêu sao?|9
+Skill 'Gậy Ông Đập Lưng Ông' thuộc loại gì?|counter
+Skill 'Sét Đánh Ngang Tai' thuộc loại gì?|special
+Skill hồi máu mạnh nhất tên là gì?|uống thuốc dỏm
+Stackoverflow là gì?|người thầy vĩ đại nhất
+Stamina Luân Hồi tối đa cơ bản là bao nhiêu?|120
+Stored Procedure là gì?|tập hợp câu lệnh SQL được lưu trữ
+String interpolation trong C# dùng ký hiệu gì?|$
+Struct trong C# là value type hay reference?|value
+SUM() là hàm gì?|tính tổng
+Sông nào dài nhất thế giới?|nile
+Số La Mã 'V' là số mấy?|5
+Số La Mã 'X' là số mấy?|10
+Số lớn nhất có 3 chữ số là?|999
+Số nguyên tố lớn nhất nhỏ hơn 100 là?|97
+Số nguyên tố nhỏ nhất là số mấy?|2
+Số tiếp theo: 2, 4, 8, 16, ?|32
+Task trong C# đại diện cho gì?|tác vụ bất đồng bộ
+Thành phố nào đông dân nhất Việt Nam?|Hồ Chí Minh
+Thần khí mạnh nhất là gì? (tên)|đá nữ oa
+Thần khí Nữ Oa Bổ Thiên active mult bao nhiêu?|9
+Thần khí tối đa bao nhiêu sao?|10
+Thời gian đăng ký boss thế giới là bao nhiêu giây?|300
+Thủ đô của Hàn Quốc là gì?|seoul
+Thủ đô của Nhật Bản là gì?|tokyo
+Thủ đô của nước Anh là gì?|london
+Thủ đô của nước Mỹ là gì?|washington dc
+Thủ đô của nước Nga là gì?|moscow
+Thủ đô của nước Úc là gì?|canberra
+Thủ đô của Thái Lan là gì?|bangkok
+Thủ đô của Việt Nam là gì?|Hà Nội
+Trang bị 6 sao có tên gọi là gì?|thần thoại
+Trang bị Vạn Giới Chiến Giáp thuộc slot nào?|áo giáp
+Transaction trong SQL dùng để làm gì?|đảm bảo tính toàn vẹn dữ liệu
+Trigger trong SQL là gì?|tự động chạy khi có sự kiện
+Try-catch trong C# bắt lỗi gì?|exception
+Trái đất quay quanh gì?|mặt trời
+Two-way binding dùng cú pháp gì?|[(ngModel)]
+TypeScript hỗ trợ access modifier nào?|public private protected
+TypeScript là superset của ngôn ngữ nào?|javascript
+Tên class trùm cuối là gì?|trùm cuối
+Tên của shop trong game là gì?|shop ba que xỏ lá
+Tích của 12 và 12 là?|144
+Tại sao dev ghét thứ 2?|vì phải họp standup
+Tối ưu code sớm là gì?|gốc rễ của mọi tội lỗi
+Từ khóa 'await' dùng để làm gì?|chờ coroutine
+Từ khóa 'extends' dùng để làm gì trong TS?|kế thừa class hoặc interface
+Từ khóa 'finally' trong try-catch chạy khi nào?|luôn luôn chạy
+Từ khóa 'implements' dùng để làm gì trong TS?|triển khai interface
+Từ khóa 'sealed' trong C# nghĩa là gì?|không thể kế thừa
+Từ khóa 'virtual' trong C# dùng để làm gì?|cho phép override method
+Từ khóa khai báo property trong C#?|get set
+Từ khóa kế thừa class trong C#?|:
+Từ khóa nào khai báo generic trong TypeScript?|<T>
+Từ khóa nào khai báo kiểu dữ liệu trong TS?|type
+Từ khóa nào khai báo kiểu union trong TS?|
+UNION khác UNION ALL thế nào?|union loại bỏ trùng lặp
+Unit test là gì?|thứ dev viết sau khi code xong và hối hận
+View trong SQL là gì?|bảng ảo từ câu truy vấn
+Vé bí cảnh thứ nhất giá bao nhiêu coin?|200
+Vũ khí 6 sao có bao nhiêu cái?|3
+Waifu có mấy loại rarity?|4
+Waifu mạnh nhất thuộc rarity gì?|svip
+Waifu UR có mấy sao?|5
+Web API hoạt động qua giao thức nào?|http
+Đà Lạt thuộc tỉnh nào?|lâm đồng
+Đơn vị tiền tệ của Hàn Quốc là gì?|won
+Đơn vị tiền tệ của Mỹ là gì?|usd
+Đơn vị tiền tệ của Nhật Bản là gì?|yên
+Đơn vị tiền tệ của Trung Quốc là gì?|nhân dân tệ
+Đơn vị đo điện trở là gì?|ohm
+Đại dương nào sâu nhất?|thái bình dương
+Để thách đấu người khác dùng lệnh gì?|challenge
+Đỉnh núi nào cao nhất thế giới?|everest
+Đồng bằng sông Cửu Long còn gọi là gì?|đồng bằng sông mê kông
+Ấn Alt+F4 để làm gì?|tắt cửa sổ
+Class Phong Lôi thuộc nguyên tố nào?|mộc
+Xúc Xắc nhân mấy lần tỉ lệ legendary?|2
+Giải phóng miền Nam năm bao nhiêu?|1975
+Kim tự tháp nổi tiếng nằm ở nước nào?|ai cập
+async await trong C# dùng để làm gì?|lập trình bất đồng bộ
+Lệnh git nào tạo branch mới?|git branch
+Ai nổi tiếng với thuyết tương đối?|einstein
+PEP8 trong Python là gì?|style guide
+Dây lưng 7 sao tên là gì?|vĩnh hằng chi đới
+Vị vua đầu tiên của nhà Lý là ai?|lý công uẩn
+Từ khóa nào khai báo interface trong TS?|interface
+Xúc Xắc giá bao nhiêu coin?|1000
+15 + 27 = ?|42
+Lệnh Docker nào xem danh sách image?|docker images
+Trang bị 3 sao có tên gọi là gì?|hiếm
+25% của 200 là?|50
+Class nào có perk 'random_buff'?|trùm cuối
+Loài cây nào là quốc hoa của Việt Nam?|hoa sen
+OOP là viết tắt của gì?|object oriented programming
+6 × 7 = ?|42
+Trái đất mất bao lâu để quay quanh Mặt Trời (ngày)?|365
+11 × 11 = ?|121
+Quốc gia nào có nhiều múi giờ nhất?|pháp
+Ngũ Hành Sơn nằm ở thành phố nào?|đà nẵng
+Lục địa nào nhỏ nhất?|úc
+9 × 9 = ?|81
+Bao tay 7 sao tên là gì?|hủy diệt thần quyền
+Ai viết 'Bình Ngô Đại Cáo'?|nguyễn trãi
+Nước đóng băng ở bao nhiêu độ C?|0
+Lệnh git nào khôi phục commit?|git revert
+Lệnh để vào tháp Luân Hồi là gì?|luanhoi
+Máu Bò giá bao nhiêu coin?|600
+Cảnh giới thứ 3 trong tu luyện là gì?|kết đan
+range(5) trả về bao nhiêu số?|5
+1 năm thường có bao nhiêu ngày?|365
+Stamina Luân Hồi cap tối đa là bao nhiêu?|300
+Hồi Phục hồi bao nhiêu % HP?|20
+Giáp Chuối giá bao nhiêu coin?|500
+Lệnh để mua skill là gì?|buyskill
+Hàm len() dùng để làm gì?|trả về độ dài
+10 × 10 + 5 = ?|105
+Vũ khí Gậy Thần Thor là sao mấy?|6
+Phím nào dùng để xóa ký tự phía trước con trỏ?|delete
+Vũ khí 7 sao tên là gì?|hư vô thần kiếm
+Tốc độ ánh sáng là bao nhiêu km/s?|300000
+RAM là viết tắt của từ gì?|random access memory
+Đột phá thất bại mất bao nhiêu % tu vi?|20
+Ký hiệu hóa học của vàng là gì?|au
+Việt Nam giáp Trung Quốc ở phía nào?|bắc
+Decorator trong TypeScript bắt đầu bằng ký tự gì?|@
+Từ khóa khai báo hằng số trong C#?|const
+Có bao nhiêu châu lục trên thế giới?|7
+Hộ Thuẫn tạo khiên bao nhiêu % HP?|30
+Việt Nam giáp biển ở phía nào?|đông
+Kho Báu tăng bao nhiêu % coin & XP?|25
+Lệnh nào restart service trên systemd?|systemctl restart
+Thư viện HTTP phổ biến trong Python là gì?|requests
+Việt Nam có bao nhiêu tỉnh thành?|63
+Gacha waifu lần đầu tiên giá bao nhiêu?|0
+NPC Chuột Cống có class gì?|kiếm sĩ
+Port mặc định của ứng dụng Node là bao nhiêu?|3000
+Set bonus Sử Thi cần bao nhiêu sao?|36
+NPC mạnh nhất có tên là gì?|vua quỷ tận thế
+Đơn vị đo cường độ dòng điện là gì?|ampe
+Thủ đô của nước Đức là gì?|berlin
+Lệnh Docker nào build image?|docker build
+Class Hộ Pháp thuộc nguyên tố nào?|thổ
+Lệnh SQL nào xem cấu trúc bảng?|describe
+Tối đa bao nhiêu buff trong tháp Luân Hồi?|20
+0 bug có nghĩa là gì?|chưa test đủ
+Lệnh git nào xem trạng thái working tree?|git status
+NPC level 81 tên là gì?|hằng nga tiên tử
+Lôi Kích làm choáng mấy lượt?|1
+Skill Kiếm Cơ Bản có CD bao nhiêu?|0
+Trọng Kích khiến bản thân mất bao nhiêu % HP?|10
+Số nguyên tố chẵn duy nhất là?|2
+NPC level 75 tên là gì?|chúc dung hỏa thần
+Ai sáng lập ra Google?|larry page
+Mỗi ngày có bao nhiêu quest?|5
+F-string trong Python được viết bằng ký tự gì?|f
+Có tổng bao nhiêu waifu trong game?|88
+Số tiếp theo dãy: 1, 4, 9, 16, ?|25
+Con sông nào dài nhất châu Á?|trường giang
+Git là gì?|hệ thống quản lý phiên bản phân tán
+Nullable<T> trong C# ký hiệu là gì?|T?
+Tester và lập trình viên giống nhau ở điểm gì?|đều ghét bug
+Chiến thắng Điện Biên Phủ năm bao nhiêu?|1954
+Áo giáp 7 sao tên là gì?|vạn giới chiến giáp
+Ngày Valentine là ngày nào?|14 tháng 2
+Thủ đô của nước Pháp là gì?|paris
+OFFSET trong SQL dùng để làm gì?|bỏ qua số dòng đầu
+Cà phê trứng nổi tiếng ở thành phố nào?|hà nội
+Giày 7 sao tên là gì?|thời không chiến hài
+Lệnh để ghép trang bị là gì?|ghep
+Giày Hư Không Chi Nộ là sao mấy?|6
+Lệnh Linux nào xem dung lượng ổ đĩa?|df
+Đổi slot 2 tốn bao nhiêu coin?|6000
+Waifu Thiết Liên thuộc rarity gì?|b
+List<T> trong C# nằm trong namespace nào?|System.Collections.Generic
+Lệnh SQL nào tạo bảng mới?|create table
+CASE WHEN trong SQL dùng để làm gì?|xử lý điều kiện
+Có bao nhiêu waifu UR?|8
+Cảnh giới thứ 6 trong tu luyện là gì?|đại thừa
+Số tiếp theo dãy: 3, 6, 9, 12, ?|15
+DOM là viết tắt của gì?|document object model
+Nha Trang thuộc tỉnh nào?|khánh hòa
+JWT là viết tắt của từ gì?|json web token
+HTTP method nào cập nhật một phần dữ liệu?|patch
+Lệnh Linux nào xem tiến trình đang chạy?|ps
+NPC level 60 tên là gì?|chu tước thần điểu
+Trái Đất quay quanh trục mất bao lâu (giờ)?|24
+Hộ kiên 7 sao tên là gì?|thiên mệnh hộ phù
+Framework JS nổi tiếng của Meta là gì?|react
+Lệnh Docker nào xem log container?|docker logs
+Trang bị 1 sao có tên gọi là gì?|thường
+Làm sao để fix 1 bug?|tạo ra 2 bug mới
+Từ khóa khai báo biến trong C#?|var
+Tạm thời trong code nghĩa là gì?|vĩnh viễn
+Cảnh giới cao nhất trong tu luyện là gì?|độ kiếp
+PM hỏi 'xong chưa' nghĩa là gì?|deadline đang đến gần
+Câu lệnh SELECT dùng để làm gì?|truy vấn dữ liệu
+Quốc gia nào có hình dạng 'chữ S'?|việt nam
+Tổng thống đầu tiên của nước Mỹ là ai?|george washington
+Ai là tác giả của 'Conan'?|aoyama gosho
+Lệnh Linux nào xem thư mục hiện tại?|pwd
+Boss tháp Luân Hồi xuất hiện mỗi bao nhiêu tầng?|10
+Kiểu int trong C# là reference hay value?|value
+1 GB bằng bao nhiêu MB?|1024
+1 + 1 = ?|2
+Trang bị 4 sao có tên gọi là gì?|sử thi
+Giáp Chuối tăng bao nhiêu % DEF?|50
+Mỗi cảnh giới tu luyện có mấy bậc?|9
+Class nào có HP cao nhất? (tên)|hộ pháp
+Active skill của Đá Nữ Oa tên là gì?|bổ thiên tuyệt thạch
+JavaScript chạy trên nền tảng nào ở server?|node
+Đá cường hóa cao nhất là đá gì?|cao cấp
+Skill Thần Uy giá bao nhiêu coin?|20000
+Waifu SVIP có mấy sao?|4
+Phòng Ngự nhân DEF lên mấy lần?|3
+Trang bị 7 sao có tên gọi là gì?|vũ trụ
+Lệnh git nào lưu tạm thay đổi?|git stash
+API là viết tắt của từ gì?|application programming interface
+Hành tinh nào được gọi là 'hành tinh đỏ'?|sao hỏa
+LIMIT trong SQL dùng để làm gì?|giới hạn số dòng
+Ai là người sáng lập ra Tesla?|elon musk
+Lệnh Linux nào tìm chuỗi trong file?|grep
+Nguyên tố nào khắc Thổ?|mộc
+File TypeScript có đuôi gì?|.ts
+File .gitignore dùng để làm gì?|bỏ qua file không track
+Class Thiết Giáp có perk gì?|defend reduce
+Class nào có perk 'rage_boost'?|cuồng chiến
+Lệnh git nào đổi branch?|git checkout
+Bí cảnh có tối đa bao nhiêu tầng?|200
+Số Pi làm tròn 2 chữ số = ?|3.14
+Tỉ lệ rơi đồ từ NPC là bao nhiêu %?|8
+Thủ đô của nước Trung Quốc là gì?|bắc kinh
+Component trong Angular gồm mấy file chính?|3
+Bộ phận nào của cơ thể bơm máu?|tim
+Class nào có ATK cao nhất? (tên)|cuồng chiến
+Giữa list và tuple, cái nào mutable?|list
+Mỗi lần gacha waifu tốn bao nhiêu coin?|5000
+Thủ đô của nước Canada là gì?|ottawa
+NPC level 51 tên là gì?|cửu vĩ hồ ly
+Property binding dùng cú pháp gì?|[property]
+NULL trong SQL nghĩa là gì?|không có giá trị
+Hấp Huyết hút bao nhiêu % sát thương?|40
+Vạn Lý Trường Thành nằm ở nước nào?|trung quốc
+Lệnh Docker nào xem container đang chạy?|docker ps
+Con gì di chuyển chậm nhất?|ốc sên
+Trọng Kích gây sát thương gấp mấy lần?|2
+5! (5 giai thừa) = ?|120
+Lệnh Docker nào chạy container?|docker run
+Lệnh Linux nào tạo thư mục mới?|mkdir
+Liên 7 sao tên là gì?|vạn giới chi liên
+Lệnh để xem toàn bộ trang bị là gì?|equipment
+Vịnh Hạ Long thuộc tỉnh nào?|quảng ninh
+Skill Tuyệt Sát giá bao nhiêu coin?|24000
+Có bao nhiêu slot trang bị?|9
+Từ khóa 'override' trong C# dùng để làm gì?|ghi đè method của class cha
+Deadline là gì?|ngày mai
+Set Tinh Anh cần bao nhiêu sao?|18
+Trái Đất có bao nhiêu đại dương?|5
+IP là viết tắt của từ gì?|internet protocol
+Đổi slot trang bị 1 cần bao nhiêu đá?|20
+Từ khóa nào dùng để thoát vòng lặp?|break
+1 ngày có bao nhiêu giờ?|24
+Object là gì trong OOP?|thể hiện cụ thể của class
+LINQ trong C# dùng để làm gì?|truy vấn dữ liệu
+Từ khóa 'using' trong C# dùng để làm gì?|tự động dispose object
+NPC level 90 tên là gì?|ngọc hoàng đại đế
+Ctrl+Z thường dùng để làm gì?|hoàn tác
+Bánh mì nổi tiếng của Việt Nam gọi là gì?|bánh mì
+NPC level 180 tên là gì?|vô thủy vô chung đế
+NgModule dùng decorator gì?|@NgModule
+Lệnh Linux nào xem nội dung file?|cat
+Vé bí cảnh thứ hai giá bao nhiêu coin?|400
+Hạnh phúc nhất của dev là gì?|code chạy ngay lần đầu
+Hàm filter() dùng để làm gì?|lọc phần tử
+Mỗi ngày vào bí cảnh miễn phí mấy lần?|1

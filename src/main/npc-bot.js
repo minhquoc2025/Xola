@@ -1,3 +1,32 @@
+const fs = require('fs');
+const path = require('path');
+const XLSX = require('xlsx');
+
+const DIANGUC_DATA_FILE = path.resolve(__dirname, '..', '..', 'dianguc_data.xlsx');
+const DIANGUC_DIRECTIONS = ['lên', 'xuống', 'trái', 'phải'];
+const DIANGUC_PRIORITY_PATTERNS = [
+  '+__% ALL STATS',
+  '+__% ATK',
+  '+__% DEF',
+  '+__% HP',
+  'Miễn Tử',
+  '-__% HP Quái',
+  'Huyết Sát Quyết',
+  'Diêm Vương Chi Hỏa',
+  '+__% Hút Máu',
+];
+
+function diangucNormalize(text) {
+  return String(text || '').replace(/[^\p{L}\p{N}%+\-.,\s]/gu, '').replace(/\s*%\s*/g, '% ').replace(/\s+/g, ' ').trim();
+}
+
+function diangucPatternRegex(pattern) {
+  const normalized = diangucNormalize(pattern);
+  return new RegExp(`^${normalized.split('__').map(part => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\d+(?:[.,]\\d+)?')}$`, 'iu');
+}
+
+const DIANGUC_COMPILED_PATTERNS = DIANGUC_PRIORITY_PATTERNS.map(diangucPatternRegex);
+
 class NpcBot {
   constructor(wc, idx) {
     this.wc = wc;
@@ -28,17 +57,32 @@ class NpcBot {
     this.mode = 'npc';
     this.luanhoi = false;
     this.luanhoiTarget = 10;
-     this.luanhoiCmd = '!luanhoi';
-     this.luanhoiSkillNames = ['Kiếm Cơ Bản','Liên Hoàn Kích','Trọng Kích','Phá Giáp','Xuyên Tâm','Liệt Hỏa Trảm','Hấp Huyết','Kịch Độc','Lôi Kích','Tuyệt Sát','Thần Uy','Băng Phong','Phòng Ngự','Phản Kích','Hồi Phục','Hộ Thuẫn','Hỏa Giáp','Thái Cực Dưỡng Sinh','Kiếm Khí Xung Thiên','Kim Cương Phục Ma','Hỗn Nguyên Hộ Thể','Vạn Kiếm Quy Tông','Phong Ấn Thất Mạch'];
-     this.luanhoiSkillIdx = 0;
-     this.luanhoiCurrentTier = 0;
-     this.luanhoiBuffInit = false;
-     this.lastLuanhoiTarget = null;
-     this.bicanh = false;
-     this.bicanhCmd = '!bicanh';
-     this.bicanhSkillOrder = [];
-     this._bicanhSkillIdx = 0;
-     this.stats = {
+    this.luanhoiCmd = '!luanhoi';
+    this.luanhoiSkillNames = ['Kiếm Cơ Bản', 'Liên Hoàn Kích', 'Trọng Kích', 'Phá Giáp', 'Xuyên Tâm', 'Liệt Hỏa Trảm', 'Hấp Huyết', 'Kịch Độc', 'Lôi Kích', 'Tuyệt Sát', 'Thần Uy', 'Băng Phong', 'Phòng Ngự', 'Phản Kích', 'Hồi Phục', 'Hộ Thuẫn', 'Hỏa Giáp', 'Thái Cực Dưỡng Sinh', 'Kiếm Khí Xung Thiên', 'Kim Cương Phục Ma', 'Hỗn Nguyên Hộ Thể', 'Vạn Kiếm Quy Tông', 'Phong Ấn Thất Mạch'];
+    this.luanhoiSkillIdx = 0;
+    this.luanhoiCurrentTier = 0;
+    this.luanhoiBuffInit = false;
+    this.lastLuanhoiTarget = null;
+    this.bicanh = false;
+    this.bicanhCmd = '!bicanh';
+    this.bicanhSkillOrder = [];
+    this._bicanhSkillIdx = 0;
+    this.dianguc = false;
+    this.diangucCmd = '!dianguc';
+    this.diangucSkillNames = this.luanhoiSkillNames;
+    this.diangucDelayMs = 1500;
+    this.diangucChoiceDelayMs = 1500;
+    this.diangucSkillDelayMs = 1700;
+    this.diangucWinDelayMs = 3000;
+    this.diangucFloor = 0;
+    this.diangucStep = 0;
+    this.diangucPending = null;
+    this.diangucSkillIdx = 0;
+    this.diangucResolvedBattleIds = new Set();
+    this.diangucLastScanSignature = '';
+    this.diangucData = {};
+    this.diangucLastSaved = 0;
+    this.stats = {
       wins: 0,
       losses: 0,
       coins: 0,
@@ -107,7 +151,17 @@ class NpcBot {
     if (config.luanhoi !== undefined) this.luanhoi = config.luanhoi;
     if (config.luanhoiTarget !== undefined) this.luanhoiTarget = config.luanhoiTarget;
     if (config.luanhoiCmd !== undefined) this.luanhoiCmd = config.luanhoiCmd;
-    if (config.luanhoiSkillNames !== undefined) this.luanhoiSkillNames = config.luanhoiSkillNames;
+    if (config.luanhoiSkillNames !== undefined) {
+      this.luanhoiSkillNames = config.luanhoiSkillNames;
+      this.diangucSkillNames = config.luanhoiSkillNames;
+    }
+    if (config.dianguc !== undefined) this.dianguc = config.dianguc;
+    if (config.diangucCmd !== undefined) this.diangucCmd = config.diangucCmd;
+    if (config.diangucSkillNames !== undefined) this.diangucSkillNames = config.diangucSkillNames;
+    if (config.diangucDelayMs !== undefined) this.diangucDelayMs = config.diangucDelayMs;
+    if (config.diangucChoiceDelayMs !== undefined) this.diangucChoiceDelayMs = config.diangucChoiceDelayMs;
+    if (config.diangucSkillDelayMs !== undefined) this.diangucSkillDelayMs = config.diangucSkillDelayMs;
+    if (config.diangucWinDelayMs !== undefined) this.diangucWinDelayMs = config.diangucWinDelayMs;
   }
 
   async start() {
@@ -125,18 +179,28 @@ class NpcBot {
     this.processedLockIds = new Set();
     this.luanhoiSkillIdx = 0;
     this.lastLuanhoiTarget = null;
+    this.diangucPending = null;
+    this.diangucSkillIdx = 0;
+    this.diangucResolvedBattleIds = new Set();
+    this.diangucLastScanSignature = '';
     this.log('Bot started');
-     if (this.mode === 'luanhoi') {
-       this.log(`=== LUÂN HỒI MODE: Target tầng ${this.luanhoiTarget} ===`);
-       this.luanhoiLoop(this.runId);
-       return;
-     }
-     if (this.mode === 'bicanh') {
-       this.log(`=== BICANH MODE: Spam技能 theo thứ tự ===`);
-       this.bicanhLoop(this.runId);
-       return;
-     }
-     this.log('=== SMART MODE: Đọc turn real-time ===');
+    if (this.mode === 'luanhoi') {
+      this.log(`=== LUÂN HỒI MODE: Target tầng ${this.luanhoiTarget} ===`);
+      this.luanhoiLoop(this.runId);
+      return;
+    }
+    if (this.mode === 'bicanh') {
+      this.log(`=== BICANH MODE: Spam技能 theo thứ tự ===`);
+      this.bicanhLoop(this.runId);
+      return;
+    }
+    if (this.mode === 'dianguc') {
+      this.log(`=== ĐỊA NGỤC MODE: ${this.diangucCmd} ===`);
+      this.log(`=== ĐỊA NGỤC SKILLS: ${this.diangucSkillNames.join(' -> ')} ===`);
+      this.diangucLoop(this.runId);
+      return;
+    }
+    this.log('=== SMART MODE: Đọc turn real-time ===');
     if (this.username) {
       this.log(`=== GROUP MODE: Lọc tin nhắn theo "${this.username}" ===`);
     }
@@ -157,6 +221,7 @@ class NpcBot {
     if (this._tuLuyenActive) {
       await this.endTuLuyen();
     }
+    if (this.mode === 'dianguc') this.saveDiangucData();
     if (wasRunning) {
       this.log('Bot stopped');
       this.printStats();
@@ -308,6 +373,8 @@ class NpcBot {
       tuLuyen: this.tuLuyen,
       tuLuyenAfterTarget: this.tuLuyenAfterTarget,
       tuLuyenActive: this._tuLuyenActive,
+      diangucFloor: this.diangucFloor,
+      diangucStep: this.diangucStep,
       climbWinsNeeded: this.climbWinsNeeded,
       climbWinsDone: this.climbWinsDone,
       stats: { ...this.stats },
@@ -624,6 +691,7 @@ class NpcBot {
           .some(reply => (reply.textContent || '').includes(command));
         if (hasCommandReply && (!username || text.includes(username))) directFound = true;
         if (!text.includes(command) || (username && !text.includes(username))) continue;
+        msg.setAttribute('data-dianguc-anchor', 'true');
         const values = [msg.id, msg.getAttribute('data-list-item-id'), msg.getAttribute('data-message-id')];
         for (const value of values) {
           const id = getId(value);
@@ -637,6 +705,115 @@ class NpcBot {
     else if (anchorId) this.log('🔗 Đã neo vào message game trực tiếp mới nhất có reply !luanhoi của bạn.');
     else this.log('⚠️ Không lấy được ID thật của message !luanhoi; tạm thời không click message nào.');
     return anchorId;
+  }
+
+  async captureDiangucAnchor() {
+    const command = this.diangucCmd || '!dianguc';
+    const anchor = await this.exec(`(() => {
+      const command = ${JSON.stringify(command)};
+      const username = ${JSON.stringify(this.username || '')};
+      const getId = value => {
+        const match = String(value || '').match(/(\\d{10,30})/);
+        return match ? match[1] : '';
+      };
+      let found = '';
+      let directFound = false;
+      for (const msg of document.querySelectorAll('[role="article"]')) {
+        const text = msg.textContent || '';
+        const hasCommandReply = Array.from(msg.querySelectorAll('[class*="repliedTextPreview"], [class*="repliedMessageClickable"], [class*="reply"]'))
+          .some(reply => (reply.textContent || '').includes(command));
+        if (hasCommandReply && (!username || text.includes(username))) directFound = true;
+        if (!text.includes(command) || (username && !text.includes(username))) continue;
+        const values = [msg.id, msg.getAttribute('data-list-item-id'), msg.getAttribute('data-message-id')];
+        for (const value of values) {
+          const id = getId(value);
+          if (id && (!found || BigInt(id) > BigInt(found))) found = id;
+        }
+      }
+      if (found) window.diangucAnchorId = found;
+      return found || (directFound ? 'direct' : '');
+    })()`);
+    if (anchor && anchor !== 'direct') this.log(`🔗 Đã lưu ID message !dianguc: ${anchor}.`);
+    else if (anchor) this.log('🔗 Đã neo message game Địa Ngục qua reply preview.');
+    else this.log('⚠️ Không neo được message game qua reply preview của !dianguc.');
+    return anchor;
+  }
+
+  async markDiangucMessages() {
+    const ownedCount = await this.exec(`(() => {
+      const anchorId = window.diangucAnchorId || '';
+      const articles = Array.from(document.querySelectorAll('[role="article"]'));
+      const attrNames = ['data-message-id', 'data-reference-id', 'data-message-reference', 'href'];
+      const getId = value => {
+        const match = String(value || '').match(/(\\d{10,30})/);
+        return match ? match[1] : '';
+      };
+
+      const command = ${JSON.stringify(this.diangucCmd || '!dianguc')};
+      const ids = new Set(anchorId ? [anchorId] : []);
+      let ownedCount = 0;
+
+      // Một số message Discord có reply preview nhưng không expose reference
+      // attribute. Khi đó dùng vị trí DOM sau command làm fallback cho card game.
+      if (anchorId) {
+        const anchorIndex = articles.findIndex(msg => {
+          if (msg.getAttribute('data-dianguc-anchor') === 'true') return true;
+          const values = [msg.id, msg.getAttribute('data-list-item-id'), msg.getAttribute('data-message-id')];
+          return values.some(value => getId(value) === anchorId);
+        });
+        if (anchorIndex >= 0) {
+          for (let index = anchorIndex + 1; index < articles.length; index++) {
+            const msg = articles[index];
+            const rawText = msg.textContent || '';
+            const hasButtons = msg.querySelectorAll('button, [role="button"]').length > 0;
+            const looksLikeGame = /tầng địa ngục|địa ngục\s*(?:tầng|bước)|đúng đường|sai đường|chọn 1 buff|hãy chọn hướng|sự kiện bí ẩn|trạng thái|diễn biến|gặp quái/i.test(rawText);
+            if (hasButtons && looksLikeGame && msg.getAttribute('data-dianguc-owned') !== 'true') {
+              msg.setAttribute('data-dianguc-owned', 'true');
+              ownedCount++;
+            }
+          }
+        }
+      }
+
+      // Discord đôi khi không expose data-reference-id trên DOM, nhưng vẫn
+      // render reply preview. Dùng preview làm điểm neo trực tiếp trước.
+      for (const msg of articles) {
+        const hasOwnedReply = Array.from(msg.querySelectorAll('[class*="repliedTextPreview"], [class*="repliedMessageClickable"], [class*="reply"]'))
+          .some(reply => (reply.textContent || '').includes(command));
+        if (!hasOwnedReply) continue;
+        msg.setAttribute('data-dianguc-owned', 'true');
+        ownedCount++;
+        const messageId = getId(msg.id) || getId(msg.getAttribute('data-list-item-id')) || getId(msg.getAttribute('data-message-id'));
+        if (messageId) ids.add(messageId);
+      }
+
+      if (!anchorId && ownedCount === 0) return 0;
+      for (let pass = 0; pass < 5; pass++) {
+        let changed = false;
+        for (const msg of articles) {
+          if (msg.getAttribute('data-dianguc-owned') === 'true') {
+            const messageId = getId(msg.id) || getId(msg.getAttribute('data-list-item-id')) || getId(msg.getAttribute('data-message-id'));
+            if (messageId) ids.add(messageId);
+            continue;
+          }
+          const refs = Array.from(msg.querySelectorAll('[data-message-id], [data-reference-id], [data-message-reference], a[href]'));
+          const referencesOwned = refs.some(el => attrNames.some(name => {
+            const referenceId = getId(el.getAttribute(name));
+            return referenceId && ids.has(referenceId);
+          }));
+          if (referencesOwned) {
+            msg.setAttribute('data-dianguc-owned', 'true');
+            ownedCount++;
+            const messageId = getId(msg.id) || getId(msg.getAttribute('data-list-item-id')) || getId(msg.getAttribute('data-message-id'));
+            if (messageId) ids.add(messageId);
+            changed = true;
+          }
+        }
+        if (!changed) break;
+      }
+      return ownedCount;
+    })()`);
+    return Number.isFinite(ownedCount) ? ownedCount : 0;
   }
 
   async markLuanhoiMessages() {
@@ -1008,10 +1185,10 @@ class NpcBot {
       }
      return -1;
    })()`);
-   }
+  }
 
-   async checkBicanhCooldown() {
-     return await this.exec(`(() => {
+  async checkBicanhCooldown() {
+    return await this.exec(`(() => {
        const msgs = document.querySelectorAll('[role="article"]');
        const recent = Array.from(msgs).slice(-30).reverse();
        for (const msg of recent) {
@@ -1024,9 +1201,9 @@ class NpcBot {
        }
        return 0;
      })()`);
-   }
+  }
 
-   async checkAlreadyFighting() {
+  async checkAlreadyFighting() {
     const username = this.username || '';
     return await this.exec(`(() => {
       const maxIdStr = window.botMaxMsgId || '0';
@@ -1423,6 +1600,407 @@ class NpcBot {
     }
 
     return false;
+  }
+
+  loadDiangucData() {
+    this.diangucData = {};
+    if (!fs.existsSync(DIANGUC_DATA_FILE)) return;
+    try {
+      const workbook = XLSX.readFile(DIANGUC_DATA_FILE);
+      const sheet = workbook.Sheets.Data || workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
+      for (let rowIndex = 1; rowIndex < rows.length; rowIndex++) {
+        const row = rows[rowIndex];
+        const step = Number(row[0]);
+        if (!Number.isInteger(step) || step < 1) continue;
+        this.diangucData[step] = {};
+        DIANGUC_DIRECTIONS.forEach((direction, index) => {
+          const value = typeof row[index + 1] === 'string' ? row[index + 1].trim().toLowerCase() : '';
+          if (value === 'đúng' || value === 'sai') this.diangucData[step][direction] = value;
+        });
+      }
+      const meta = workbook.Sheets.Meta;
+      const metaRows = meta ? XLSX.utils.sheet_to_json(meta, { header: 1, defval: null }) : [];
+      const metaFloor = metaRows[0] && Number(metaRows[0][1]);
+      if (Number.isInteger(metaFloor) && metaFloor > 0) this.diangucFloor = metaFloor;
+    } catch (error) {
+      this.log(`⚠️ Không đọc được ${DIANGUC_DATA_FILE}: ${error.message}`);
+    }
+  }
+
+  saveDiangucData() {
+    try {
+      const rows = [['', 'lên', 'xuống', 'trái', 'phải']];
+      Object.keys(this.diangucData).map(Number).sort((a, b) => a - b).forEach(step => {
+        const entry = this.diangucData[step] || {};
+        rows.push([step, ...DIANGUC_DIRECTIONS.map(direction => entry[direction] || null)]);
+      });
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), 'Data');
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([['current_floor', this.diangucFloor || 0]]), 'Meta');
+      XLSX.writeFile(workbook, DIANGUC_DATA_FILE);
+      this.diangucLastSaved = Date.now();
+    } catch (error) {
+      this.log(`⚠️ Không lưu được ${DIANGUC_DATA_FILE}: ${error.message}`);
+    }
+  }
+
+  recordDiangucDirection(step, direction, result) {
+    if (!Number.isInteger(step) || !DIANGUC_DIRECTIONS.includes(direction)) return;
+    if (!this.diangucData[step]) this.diangucData[step] = {};
+    this.diangucData[step][direction] = result;
+    this.log(`📝 Địa Ngục bước ${step}: ${direction} = ${result}`);
+    this.saveDiangucData();
+  }
+
+  chooseDiangucDirection(step, buttons) {
+    const entry = this.diangucData[step] || {};
+    const choices = buttons.map((button, index) => ({
+      index,
+      direction: DIANGUC_DIRECTIONS.find(direction => diangucNormalize(button.text).toLowerCase().includes(direction)),
+    })).filter(choice => choice.direction);
+    const knownCorrect = choices.find(choice => entry[choice.direction] === 'đúng');
+    if (knownCorrect) return knownCorrect;
+    return choices.find(choice => entry[choice.direction] !== 'sai') || null;
+  }
+
+  async scanDianguc() {
+    const skillNames = this.diangucSkillNames;
+    return await this.exec(`(() => {
+      const getId = msg => msg.id || msg.getAttribute('data-list-item-id') || msg.getAttribute('data-message-id') || '';
+      const maxIdText = String(window.botMaxMsgId || '').match(/\d{1,30}/);
+      const maxId = maxIdText ? BigInt(maxIdText[0]) : 0n;
+      const skills = ${JSON.stringify(skillNames)};
+      const articles = Array.from(document.querySelectorAll('[role="article"]')).slice(-50).reverse();
+      for (const msg of articles) {
+        if (msg.getAttribute('data-dianguc-owned') !== 'true') continue;
+        if (msg.getAttribute('data-dianguc-resolved') === 'true') continue;
+        const rawText = msg.textContent || '';
+        const lower = rawText.toLowerCase();
+        const id = getId(msg);
+        const targetKey = id || ('dianguc-' + Date.now() + '-' + articles.indexOf(msg));
+        msg.setAttribute('data-dianguc-target', targetKey);
+        if (id) {
+          const idMatch = id.match(/(\\d{10,30})$/);
+          if (idMatch && BigInt(idMatch[1]) <= maxId) continue;
+        }
+        const buttons = Array.from(msg.querySelectorAll('button[role="button"], [role="button"]'))
+          .filter(button => button.offsetParent !== null && (button.textContent || '').trim())
+          .map((button, index) => ({ index, text: (button.textContent || '').trim() }));
+        if (!buttons.length) continue;
+        const buttonText = buttons.map(button => button.text.toLowerCase()).join(' | ');
+        const hasSkillButton = skills.some(skill => buttonText.includes(skill.toLowerCase()));
+        const metadataOnly = buttons.every(button => {
+          const text = button.text.trim();
+          return /^[@!]/.test(text) || /^(?:quất bất lực|xỏ lá ba que)$/iu.test(text);
+        });
+        if (msg.getAttribute('data-dianguc-buff-clicked') === 'true'
+          && lower.includes('chọn 1 buff')) continue;
+        const hasBattleMarker = ['chiến đấu', 'đánh quái', 'quái vật', 'trạng thái', 'diễn biến', 'gặp quái', 'atk:', 'def:']
+          .some(marker => lower.includes(marker));
+        const phase = lower.includes('sự kiện bí ẩn') ? 'MYSTERY'
+          : lower.includes('chọn 1 buff') ? 'BUFF'
+          : lower.includes('hãy chọn hướng đi tiếp theo') ? 'DIRECTION'
+          : hasSkillButton || hasBattleMarker || skills.some(skill => lower.includes(skill.toLowerCase())) ? 'BATTLE' : 'UNKNOWN';
+        const floorMatch = rawText.match(/tầng\\s*:?\\s*(\\d+)/i);
+        const stepMatch = rawText.match(/bước\\s*:?\\s*(\\d+)/i);
+        const result = /đã chết|bạn đã thua|thất bại|thua!|💀|❌/i.test(rawText) ? 'loss'
+          : /chiến thắng|đúng đường|thắng!/i.test(rawText) ? 'win' : null;
+        const hasOutcomeMarker = /sai đường|đúng đường|đã chết|thắng!|thua!|thất bại|💀|❌/i.test(rawText);
+        if (phase === 'UNKNOWN' && !hasOutcomeMarker) continue;
+        return {
+          id,
+          targetKey,
+          text: rawText,
+          buttons,
+          buttonText,
+          metadataOnly,
+          phase,
+          floor: floorMatch ? Number(floorMatch[1]) : null,
+          step: stepMatch ? Number(stepMatch[1]) : null,
+          result,
+          target: /đánh\s*(?:boss\s*)?(41|51)|boss\s*(41|51)|tầng\s*51/i.test(rawText),
+        };
+      }
+      return null;
+    })()`);
+  }
+
+  async clickDiangucButton(messageId, index) {
+    if (!messageId) return false;
+    return await this.exec(`(() => {
+      const target = ${JSON.stringify(messageId)};
+      const msg = document.getElementById(target)
+        || document.querySelector('[data-message-id="' + target + '"]')
+        || document.querySelector('[data-dianguc-target="' + target.replace(/"/g, '\\"') + '"]');
+      if (!msg) return false;
+      const buttons = Array.from(msg.querySelectorAll('button[role="button"], [role="button"]')).filter(button => button.offsetParent !== null && (button.textContent || '').trim());
+      const button = buttons[${Number(index)}];
+      if (!button) return false;
+      button.click();
+      return true;
+    })()`);
+  }
+
+  async clickDiangucBuff(messageId, index) {
+    if (!messageId) return false;
+    return await this.exec(`(() => {
+      const target = ${JSON.stringify(messageId)};
+      const msg = document.getElementById(target)
+        || document.querySelector('[data-message-id="' + target + '"]')
+        || document.querySelector('[data-dianguc-target="' + target.replace(/"/g, '\\"') + '"]');
+      if (!msg) return false;
+      const buttons = Array.from(msg.querySelectorAll('button[role="button"], [role="button"]'))
+        .filter(button => button.offsetParent !== null && (button.textContent || '').trim());
+      const button = buttons[${Number(index)}];
+      if (!button) return false;
+      button.click();
+      msg.setAttribute('data-dianguc-buff-clicked', 'true');
+      return true;
+    })()`);
+  }
+
+  async clickDiangucDirection(messageId, direction) {
+    if (!messageId || !direction) return false;
+    return await this.exec(`(() => {
+      const normalize = value => (value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/\\u0111/g, 'd').replace(/\\u0110/g, 'd').toLowerCase();
+      const target = ${JSON.stringify(messageId)};
+      const msg = document.getElementById(target)
+        || document.querySelector('[data-message-id="' + target + '"]')
+        || document.querySelector('[data-dianguc-target="' + target.replace(/"/g, '\\"') + '"]');
+      if (!msg) return false;
+      const wanted = normalize(${JSON.stringify(direction)});
+      const buttons = Array.from(msg.querySelectorAll('button, [role="button"]'))
+        .filter(button => button.offsetParent !== null && !button.disabled && (button.textContent || '').trim());
+      const button = buttons.find(item => normalize(item.textContent).includes(wanted));
+      if (!button) return false;
+      button.click();
+      return (button.textContent || '').trim();
+    })()`);
+  }
+
+  async clickDiangucMystery(messageId, buttons) {
+    if (!messageId) return false;
+    const choice = buttons.find(button => {
+      const text = String(button.text || '').trim();
+      return text && !/^[@!]/.test(text) && !/^(?:quất bất lực|xỏ lá ba que)$/iu.test(text);
+    });
+    if (!choice) return false;
+    return await this.clickDiangucButton(messageId, choice.index);
+  }
+
+  extractDiangucBuffs(text, buttons) {
+    const tierNames = ['Thiên', 'Huyền', 'Linh', 'Phàm'];
+    const parsedButtons = buttons.map((button, index) => ({
+      button,
+      index,
+      tier: tierNames.find(tier => diangucNormalize(button.text).toLowerCase().includes(tier.toLowerCase())) || '',
+    })).filter(item => item.tier);
+    const buttonTiers = parsedButtons.map(item => item.tier);
+    const buffMarker = 'chọn 1 buff';
+    const markerIndex = text.toLowerCase().indexOf(buffMarker);
+    const buffText = markerIndex >= 0 ? text.slice(markerIndex + buffMarker.length) : text;
+    const buffLines = buffText.split('\n').map(line => line.trim()).filter(Boolean);
+    const selectedDescriptions = [];
+    let lineCursor = 0;
+    for (const tier of buttonTiers) {
+      let description = '';
+      for (let lineIndex = lineCursor; lineIndex < buffLines.length; lineIndex++) {
+        const cleanLine = diangucNormalize(buffLines[lineIndex]);
+        const tierMatch = cleanLine.match(/^(Thiên|Huyền|Linh|Phàm)\b/iu);
+        const hasTierList = /^(?:Thiên|Huyền|Linh|Phàm)\s*[,|]\s*(?:Thiên|Huyền|Linh|Phàm)/iu.test(cleanLine);
+        if (!tierMatch || tierMatch[1].toLowerCase() !== tier.toLowerCase() || hasTierList) continue;
+        description = cleanLine.slice(tierMatch[0].length).trim();
+        lineCursor = lineIndex + 1;
+        break;
+      }
+      selectedDescriptions.push(description);
+    }
+    return parsedButtons.map((item, index) => {
+      const description = selectedDescriptions[index] || diangucNormalize(item.button.text);
+      return { button: item.button, index: item.index, tier: buttonTiers[index], description };
+    });
+  }
+
+  chooseDiangucBuff(text, buttons) {
+    const candidates = this.extractDiangucBuffs(text, buttons).filter(item => !/hồi/i.test(item.description));
+    const usable = candidates.length ? candidates : this.extractDiangucBuffs(text, buttons);
+    for (const regex of DIANGUC_COMPILED_PATTERNS) {
+      const matched = usable.filter(item => regex.test(item.description));
+      if (matched.length) {
+        matched.sort((a, b) => {
+          const tierDiff = ['Thiên', 'Huyền', 'Linh', 'Phàm'].indexOf(a.tier) - ['Thiên', 'Huyền', 'Linh', 'Phàm'].indexOf(b.tier);
+          const aNumber = Number((a.description.match(/[0-9]+(?:[.,][0-9]+)?/) || ['0'])[0].replace(',', '.'));
+          const bNumber = Number((b.description.match(/[0-9]+(?:[.,][0-9]+)?/) || ['0'])[0].replace(',', '.'));
+          return tierDiff || bNumber - aNumber || b.description.localeCompare(a.description, 'vi');
+        });
+        return matched[0];
+      }
+    }
+    const tierRank = { Thiên: 0, Huyền: 1, Linh: 2, Phàm: 3 };
+    return usable.slice().sort((a, b) => (tierRank[a.tier] ?? 4) - (tierRank[b.tier] ?? 4))[0] || null;
+  }
+
+  async diangucLoop(runId) {
+    this.loadDiangucData();
+    while (this.isRunning && this.runId === runId) {
+      this.diangucPending = null;
+      await this.exec('window.diangucAnchorId = ""; true;');
+      await this.sendChat(this.diangucCmd);
+      await this.delay(2000);
+      const anchor = await this.captureDiangucAnchor();
+      if (!anchor) {
+        this.saveDiangucData();
+        this.log('❌ Địa Ngục dừng: không xác định được message game qua reply preview.');
+        return;
+      }
+      const ownedCount = await this.markDiangucMessages();
+      if (!ownedCount) {
+        this.saveDiangucData();
+        this.log('❌ Địa Ngục dừng: anchor có nhưng không tìm thấy message reply preview thuộc game.');
+        return;
+      }
+      this.log(`🔗 Đã đánh dấu ${ownedCount} message Địa Ngục.`);
+      let result;
+      try {
+        result = await this.diangucAttempt(runId);
+      } catch (error) {
+        this.saveDiangucData();
+        this.log(`❌ Lỗi Địa Ngục: ${error.message}`);
+        result = 'ERROR';
+      }
+      this.saveDiangucData();
+      if (result === 'TARGET') {
+        this.log('✅ Đã gặp message đánh boss 41 hoặc tầng 51. Dừng Địa Ngục.');
+        this.stop();
+        return;
+      }
+      if (result === 'DEATH') {
+        this.log('🛑 Đã chết trong Địa Ngục. Dừng bot, không gửi lại !dianguc.');
+        await this.stop();
+        return;
+      }
+      if (result === 'STOP' || result === 'ERROR') return;
+      if (this.isRunning && this.runId === runId) await this.delay(2000);
+    }
+  }
+
+  async diangucAttempt(runId) {
+    const deadline = Date.now() + 15 * 60 * 1000;
+    let missing = 0;
+    while (this.isRunning && this.runId === runId && Date.now() < deadline) {
+      // Message buff/battle mới được bot tạo sau lần scan trước vẫn phải được
+      // nối vào chuỗi reply của !dianguc trước khi quét trạng thái tiếp theo.
+      await this.markDiangucMessages();
+      const state = await this.scanDianguc();
+      if (!state) {
+        missing++;
+        if (missing > 30) {
+          this.log('⚠️ Mất message Địa Ngục quá lâu, đã lưu Excel.');
+          return 'ERROR';
+        }
+        await this.delay(500);
+        continue;
+      }
+      missing = 0;
+      const scanSignature = `${state.phase}|${state.buttonText || ''}`;
+      if (scanSignature !== this.diangucLastScanSignature) {
+        this.diangucLastScanSignature = scanSignature;
+        this.log(`🔎 Địa Ngục scan: ${state.phase} | buttons: ${state.buttonText || '(trống)'}`);
+      }
+      if (state.target) return 'TARGET';
+      if (state.floor) {
+        if (this.diangucFloor && this.diangucFloor !== state.floor) this.diangucData = {};
+        this.diangucFloor = state.floor;
+      }
+      if (state.step) this.diangucStep = state.step;
+
+      const lower = state.text.toLowerCase();
+      const isActiveChoice = ['DIRECTION', 'BUFF', 'MYSTERY'].includes(state.phase);
+      const isConfirmedDeath = !state.metadataOnly && (
+        /đã chết!?[\s\S]*đã ngã xuống[\s\S]*reset về tầng địa ngục/i.test(lower)
+        || /death[\s\S]*reset về tầng địa ngục/i.test(lower)
+      );
+      if (!isActiveChoice && isConfirmedDeath) {
+        this.saveDiangucData();
+        this.log(`💀 Địa Ngục chết ở tầng ${this.diangucFloor}, bước ${this.diangucStep}; làm lại từ bước 1 cùng tầng.`);
+        return 'DEATH';
+      }
+      if (state.metadataOnly) {
+        await this.delay(this.diangucChoiceDelayMs);
+        continue;
+      }
+      if (this.diangucPending && lower.includes('sai đường')) {
+        this.recordDiangucDirection(this.diangucPending.step, this.diangucPending.direction, 'sai');
+        this.diangucPending = null;
+      } else if (this.diangucPending && lower.includes('đúng đường')) {
+        this.recordDiangucDirection(this.diangucPending.step, this.diangucPending.direction, 'đúng');
+        this.diangucPending = null;
+      } else if (this.diangucPending) {
+        // Card hướng cũ vẫn còn trong DOM cho tới khi game trả kết quả.
+        // Chờ xác nhận để không click cùng một hướng nhiều lần.
+        await this.delay(this.diangucChoiceDelayMs);
+        continue;
+      }
+
+      if (state.phase === 'MYSTERY') {
+        const clicked = await this.clickDiangucMystery(state.targetKey, state.buttons);
+        this.log(clicked
+          ? `🎲 Đã click sự kiện bí ẩn: ${state.buttons.find(button => !/^[@!]/.test(button.text) && !/^(?:quất bất lực|xỏ lá ba que)$/iu.test(button.text))?.text || 'nút đầu tiên'}`
+          : '⚠️ Không tìm thấy nút lựa chọn sự kiện bí ẩn');
+        await this.delay(1500);
+        continue;
+      }
+      if (state.phase === 'BUFF') {
+        const choice = this.chooseDiangucBuff(state.text, state.buttons);
+        if (choice) {
+          const clicked = await this.clickDiangucBuff(state.targetKey, choice.index);
+          this.log(`${clicked ? '✨ Đã click buff' : '⚠️ Click buff thất bại'}: ${choice.tier} | ${choice.description || choice.button.text}`);
+        } else {
+          this.log(`⚠️ Không tìm thấy buff hợp lệ: ${state.buttonText || '(trống)'}`);
+        }
+        await this.delay(this.diangucChoiceDelayMs);
+        continue;
+      }
+      if (state.phase === 'DIRECTION') {
+        const currentStep = state.step || this.diangucStep || 1;
+        if (!this.diangucStep) this.diangucStep = currentStep;
+        const choice = this.chooseDiangucDirection(currentStep, state.buttons);
+        if (choice && await this.clickDiangucDirection(state.targetKey, choice.direction)) {
+          this.diangucPending = { step: currentStep, direction: choice.direction };
+          this.log(`🧭 Tầng ${this.diangucFloor}, bước ${this.diangucStep}: đã click hướng ${choice.direction}`);
+        } else if (choice) {
+          this.log(`⚠️ Không click được hướng ${choice.direction} trong message ${state.targetKey || '(không có target)'}`);
+        } else {
+          this.log(`⚠️ Không tìm thấy hướng chưa thử. Buttons: ${state.buttonText || '(trống)'}`);
+        }
+        await this.delay(this.diangucChoiceDelayMs);
+        continue;
+      }
+      if (state.phase === 'BATTLE') {
+        if (state.result === 'win') {
+          if (state.id && !this.diangucResolvedBattleIds.has(state.id)) {
+            this.diangucResolvedBattleIds.add(state.id);
+            await this.exec(`(() => {
+              const msg = document.getElementById(${JSON.stringify(state.id)});
+              if (msg) msg.setAttribute('data-dianguc-resolved', 'true');
+              return true;
+            })()`);
+            this.log('✅ Đã thắng quái mở màn, chuyển sang quét màn chọn hướng.');
+          }
+          await this.delay(this.diangucWinDelayMs);
+          continue;
+        }
+        const clickedSkill = await this.clickNextDiangucSkill();
+        if (clickedSkill) this.log(`⚔️ Địa Ngục click skill: ${clickedSkill}`);
+        else this.log(`⚠️ Battle không tìm thấy skill trong message Địa Ngục: ${state.buttonText || '(trống)'}`);
+        await this.delay(this.diangucSkillDelayMs);
+        continue;
+      }
+      await this.delay(this.diangucDelayMs);
+    }
+    this.saveDiangucData();
+    return this.isRunning ? 'ERROR' : 'STOP';
   }
 
   // ================= LUÂN HỒI MODE =================
@@ -2046,6 +2624,40 @@ class NpcBot {
     return null;
   }
 
+  async clickNextDiangucSkill() {
+    const names = this.diangucSkillNames;
+    const startIndex = this.diangucSkillIdx % names.length;
+    const rotatedNames = names.map((_, index) => names[(startIndex + index) % names.length]);
+    const clicked = await this.exec(`(() => {
+      const removeVN = value => (value || '').normalize('NFD')
+        .replace(/[\\u0300-\\u036f]/g, '')
+        .replace(/\\u0111/g, 'd').replace(/\\u0110/g, 'd')
+        .toLowerCase();
+      const names = ${JSON.stringify(rotatedNames)}.map(removeVN);
+      const tierWords = ['pham', 'linh', 'huyen', 'thien'];
+      const messages = Array.from(document.querySelectorAll('[role="article"][data-dianguc-owned="true"]')).reverse();
+      for (const message of messages) {
+        const buttons = Array.from(message.querySelectorAll('button, [role="button"]'))
+          .filter(button => !button.disabled && button.offsetParent !== null);
+        const skills = buttons.map(button => ({
+          button,
+          text: (button.textContent || '').trim(),
+          clean: removeVN(button.textContent || '').replace(/[^a-z0-9]/g, ''),
+        })).filter(item => item.text && !tierWords.includes(item.clean) && !/^[@!]/.test(item.text));
+        for (const name of names) {
+          const hit = skills.find(item => item.clean.includes(name.replace(/[^a-z0-9]/g, '')));
+          if (hit) {
+            hit.button.click();
+            return hit.text;
+          }
+        }
+      }
+      return null;
+    })()`);
+    if (clicked) this.diangucSkillIdx = (this.diangucSkillIdx + 1) % names.length;
+    return clicked;
+  }
+
   // Đọc tầng hiện tại từ message (dùng match + /i như checkLuanhoiAdvance/battleEnd)
   // Kiểm tra xem màn "Đánh Cược Độ Khó — Sau Tầng X" (chọn hướng) của đúng tầng boss vừa thắng
   // đã xuất hiện chưa — nếu có, nghĩa là đã qua bước "Tiếp tục leo tháp" rồi, không cần bấm lại nữa.
@@ -2253,63 +2865,63 @@ class NpcBot {
       return null;
     })()`);
 
-     if (clicked) {
-       this.log(`🎯 Chọn buff: "${clicked.text}" (ưu tiên, tầng ${clicked.tier || '?'}).`);
-       return clicked.text;
-     }
-     return false;
-   }
+    if (clicked) {
+      this.log(`🎯 Chọn buff: "${clicked.text}" (ưu tiên, tầng ${clicked.tier || '?'}).`);
+      return clicked.text;
+    }
+    return false;
+  }
 
-   // === BICANH MODE ===
-   // Gửi !bicanh, click nút "Leo Tầng N", rồi spam skill theo danh sách cho đến khi stop
-   async bicanhLoop(runId) {
-     if (!this.isRunning || this.runId !== runId) return;
+  // === BICANH MODE ===
+  // Gửi !bicanh, click nút "Leo Tầng N", rồi spam skill theo danh sách cho đến khi stop
+  async bicanhLoop(runId) {
+    if (!this.isRunning || this.runId !== runId) return;
 
-     this.log('\n=== ⚔️ BICANH MODE ===');
-     this.log('Gửi lệnh !bicanh...');
-     await this.sendChat(this.bicanhCmd);
-     await this.delay(this.rand(2000, 3000));
+    this.log('\n=== ⚔️ BICANH MODE ===');
+    this.log('Gửi lệnh !bicanh...');
+    await this.sendChat(this.bicanhCmd);
+    await this.delay(this.rand(2000, 3000));
 
-     // Click nút "Leo Tầng N"
-     const floorClicked = await this.clickBicanhFloor();
-     if (!floorClicked) {
-       this.log('⚠️ Không tìm thấy nút Leo Tầng. Thử lại...');
-       await this.cooldownWait(5, runId);
-       if (this.isRunning && this.runId === runId) this.bicanhLoop(runId);
-       return;
-     }
-     this.log(`✅ Đã click "${floorClicked}" — bắt đầu spam skill...`);
+    // Click nút "Leo Tầng N"
+    const floorClicked = await this.clickBicanhFloor();
+    if (!floorClicked) {
+      this.log('⚠️ Không tìm thấy nút Leo Tầng. Thử lại...');
+      await this.cooldownWait(5, runId);
+      if (this.isRunning && this.runId === runId) this.bicanhLoop(runId);
+      return;
+    }
+    this.log(`✅ Đã click "${floorClicked}" — bắt đầu spam skill...`);
 
-      // Spam skill theo danh sách, lặp lại cho đến khi user bấm stop
-       while (this.isRunning && this.runId === runId) {
-          let skillName;
-          if (this.bicanhSkillOrder.length > 0) {
-            const stt = this.bicanhSkillOrder[this._bicanhSkillIdx % this.bicanhSkillOrder.length];
-            skillName = this.luanhoiSkillNames[stt - 1];
-          } else {
-            skillName = this.luanhoiSkillNames[this._bicanhSkillIdx % this.luanhoiSkillNames.length];
-          }
-         if (!skillName) { this._bicanhSkillIdx++; continue; }
-         const clicked = await this.clickNextBicanhSkill(skillName);
-         if (clicked) {
-            this.log(`🌀 Click skill bicanh: "${clicked}"`);
-            this._bicanhSkillIdx++;
-          }
-          const cd = await this.checkBicanhCooldown();
-          if (cd > 0) {
-            this.log(`⏳ Cooldown — chờ ${cd}ms`);
-            await this.delay(cd);
-          } else {
-            await this.delay(this.rand(800, 1500));
-          }
-        }
+    // Spam skill theo danh sách, lặp lại cho đến khi user bấm stop
+    while (this.isRunning && this.runId === runId) {
+      let skillName;
+      if (this.bicanhSkillOrder.length > 0) {
+        const stt = this.bicanhSkillOrder[this._bicanhSkillIdx % this.bicanhSkillOrder.length];
+        skillName = this.luanhoiSkillNames[stt - 1];
+      } else {
+        skillName = this.luanhoiSkillNames[this._bicanhSkillIdx % this.luanhoiSkillNames.length];
+      }
+      if (!skillName) { this._bicanhSkillIdx++; continue; }
+      const clicked = await this.clickNextBicanhSkill(skillName);
+      if (clicked) {
+        this.log(`🌀 Click skill bicanh: "${clicked}"`);
+        this._bicanhSkillIdx++;
+      }
+      const cd = await this.checkBicanhCooldown();
+      if (cd > 0) {
+        this.log(`⏳ Cooldown — chờ ${cd}ms`);
+        await this.delay(cd);
+      } else {
+        await this.delay(this.rand(800, 1500));
+      }
+    }
 
-      this.log('⏹ BICANH MODE đã dừng.');
-   }
+    this.log('⏹ BICANH MODE đã dừng.');
+  }
 
-   // Tìm và click nút "Leo Tầng N" trong message gần nhất
-   async clickBicanhFloor() {
-     return await this.exec(`(() => {
+  // Tìm và click nút "Leo Tầng N" trong message gần nhất
+  async clickBicanhFloor() {
+    return await this.exec(`(() => {
        const msgs = document.querySelectorAll('[role="article"]');
        const recent = Array.from(msgs).slice(-20).reverse();
        for (const msg of recent) {
@@ -2330,18 +2942,18 @@ class NpcBot {
        }
        return null;
      })()`);
-   }
+  }
 
-   // Click skill bicanh theo tên
-   async clickNextBicanhSkill(skillName) {
-     const username = this.username || '';
-     const nameNoD = skillName.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-       .replace(/\u0111/g,'d').replace(/\u0110/g,'d')
-       .replace(/\u01A1/g,'o').replace(/\u01A0/g,'o')
-       .replace(/\u01B0/g,'u').replace(/\u01AF/g,'u')
-       .toLowerCase();
+  // Click skill bicanh theo tên
+  async clickNextBicanhSkill(skillName) {
+    const username = this.username || '';
+    const nameNoD = skillName.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/\u0111/g, 'd').replace(/\u0110/g, 'd')
+      .replace(/\u01A1/g, 'o').replace(/\u01A0/g, 'o')
+      .replace(/\u01B0/g, 'u').replace(/\u01AF/g, 'u')
+      .toLowerCase();
 
-     return await this.exec(`(() => {
+    return await this.exec(`(() => {
        const username = ${JSON.stringify(username)};
        const nameNoD = ${JSON.stringify(nameNoD)};
        const usernameFirst = (username || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\u0111/g,'d').replace(/\u0110/g,'d').split(' ')[0].toLowerCase();
@@ -2367,7 +2979,7 @@ class NpcBot {
        }
        return null;
      })()`);
-   }
- }
+  }
+}
 
- module.exports = { NpcBot };
+module.exports = { NpcBot };

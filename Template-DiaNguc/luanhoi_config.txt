@@ -1,0 +1,23 @@
+# ============================================================
+# LUANHOI_BOT CONFIG - tách riêng khỏi config.txt của npc/boss
+# ============================================================
+# Mỗi dòng KEY=VALUE. Sửa marker ở đây nếu game đổi wording,
+# không cần sửa code.
+
+LUANHOI_COMMAND=!luanhoi
+CLICK_DELAY=1.5
+INITIAL_WAIT_AFTER_COMMAND=2
+INTER_RUN_WAIT=3
+LUANHOI_MESSAGE_WAIT=15
+TRACK_RETRY_COUNT=3
+TRACK_RETRY_DELAY=1.0
+MAX_LOST_TRACK_ROUNDS=5
+BUFF_SELECT_MARKER=Chọn 1 cổng!
+DIRECTION_MARKER=Chọn 1 trong 4 hướng
+CONTINUE_BUTTON_TEXT=Tiếp Tục Leo Tháp
+END_BUTTON_TEXT=Kết Thúc
+RETREAT_BUTTON_TEXT=Rút Lui
+LOSE_MARKER=Ngã Xuống Luân Hồi Tháp
+STAMINA_MARKER=hết stamina
+FLOOR_REGEX_PATTERN=Tầng\s*(\d+)
+BUFF_PRIORITY=Thiên,Huyền,Linh,Phàm

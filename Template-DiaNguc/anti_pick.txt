@@ -1,0 +1,5 @@
+# Mỗi dòng là 1 MẪU buff LUÔN bị loại (so khớp CHÍNH XÁC cả cụm,
+# dùng __ cho số nếu cần). Buff chứa chữ 'hồi' đã bị loại mặc định
+# ở code, KHÔNG cần liệt kê lại ở đây trừ khi muốn liệt kê rõ.
+Hồi Full HP
+Hồi __% HP
