@@ -1389,6 +1389,12 @@ class NpcBot {
     const preTimeout = Date.now() + 15000; // tối đa 15s chờ chọn buff
     let entered = false;
     while (this.isRunning && this.runId === runId && Date.now() < preTimeout) {
+      const leftoverCont = await this.clickContinueOrStop('continue');
+      if (leftoverCont) {
+        this.log(`↪️ Phát hiện & bấm nút "Tiếp tục leo tháp" còn sót lại: ${leftoverCont}`);
+        await this.delay(this.rand(1500, 2500));
+        continue;
+      }
       if (await this.clickDoor('up')) {
         this.log('🚪 Đã chọn cửa hướng lên (boss mốc).');
         await this.delay(this.rand(1200, 2000));
@@ -1479,11 +1485,15 @@ class NpcBot {
     if (currentTier > 0 && currentTier % 10 === 0) {
       this.log(`🔄 Thắng BOSS tầng ${currentTier} — cần bấm "Tiếp tục leo tháp" để đi tiếp.`);
       let cont = null;
-      for (let attempt = 1; attempt <= 3; attempt++) {
+      const contDeadline = Date.now() + 30000; // chờ tối đa 30s — bot Xola có lúc trả lời chậm
+      let contAttempt = 0;
+      while (!cont && Date.now() < contDeadline) {
         if (!this.isRunning || this.runId !== runId) return;
+        contAttempt++;
         cont = await this.clickContinueOrStop('continue');
         if (cont) break;
-        await this.delay(this.rand(2500, 3500));
+        this.log(`   ...chưa thấy nút "Tiếp tục leo tháp" (lần ${contAttempt}), thử lại...`);
+        await this.delay(this.rand(2000, 3000));
       }
       if (cont) {
         this.log(`✅ Đã click nút tiếp tục (${cont}).`);
@@ -1688,8 +1698,8 @@ class NpcBot {
 
   // Đọc tầng hiện tại từ message (dùng match + /i như checkLuanhoiAdvance/battleEnd)
   async readLuanhoiTier() {
-     const username = this.username || '';
-     const val = await this.exec(`(() => {
+    const username = this.username || '';
+    const val = await this.exec(`(() => {
        const username = ${JSON.stringify(username)};
        const msgs = document.querySelectorAll('[role="article"]');
        const recent = Array.from(msgs).slice(-40).reverse();
@@ -1709,7 +1719,7 @@ class NpcBot {
        return w > 0 ? w : null;
      })()`);
 
-     if (val === null || val === undefined) {
+    if (val === null || val === undefined) {
       this.log('⚠️ [Debug] Không đọc được tầng hiện tại từ message.');
       const preview = await this.exec(`(() => {
         const msgs = document.querySelectorAll('[role="article"]');
@@ -1727,7 +1737,7 @@ class NpcBot {
   // Click nút "Tiếp tục" hoặc "Dừng nhận thưởng"
   async clickContinueOrStop(which) {
     const contKeywords = ['tiếp tục leo tháp', 'tiep tuc leo thap', 'tiếp tục leo', 'tiep tuc leo', 'tiếp tục', 'tiep tuc', 'leo tháp', 'leo thap', 'tiếp', 'tiep'];
-      const stopKeywords = ['ket thuc', 'kết thúc', 'dừng', 'dung', 'nhận thưởng'];
+    const stopKeywords = ['ket thuc', 'kết thúc', 'dừng', 'dung', 'nhận thưởng'];
 
     return await this.exec(`(() => {
       const which = ${JSON.stringify(which)};
@@ -1776,7 +1786,7 @@ class NpcBot {
     };
     const keys = dirMap[direction] || dirMap.up;
 
-     return await this.exec(`(() => {
+    return await this.exec(`(() => {
        const username = ${JSON.stringify(username)};
        const keys = ${JSON.stringify(keys)};
        const nd = s => s.replace(/:[a-z_0-9]+:/g, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
