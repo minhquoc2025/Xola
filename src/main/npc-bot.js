@@ -105,9 +105,6 @@ class NpcBot {
     if (config.luanhoiTarget !== undefined) this.luanhoiTarget = config.luanhoiTarget;
     if (config.luanhoiCmd !== undefined) this.luanhoiCmd = config.luanhoiCmd;
     if (config.luanhoiSkillNames !== undefined) this.luanhoiSkillNames = config.luanhoiSkillNames;
-    // >>> NEW
-    if (config.luanhoiAutoRestart !== undefined) this.luanhoiAutoRestart = config.luanhoiAutoRestart;
-    if (config.luanhoiRestartDelaySec !== undefined) this.luanhoiRestartDelaySec = config.luanhoiRestartDelaySec;
   }
 
   async start() {
@@ -310,8 +307,6 @@ class NpcBot {
       tuLuyenActive: this._tuLuyenActive,
       climbWinsNeeded: this.climbWinsNeeded,
       climbWinsDone: this.climbWinsDone,
-      luanhoiAutoRestart: this.luanhoiAutoRestart,
-      luanhoiRestartDelaySec: this.luanhoiRestartDelaySec,
       stats: { ...this.stats },
     };
   }
@@ -1477,20 +1472,6 @@ class NpcBot {
       const stopResult = await this.clickContinueOrStop('stop');
       this.log(`[DỪNG] clickContinueOrStop('stop') returned: ${stopResult}`);
       this.printStats();
-
-      // >>> NEW: tự động gửi lại lệnh !luanhoi để chạy vòng mới, giống cơ chế
-      // startTuLuyenAfterTarget() của mode NPC — thay vì stop() luôn.
-      if (this.luanhoiAutoRestart) {
-        this.log(`🔁 Tự động bắt đầu lại Luân Hồi (${this.luanhoiCmd}) sau ${this.luanhoiRestartDelaySec}s...`);
-        await this.cooldownWait(this.luanhoiRestartDelaySec, runId);
-        if (this.isRunning && this.runId === runId) {
-          this.luanhoiSkillIdx = 0;
-          this.lastLuanhoiTarget = null;
-          this.luanhoiLoop(runId);
-        }
-        return;
-      }
-
       this.stop();
       return;
     }
@@ -1553,10 +1534,11 @@ class NpcBot {
     const username = this.username || '';
     const names = this.luanhoiSkillNames;
     const startIdx = this.luanhoiSkillIdx % names.length;
-    this.luanhoiSkillIdx++; // tăng idx mỗi lượt, giữ đúng hành vi cũ
+    // KHÔNG tăng idx ở đây — chỉ tăng SAU KHI xác nhận đã thực sự bấm được 1 skill (xem dưới),
+    // để tránh lệch thứ tự xoay vòng khi lượt đó chỉ chọn buff/cooldown/không bấm được gì.
     const rotatedNames = names.map((_, i) => names[(startIdx + i) % names.length]);
 
-    return await this.exec(`(() => {
+    const tick = await this.exec(`(() => {
       const removeVN = s => (s || '').normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
         .replace(/\u0111/g, 'd').replace(/\u0110/g, 'd')
@@ -1773,6 +1755,11 @@ class NpcBot {
 
       return { type: 'none' };
     })()`);
+
+    if (tick && tick.type === 'skill') {
+      this.luanhoiSkillIdx++; // chỉ tăng khi THỰC SỰ bấm được skill — giữ đúng thứ tự xoay vòng
+    }
+    return tick;
   }
 
   async luanhoiBattle(isResuming = false, runId = null) {
@@ -1820,7 +1807,7 @@ class NpcBot {
         noSkillSince = Date.now();
       }
 
-      await this.delay(this.rand(2000, 3000));
+      await this.delay(this.rand(1200, 1800));
     }
 
     return { ended: false };
