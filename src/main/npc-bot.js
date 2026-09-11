@@ -101,14 +101,14 @@ class NpcBot {
     if (config.tuLuyenAfterTarget !== undefined) this.tuLuyenAfterTarget = config.tuLuyenAfterTarget;
     if (config.username !== undefined) this.username = config.username;
     if (config.mode !== undefined) this.mode = config.mode;
-     if (config.luanhoi !== undefined) this.luanhoi = config.luanhoi;
-     if (config.luanhoiTarget !== undefined) this.luanhoiTarget = config.luanhoiTarget;
-     if (config.luanhoiCmd !== undefined) this.luanhoiCmd = config.luanhoiCmd;
-     if (config.luanhoiSkillNames !== undefined) this.luanhoiSkillNames = config.luanhoiSkillNames;
-     if (config.bicanhSkillOrder !== undefined) {
-       this.bicanhSkillOrder = Array.isArray(config.bicanhSkillOrder) ? config.bicanhSkillOrder : config.bicanhSkillOrder.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
-     }
-   }
+    if (config.luanhoi !== undefined) this.luanhoi = config.luanhoi;
+    if (config.luanhoiTarget !== undefined) this.luanhoiTarget = config.luanhoiTarget;
+    if (config.luanhoiCmd !== undefined) this.luanhoiCmd = config.luanhoiCmd;
+    if (config.luanhoiSkillNames !== undefined) this.luanhoiSkillNames = config.luanhoiSkillNames;
+    // >>> NEW
+    if (config.luanhoiAutoRestart !== undefined) this.luanhoiAutoRestart = config.luanhoiAutoRestart;
+    if (config.luanhoiRestartDelaySec !== undefined) this.luanhoiRestartDelaySec = config.luanhoiRestartDelaySec;
+  }
 
   async start() {
     if (this.isRunning) {
@@ -307,16 +307,16 @@ class NpcBot {
       targetMaxNpc: this.targetMaxNpc,
       tuLuyen: this.tuLuyen,
       tuLuyenAfterTarget: this.tuLuyenAfterTarget,
-       tuLuyenActive: this._tuLuyenActive,
-       climbWinsNeeded: this.climbWinsNeeded,
-       climbWinsDone: this.climbWinsDone,
-       bicanh: this.bicanh,
-       bicanhCmd: this.bicanhCmd,
-       stats: { ...this.stats },
-     };
-   }
+      tuLuyenActive: this._tuLuyenActive,
+      climbWinsNeeded: this.climbWinsNeeded,
+      climbWinsDone: this.climbWinsDone,
+      luanhoiAutoRestart: this.luanhoiAutoRestart,
+      luanhoiRestartDelaySec: this.luanhoiRestartDelaySec,
+      stats: { ...this.stats },
+    };
+  }
 
-   async mainLoop(runId) {
+  async mainLoop(runId) {
     if (!this.isRunning || this.runId !== runId) return;
 
     if (!this.autoClimb && this.battleCount >= this.totalBattles) {
@@ -1477,6 +1477,20 @@ class NpcBot {
       const stopResult = await this.clickContinueOrStop('stop');
       this.log(`[DỪNG] clickContinueOrStop('stop') returned: ${stopResult}`);
       this.printStats();
+
+      // >>> NEW: tự động gửi lại lệnh !luanhoi để chạy vòng mới, giống cơ chế
+      // startTuLuyenAfterTarget() của mode NPC — thay vì stop() luôn.
+      if (this.luanhoiAutoRestart) {
+        this.log(`🔁 Tự động bắt đầu lại Luân Hồi (${this.luanhoiCmd}) sau ${this.luanhoiRestartDelaySec}s...`);
+        await this.cooldownWait(this.luanhoiRestartDelaySec, runId);
+        if (this.isRunning && this.runId === runId) {
+          this.luanhoiSkillIdx = 0;
+          this.lastLuanhoiTarget = null;
+          this.luanhoiLoop(runId);
+        }
+        return;
+      }
+
       this.stop();
       return;
     }
