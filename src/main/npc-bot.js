@@ -29,7 +29,9 @@ class NpcBot {
     this.luanhoi = false;
     this.luanhoiTarget = 10;
     this.luanhoiCmd = '!luanhoi';
-    this.luanhoiSkillNames = ['Vạn Kiếm Quy Tông', 'Hỗn Nguyên Hộ Thể', 'Kiếm Khí Xung Thiên', 'Thái Cực Dưỡng Sinh'];
+    this.luanhoiAutoRestart = true;
+    this.luanhoiRestartDelaySec = 5;
+    this.luanhoiSkillNames = ['Kiếm Khí Xung Thiên', 'Vạn Kiếm Quy Tông', 'Kiếm Khí Xung Thiên', 'Thái Cực Dưỡng Sinh', 'Phong Ấn Thất Mạch'];
     this.luanhoiSkillIdx = 0;
     this.luanhoiCurrentTier = 0;
     this.luanhoiBuffInit = false;
@@ -1360,6 +1362,12 @@ class NpcBot {
     const preTimeout = Date.now() + 15000; // tối đa 15s chờ chọn buff
     let entered = false;
     while (this.isRunning && this.runId === runId && Date.now() < preTimeout) {
+      const leftoverCont = await this.clickContinueOrStop('continue');
+      if (leftoverCont) {
+        this.log(`↪️ Phát hiện & bấm nút "Tiếp tục leo tháp" còn sót lại: ${leftoverCont}`);
+        await this.delay(this.rand(1500, 2500));
+        continue;
+      }
       if (await this.clickDoor('up')) {
         this.log('🚪 Đã chọn cửa hướng lên (boss mốc).');
         await this.delay(this.rand(1200, 2000));
@@ -1442,19 +1450,48 @@ class NpcBot {
       const stopResult = await this.clickContinueOrStop('stop');
       this.log(`[DỪNG] clickContinueOrStop('stop') returned: ${stopResult}`);
       this.printStats();
+
+      // >>> NEW: tự động gửi lại lệnh !luanhoi để chạy vòng mới, giống cơ chế
+      // startTuLuyenAfterTarget() của mode NPC — thay vì stop() luôn.
+      if (this.luanhoiAutoRestart) {
+        this.log(`🔁 Tự động bắt đầu lại Luân Hồi (${this.luanhoiCmd}) sau ${this.luanhoiRestartDelaySec}s...`);
+        await this.cooldownWait(this.luanhoiRestartDelaySec, runId);
+        if (this.isRunning && this.runId === runId) {
+          this.luanhoiSkillIdx = 0;
+          this.lastLuanhoiTarget = null;
+          this.luanhoiLoop(runId);
+        }
+        return;
+      }
+
       this.stop();
       return;
     }
 
     // Boss mốc (tầng 10, 20, 30...) không tự sang tầng: cần bấm "Tiếp tục leo tháp".
-    if (currentTier > 0 && currentTier % 10 === 0) {
+    // CHỈ áp dụng khi thật sự vừa hạ gục boss (isWin) — nếu chỉ là "advance" (tự động sang tầng
+    // và tầng đó tình cờ là mốc 10) thì nghĩa là mới VỪA CHẠM MẶT boss, chưa đánh nó, phải fight tiếp.
+    if (isWin && currentTier > 0 && currentTier % 10 === 0) {
       this.log(`🔄 Thắng BOSS tầng ${currentTier} — cần bấm "Tiếp tục leo tháp" để đi tiếp.`);
       let cont = null;
-      for (let attempt = 1; attempt <= 3; attempt++) {
+      const bossTier = currentTier;
+      const contDeadline = Date.now() + 30000; // chờ tối đa 30s — bot Xola có lúc trả lời chậm
+      let contAttempt = 0;
+      while (!cont && Date.now() < contDeadline) {
         if (!this.isRunning || this.runId !== runId) return;
+        contAttempt++;
+
+        const alreadyPast = await this.checkAlreadyPastContinue(bossTier);
+        if (alreadyPast) {
+          this.log(`↪️ Phát hiện màn "Sau Tầng ${alreadyPast}" đã hiện ra — đã qua bước Tiếp tục leo tháp rồi (chỉ là message thắng boss cũ vẫn còn hiển thị), bỏ qua chờ nút.`);
+          cont = 'already-advanced';
+          break;
+        }
+
         cont = await this.clickContinueOrStop('continue');
         if (cont) break;
-        await this.delay(this.rand(2500, 3500));
+        this.log(`   ...chưa thấy nút "Tiếp tục leo tháp" (lần ${contAttempt}), thử lại...`);
+        await this.delay(this.rand(2000, 3000));
       }
       if (cont) {
         this.log(`✅ Đã click nút tiếp tục (${cont}).`);
@@ -1469,6 +1506,8 @@ class NpcBot {
         this.luanhoiCurrentTier = correctedTier;
         this.lastLuanhoiTarget = correctedTier;
       }
+    } else if (currentTier > 0 && currentTier % 10 === 0) {
+      this.log(`⚔️ Vừa sang tầng ${currentTier} (mốc BOSS) — chưa đánh boss này, tiếp tục chiến đấu...`);
     } else {
       this.log(`🔄 Tầng thường ${currentTier} — game tự sang tầng kế, chờ chọn buff tiếp...`);
     }
@@ -1481,6 +1520,240 @@ class NpcBot {
   }
 
   // Chiến đấu luân hồi: game tự đánh nên chỉ cần chờ trận kết thúc
+  // Gộp 5 bước (buff, advance, battle-end, cooldown, click skill) vào 1 lần executeJavaScript/lượt
+  // — thay vì 5-6 round-trip riêng biệt như trước, giảm trễ dội mỗi lượt đánh.
+  async luanhoiBattleTick() {
+    const username = this.username || '';
+    const names = this.luanhoiSkillNames;
+    const startIdx = this.luanhoiSkillIdx % names.length;
+    // KHÔNG tăng idx ở đây — chỉ tăng SAU KHI xác nhận đã thực sự bấm được 1 skill (xem dưới),
+    // để tránh lệch thứ tự xoay vòng khi lượt đó chỉ chọn buff/cooldown/không bấm được gì.
+    const rotatedNames = names.map((_, i) => names[(startIdx + i) % names.length]);
+
+    const tick = await this.exec(`(() => {
+      const removeVN = s => (s || '').normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\u0111/g, 'd').replace(/\u0110/g, 'd')
+        .replace(/\u01A1/g, 'o').replace(/\u01A0/g, 'o')
+        .replace(/\u01B0/g, 'u').replace(/\u01AF/g, 'u')
+        .toLowerCase();
+
+      const username = ${JSON.stringify(username)};
+      const tierOf = { 'thien': 3, 'huyen': 2, 'linh': 1, 'pham': 0 };
+      const tierNames = ['pham', 'linh', 'huyen', 'thien'];
+      const rotatedNames = ${JSON.stringify(rotatedNames)};
+      const namesNoD = rotatedNames.map(n => removeVN(n).replace(/[^a-z0-9]/g, ''));
+
+      const msgs = document.querySelectorAll('[role="article"]');
+      const recent40 = Array.from(msgs).slice(-40).reverse();
+      const recent30 = recent40.slice(0, 30);
+
+      // ---- 1) BUFF (ưu tiên cao nhất) ----
+      for (const msg of recent40) {
+        const rawText = msg.textContent || '';
+        if (username && !rawText.includes(username)) {
+          if (!/(?:luân hồi|luanhoi|tầng|thap|hạ gục|han guc|đánh bại|boss)/i.test(rawText)) continue;
+        }
+        const btns = msg.querySelectorAll('button, [role="button"]');
+        if (btns.length === 0) continue;
+        let maxP = -1, bestBtn = null, bestText = '';
+        for (const b of btns) {
+          if (b.disabled) continue;
+          const raw = (b.textContent || '').trim();
+          if (!raw || /[@|!]/.test(raw)) continue;
+          const clean = raw.replace(/:[a-z_0-9]+:/g, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (!tierNames.includes(clean)) continue;
+          const p = tierOf[clean];
+          if (p > maxP) { maxP = p; bestBtn = b; bestText = raw; }
+        }
+        if (!bestBtn) continue;
+        let msgTier = 0;
+        const tm = rawText.match(/(?:tầng|tầng luân hồi|tier)\s*([0-9]{1,3})/i);
+        if (tm && tm[1]) msgTier = parseInt(tm[1]);
+        const clickedTier = window.luanhoiBuffTierClicked || 0;
+        if (msgTier > 0 && msgTier <= clickedTier) continue;
+        bestBtn.disabled = false;
+        bestBtn.click();
+        window.luanhoiBuffTierClicked = Math.max(window.luanhoiBuffTierClicked || 0, msgTier > 0 ? msgTier : (window.luanhoiBuffTierClicked || 0) + 1);
+        return { type: 'buff', text: bestText, tier: msgTier };
+      }
+
+      // ---- 2) ADVANCE (tầng mới xuất hiện qua card buff, chưa được click ở bước 1) ----
+      {
+        const clickedTier = window.luanhoiBuffTierClicked || 0;
+        for (const msg of recent40) {
+          const rawText = msg.textContent || '';
+          if (username && !rawText.includes(username)) {
+            if (!/(?:luân hồi|luanhoi|tầng|thap|hạ gục|han guc|đánh bại|boss|tiếp tục|ket thuc)/i.test(rawText)) continue;
+          }
+          const tm = rawText.match(/(?:tầng|tầng luân hồi|tier)\s*([0-9]{1,3})/i);
+          const newTier = tm ? parseInt(tm[1]) : null;
+          const btns = msg.querySelectorAll('button, [role="button"]');
+          let hasBuff = false;
+          for (const b of btns) {
+            const raw = (b.textContent || '').trim();
+            if (!raw || /[@|!]/.test(raw)) continue;
+            const clean = raw.replace(/:[a-z_0-9]+:/g, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (tierNames.includes(clean)) { hasBuff = true; break; }
+          }
+          if (!hasBuff) continue;
+          if (newTier !== null && newTier > clickedTier && clickedTier > 0) {
+            return { type: 'advance', rewardText: rawText };
+          }
+        }
+      }
+
+      // ---- 3) BATTLE END (win/loss) ----
+      {
+        const knownTier = window.luanhoiBuffTierClicked || 0;
+        for (const msg of recent30) {
+          const rawText = msg.textContent || '';
+          if (username && !rawText.includes(username)) {
+            if (!/(?:luân hồi|luanhoi|tầng|thap|hạ gục|han guc|đánh bại|boss|tiếp tục|ket thuc)/i.test(rawText)) continue;
+          }
+          const text = rawText.toLowerCase();
+          const hasWin = /chiến thắng|thắng!/.test(text);
+          const hasLoss = /thất bại|bạn đã thua|thua!/.test(text);
+          const btns = msg.querySelectorAll('button, [role="button"]');
+          let hasBuff = false;
+          for (const b of btns) {
+            const rawTxt = (b.textContent || '').trim();
+            if (!rawTxt || /[@|!]/.test(rawTxt)) continue;
+            const clean = rawTxt.replace(/:[a-z_0-9]+:/g, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (tierNames.includes(clean)) { hasBuff = true; break; }
+          }
+          const isLuanhoi = hasBuff ||
+            /luân hồi tháp|luanhoi thap|tháp luân hồi|thap luanhoi|thắng boss|kết thúc luân hồi|ket thuc luan hoi|tiếp tục leo tháp|tiep tuc leo thap|chọn 1 cổng|chon 1 cong|hạ gục boss|han guc boss|đánh bại boss|danh bai boss|chọn độ khó|chon do kho|kết thúc nhận|ket thuc nhan/i.test(rawText);
+          if (!isLuanhoi) continue;
+
+          if (hasBuff && !hasWin && !hasLoss && knownTier > 0) {
+            const tm2 = rawText.match(/(?:tầng|tầng luân hồi|tier)\s*([0-9]{1,3})/i);
+            if (tm2 && parseInt(tm2[1]) > knownTier) {
+              return { type: 'advance', rewardText: rawText };
+            }
+          }
+
+          if (!hasWin && !hasLoss) {
+            const contKeywords = ['tiếp tục leo tháp', 'tiep tuc leo thap', 'tiếp tục leo', 'tiep tuc leo', 'leo tháp', 'leo thap', 'tiếp tục', 'tiep tuc'];
+            for (const b of btns) {
+              const rawTxt = (b.textContent || '').trim();
+              if (!rawTxt || /[@|!]/.test(rawTxt)) continue;
+              const t0 = rawTxt.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+              if (contKeywords.some(k => t0.includes(k))) {
+                return { type: 'end', result: 'win', rewardText: rawText };
+              }
+            }
+          }
+
+          if (!hasWin && !hasLoss) {
+            const bossHit = /hạ gục boss|han guc boss|đánh bại boss|danh bai boss/.test(rawText);
+            let hasCont = false, hasStop = false;
+            for (const b of btns) {
+              const rawTxt = (b.textContent || '').trim();
+              if (!rawTxt || /[@|!]/.test(rawTxt)) continue;
+              const t0 = rawTxt.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/:[a-z_0-9]+:/g, '');
+              if (/tiếp|tiep/.test(t0)) hasCont = true;
+              if (/kết thúc|ket thuc|dừng|dung/.test(t0)) hasStop = true;
+            }
+            if ((hasCont || hasStop) && bossHit) {
+              return { type: 'end', result: 'win', rewardText: rawText };
+            }
+          }
+
+          let hasFightBtn = false;
+          for (const b of btns) {
+            const t = (b.textContent || '').trim().toLowerCase();
+            if (t === 'chiến đấu') { hasFightBtn = true; break; }
+          }
+          if (hasFightBtn) continue;
+
+          if (!hasWin && !hasLoss) continue;
+
+          if (msg.id) {
+            const parts = msg.id.split('-');
+            window.botMaxMsgId = parts[parts.length - 1];
+          }
+          let res;
+          if (hasWin && !hasLoss) res = 'win';
+          else if (hasLoss && !hasWin) res = 'loss';
+          else res = 'unknown';
+          return { type: 'end', result: res, rewardText: rawText };
+        }
+      }
+
+      // ---- 4) COOLDOWN ----
+      {
+        const maxIdStr = window.botMaxMsgId || '0';
+        const maxId = BigInt(maxIdStr);
+        for (const msg of recent30) {
+          if (msg.getAttribute('data-bot-seen') === 'true') continue;
+          if (username && !msg.textContent.includes(username)) continue;
+          if (msg.id) {
+            const parts = msg.id.split('-');
+            const idStr = parts[parts.length - 1];
+            try {
+              const id = BigInt(idStr);
+              if (id <= maxId) continue;
+            } catch(e) {}
+          }
+          const text = msg.textContent.toLowerCase();
+          if (text.includes('hồi chiêu') || text.includes('cooldown')) {
+            msg.setAttribute('data-bot-seen', 'true');
+            if (msg.id) {
+              const parts = msg.id.split('-');
+              window.botMaxMsgId = parts[parts.length - 1];
+            }
+            const match = text.match(/(?:(\d+)\s*[pm])?\s*(\d+)\s*s/);
+            let sec = 120;
+            if (match) {
+              sec = 0;
+              if (match[1]) sec += parseInt(match[1]) * 60;
+              if (match[2]) sec += parseInt(match[2]);
+            }
+            return { type: 'cooldown', seconds: sec };
+          }
+        }
+      }
+
+      // ---- 5) CLICK SKILL (đúng thứ tự xoay vòng, bắt đầu từ idx hiện tại) ----
+      {
+        const availableBtns = [];
+        for (const msg of recent40) {
+          const rawText = msg.textContent || '';
+          const norm = removeVN(rawText);
+          if (username) {
+            const userFullName = removeVN(username);
+            if (!norm.includes(userFullName) && !norm.includes('luan') && !norm.includes('thap')) continue;
+          }
+          const btns = msg.querySelectorAll('button, [role="button"]');
+          for (const btn of btns) {
+            if (btn.disabled) continue;
+            const txt = (btn.textContent || '').trim();
+            if (!txt || /[@|!]/.test(txt)) continue;
+            const noD = removeVN(txt).replace(/[^a-z0-9]/g, '');
+            if (tierNames.includes(noD)) continue;
+            availableBtns.push({ btn, noD, txt });
+          }
+          if (availableBtns.length) break;
+        }
+        for (const n of namesNoD) {
+          const hit = availableBtns.find(b => b.noD.includes(n));
+          if (hit) {
+            hit.btn.click();
+            return { type: 'skill', text: hit.txt };
+          }
+        }
+      }
+
+      return { type: 'none' };
+    })()`);
+
+    if (tick && tick.type === 'skill') {
+      this.luanhoiSkillIdx++; // chỉ tăng khi THỰC SỰ bấm được skill — giữ đúng thứ tự xoay vòng
+    }
+    return tick;
+  }
+
   async luanhoiBattle(isResuming = false, runId = null) {
     const battleStartTime = Date.now();
     const maxBattleDurationMs = 180000;
@@ -1495,35 +1768,30 @@ class NpcBot {
         return { ended: true, result: 'unknown' };
       }
 
-      // Nếu màn chọn buff xuất hiện (màn buff giữa trận / sang tầng mới), chọn ngay và advance
-      const buffClicked = await this.clickBuffByPriority();
-      if (buffClicked) {
-        this.log(`⚡ Đã chọn buff giữa trận/sang tầng: "${buffClicked}"`);
+      const tick = await this.luanhoiBattleTick();
+
+      if (tick && tick.type === 'buff') {
+        this.log(`⚡ Đã chọn buff giữa trận/sang tầng: "${tick.text}"`);
         return { ended: true, result: 'advance' };
       }
 
-      const adv = await this.checkLuanhoiAdvance();
-      if (adv && adv.ended) {
+      if (tick && tick.type === 'advance') {
         this.log('>>> BATTLE END: ✅ advance (buff tầng mới) <<<');
-        return { ended: true, result: 'advance', rewardText: adv.rewardText };
+        return { ended: true, result: 'advance', rewardText: tick.rewardText };
       }
 
-      const end = await this.checkLuanhoiBattleEnd();
-      if (end && end.ended) {
-        this.log(`>>> BATTLE END: ${end.result === 'win' ? '✅ THẮNG' : (end.result === 'loss' ? '❌ THUA' : '?')} <<<`);
-        return { ended: true, result: end.result, rewardText: end.rewardText };
+      if (tick && tick.type === 'end') {
+        this.log(`>>> BATTLE END: ${tick.result === 'win' ? '✅ THẮNG' : (tick.result === 'loss' ? '❌ THUA' : '?')} <<<`);
+        return { ended: true, result: tick.result, rewardText: tick.rewardText };
       }
 
-      const cooldown = await this.checkCooldownMessage();
-      if (cooldown > 0) {
-        this.log(`>>> COOLDOWN: ${cooldown}s <<<`);
-        return { ended: false, cooldown: cooldown };
+      if (tick && tick.type === 'cooldown') {
+        this.log(`>>> COOLDOWN: ${tick.seconds}s <<<`);
+        return { ended: false, cooldown: tick.seconds };
       }
 
-      // Click skill mỗi lượt (nếu game cần). Không tìm thấy skill chỉ là trễ giữa các lượt — cứ chờ.
-      const clicked = await this.clickNextLuanhoiSkill();
-      if (clicked) {
-        this.log(`🌀 Click skill luân hồi: "${clicked}"`);
+      if (tick && tick.type === 'skill') {
+        this.log(`🌀 Click skill luân hồi: "${tick.text}"`);
         noSkillSince = null;
       } else if (noSkillSince === null) {
         noSkillSince = Date.now();
@@ -1531,7 +1799,7 @@ class NpcBot {
         noSkillSince = Date.now();
       }
 
-      await this.delay(this.rand(2000, 3000));
+      await this.delay(this.rand(1200, 1800));
     }
 
     return { ended: false };
@@ -1557,14 +1825,13 @@ class NpcBot {
       const username = ${JSON.stringify(username)};
       const name = ${JSON.stringify(name)};
       const nameNoD = removeVN(name);
-      const userFirstWord = removeVN(username).split(' ')[0];
-      const tierWords = ${JSON.stringify(tierWords)};
+      const userFullName = removeVN(username);
       const msgs = document.querySelectorAll('[role="article"]');
       const recent = Array.from(msgs).slice(-40).reverse();
       for (const msg of recent) {
         const rawText = msg.textContent || '';
         const norm = removeVN(rawText);
-        if (userFirstWord && !norm.includes(userFirstWord) && !norm.includes('luan') && !norm.includes('thap')) continue;
+        if (userFullName && !norm.includes(userFullName) && !norm.includes('luan') && !norm.includes('thap')) continue;
         const btns = msg.querySelectorAll('button, [role="button"]');
         if (btns.length === 0) continue;
         for (const btn of btns) {
@@ -1585,7 +1852,10 @@ class NpcBot {
 
     if (clicked) return clicked;
 
-    // Fallback: click nút skill luân hồi đầu tiên còn sẵn (không phải buff)
+    // Fallback: skill theo idx không match được (cooldown/tên lệch) → thử các skill còn lại
+    // THEO ĐÚNG THỨ TỰ XOAY VÒNG (bắt đầu từ idx hiện tại), không phải "cứ thấy cái nào trước thì bấm cái đó"
+    const startIdx = this.luanhoiSkillIdx % names.length;
+    const rotatedNames = names.map((_, i) => names[(startIdx + i) % names.length]);
     const any = await this.exec(`(() => {
       const removeVN = s => (s || '').normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
@@ -1594,30 +1864,37 @@ class NpcBot {
         .replace(/\u01B0/g, 'u').replace(/\u01AF/g, 'u')
         .toLowerCase();
       const username = ${JSON.stringify(username)};
-      const userFirstWord = removeVN(username).split(' ')[0];
-      const names = ${JSON.stringify(names)};
-      const namesNoD = names.map(n => removeVN(n).replace(/[^a-z0-9]/g, ''));
+      const userFullName = removeVN(username);
+      const rotatedNames = ${JSON.stringify(rotatedNames)};
+      const namesNoD = rotatedNames.map(n => removeVN(n).replace(/[^a-z0-9]/g, ''));
       const tierWords = ${JSON.stringify(tierWords)};
       const msgs = document.querySelectorAll('[role="article"]');
       const recent = Array.from(msgs).slice(-40).reverse();
+
+      // Gom hết nút khả dụng (chưa disable, không phải buff) trong các message hợp lệ trước
+      const availableBtns = [];
       for (const msg of recent) {
         const rawText = msg.textContent || '';
         const norm = removeVN(rawText);
-        if (userFirstWord && !norm.includes(userFirstWord) && !norm.includes('luan') && !norm.includes('thap')) continue;
+        if (userFullName && !norm.includes(userFullName) && !norm.includes('luan') && !norm.includes('thap')) continue;
         const btns = msg.querySelectorAll('button, [role="button"]');
-        if (btns.length === 0) continue;
         for (const btn of btns) {
           if (btn.disabled) continue;
           const txt = (btn.textContent || '').trim();
           if (!txt || /[@|!]/.test(txt)) continue;
           const noD = removeVN(txt).replace(/[^a-z0-9]/g, '');
           if (tierWords.includes(noD)) continue;
-          for (const n of namesNoD) {
-            if (noD.includes(n)) {
-              btn.click();
-              return txt;
-            }
-          }
+          availableBtns.push({ btn, noD, txt });
+        }
+        if (availableBtns.length) break; // chỉ lấy nút của message hợp lệ gần nhất
+      }
+
+      // Theo đúng thứ tự xoay vòng: thử namesNoD[0] trước, rồi [1], [2]... chứ không lấy "cái đầu gặp trong DOM"
+      for (const n of namesNoD) {
+        const hit = availableBtns.find(b => b.noD.includes(n));
+        if (hit) {
+          hit.btn.click();
+          return hit.txt;
         }
       }
       return null;
@@ -1658,9 +1935,26 @@ class NpcBot {
   }
 
   // Đọc tầng hiện tại từ message (dùng match + /i như checkLuanhoiAdvance/battleEnd)
+  // Kiểm tra xem màn "Đánh Cược Độ Khó — Sau Tầng X" (chọn hướng) của đúng tầng boss vừa thắng
+  // đã xuất hiện chưa — nếu có, nghĩa là đã qua bước "Tiếp tục leo tháp" rồi, không cần bấm lại nữa.
+  async checkAlreadyPastContinue(bossTier) {
+    const val = await this.exec(`(() => {
+      const bossTier = ${JSON.stringify(bossTier)};
+      const msgs = document.querySelectorAll('[role="article"]');
+      const recent = Array.from(msgs).slice(-20).reverse();
+      for (const msg of recent) {
+        const text = msg.textContent || '';
+        const m = text.match(/sau\\s*t[aầ]ng\\s*([0-9]{1,3})/i);
+        if (m && m[1] && parseInt(m[1]) >= bossTier) return parseInt(m[1]);
+      }
+      return null;
+    })()`);
+    return val;
+  }
+
   async readLuanhoiTier() {
-     const username = this.username || '';
-     const val = await this.exec(`(() => {
+    const username = this.username || '';
+    const val = await this.exec(`(() => {
        const username = ${JSON.stringify(username)};
        const msgs = document.querySelectorAll('[role="article"]');
        const recent = Array.from(msgs).slice(-40).reverse();
@@ -1680,7 +1974,7 @@ class NpcBot {
        return w > 0 ? w : null;
      })()`);
 
-     if (val === null || val === undefined) {
+    if (val === null || val === undefined) {
       this.log('⚠️ [Debug] Không đọc được tầng hiện tại từ message.');
       const preview = await this.exec(`(() => {
         const msgs = document.querySelectorAll('[role="article"]');
@@ -1697,43 +1991,73 @@ class NpcBot {
 
   // Click nút "Tiếp tục" hoặc "Dừng nhận thưởng"
   async clickContinueOrStop(which) {
+    const username = this.username || '';
     const contKeywords = ['tiếp tục leo tháp', 'tiep tuc leo thap', 'tiếp tục leo', 'tiep tuc leo', 'tiếp tục', 'tiep tuc', 'leo tháp', 'leo thap', 'tiếp', 'tiep'];
-      const stopKeywords = ['ket thuc', 'kết thúc', 'dừng', 'dung', 'nhận thưởng'];
+    const stopKeywords = ['ket thuc', 'kết thúc', 'dừng', 'dung', 'nhận thưởng'];
 
-    return await this.exec(`(() => {
+    const result = await this.exec(`(() => {
       const which = ${JSON.stringify(which)};
+      const username = ${JSON.stringify(username)};
       const contKeywords = ${JSON.stringify(contKeywords)};
       const stopKeywords = ${JSON.stringify(stopKeywords)};
        const nd = s => s.replace(/:[a-z_0-9]+:/g, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
        const msgs = document.querySelectorAll('[role="article"]');
        const recent = Array.from(msgs).slice(-30).reverse();
-       for (const msg of recent) {
-         const btns = msg.querySelectorAll('button, [role="button"]');
-         if (btns.length === 0) continue;
-         for (const btn of btns) {
-           const raw = (btn.textContent || '').trim();
-           if (!raw) continue;
-           if (/[@|!]/.test(raw)) continue;
-           const txt = nd(raw);
-           if (!txt) continue;
-            if (which === 'stop') {
-              if (txt.includes('ket thuc') && txt.includes('thuong')) {
-               btn.disabled = false;
-               btn.click();
-               return 'stop-clicked: ' + raw;
-             }
-           } else {
-             if (contKeywords.some(k => txt.includes(k))) {
-               btn.disabled = false;
-               btn.click();
-               return 'continue-clicked: ' + raw;
+
+       const scan = (requireUsername) => {
+         for (const msg of recent) {
+           if (requireUsername && username && !(msg.textContent || '').includes(username)) continue;
+           const btns = msg.querySelectorAll('button, [role="button"]');
+           if (btns.length === 0) continue;
+           for (const btn of btns) {
+             const raw = (btn.textContent || '').trim();
+             if (!raw) continue;
+             if (/[@|!]/.test(raw)) continue;
+             const txt = nd(raw);
+             if (!txt) continue;
+              if (which === 'stop') {
+                if (txt.includes('ket thuc') && txt.includes('thuong')) {
+                 btn.disabled = false;
+                 btn.click();
+                 return 'stop-clicked: ' + raw;
+               }
+             } else {
+               if (contKeywords.some(k => txt.includes(k))) {
+                 btn.disabled = false;
+                 btn.click();
+                 return 'continue-clicked: ' + raw;
+               }
              }
            }
          }
-       }
-        if (which === 'stop') return 'stop-null: ' + Array.from(recent).slice(-5).map(m => m.textContent.substring(0,60)).join(' || ');
-        return null;
+         return null;
+       };
+
+       // Ưu tiên tìm trong message có gắn đúng tên mình (an toàn khi nhiều người chơi chung phòng)
+       const strict = username ? scan(true) : null;
+       if (strict) return strict;
+
+       // Fallback: không thấy message gắn tên mình → quét không lọc tên (rủi ro bấm nhầm người khác)
+       const loose = scan(false);
+       if (loose) return username ? ('UNFILTERED:' + loose) : loose;
+
+        const btnDump = recent.slice(0, 5).map(m => {
+          const btns = Array.from(m.querySelectorAll('button, [role="button"]')).map(b => (b.textContent||'').trim()).filter(Boolean);
+          return '[' + (m.textContent||'').substring(0,50).replace(/\s+/g,' ') + '] btns=(' + btns.join(' | ') + ')';
+        }).join(' >>> ');
+        return 'NOTFOUND:' + btnDump;
      })()`);
+
+    if (result && typeof result === 'string' && result.startsWith('NOTFOUND:')) {
+      this.log(`⚠️ [Debug] Không tìm thấy nút "${which}". 5 message gần nhất + các nút của nó:`);
+      this.log('   ' + result.slice('NOTFOUND:'.length));
+      return null;
+    }
+    if (result && typeof result === 'string' && result.startsWith('UNFILTERED:')) {
+      this.log(`⚠️ [Cảnh báo] Không thấy nút "${which}" trong message gắn tên "${username}" → dùng fallback không lọc tên (có rủi ro bấm nhầm nút của người khác trong phòng đông).`);
+      return result.slice('UNFILTERED:'.length);
+    }
+    return result;
   }
 
   // Click nút cửa theo hướng (mặc định up)
@@ -1747,7 +2071,7 @@ class NpcBot {
     };
     const keys = dirMap[direction] || dirMap.up;
 
-     return await this.exec(`(() => {
+    return await this.exec(`(() => {
        const username = ${JSON.stringify(username)};
        const keys = ${JSON.stringify(keys)};
        const nd = s => s.replace(/:[a-z_0-9]+:/g, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
