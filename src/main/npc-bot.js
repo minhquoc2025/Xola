@@ -1472,6 +1472,20 @@ class NpcBot {
       const stopResult = await this.clickContinueOrStop('stop');
       this.log(`[DỪNG] clickContinueOrStop('stop') returned: ${stopResult}`);
       this.printStats();
+
+      // >>> NEW: tự động gửi lại lệnh !luanhoi để chạy vòng mới, giống cơ chế
+      // startTuLuyenAfterTarget() của mode NPC — thay vì stop() luôn.
+      if (this.luanhoiAutoRestart) {
+        this.log(`🔁 Tự động bắt đầu lại Luân Hồi (${this.luanhoiCmd}) sau ${this.luanhoiRestartDelaySec}s...`);
+        await this.cooldownWait(this.luanhoiRestartDelaySec, runId);
+        if (this.isRunning && this.runId === runId) {
+          this.luanhoiSkillIdx = 0;
+          this.lastLuanhoiTarget = null;
+          this.luanhoiLoop(runId);
+        }
+        return;
+      }
+
       this.stop();
       return;
     }
@@ -1961,8 +1975,8 @@ class NpcBot {
   }
 
   async readLuanhoiTier() {
-     const username = this.username || '';
-     const val = await this.exec(`(() => {
+    const username = this.username || '';
+    const val = await this.exec(`(() => {
        const username = ${JSON.stringify(username)};
        const msgs = document.querySelectorAll('[role="article"]');
        const recent = Array.from(msgs).slice(-40).reverse();
@@ -1982,7 +1996,7 @@ class NpcBot {
        return w > 0 ? w : null;
      })()`);
 
-     if (val === null || val === undefined) {
+    if (val === null || val === undefined) {
       this.log('⚠️ [Debug] Không đọc được tầng hiện tại từ message.');
       const preview = await this.exec(`(() => {
         const msgs = document.querySelectorAll('[role="article"]');
@@ -2001,7 +2015,7 @@ class NpcBot {
   async clickContinueOrStop(which) {
     const username = this.username || '';
     const contKeywords = ['tiếp tục leo tháp', 'tiep tuc leo thap', 'tiếp tục leo', 'tiep tuc leo', 'tiếp tục', 'tiep tuc', 'leo tháp', 'leo thap', 'tiếp', 'tiep'];
-      const stopKeywords = ['ket thuc', 'kết thúc', 'dừng', 'dung', 'nhận thưởng'];
+    const stopKeywords = ['ket thuc', 'kết thúc', 'dừng', 'dung', 'nhận thưởng'];
 
     const result = await this.exec(`(() => {
       const which = ${JSON.stringify(which)};
@@ -2079,7 +2093,7 @@ class NpcBot {
     };
     const keys = dirMap[direction] || dirMap.up;
 
-     return await this.exec(`(() => {
+    return await this.exec(`(() => {
        const username = ${JSON.stringify(username)};
        const keys = ${JSON.stringify(keys)};
        const nd = s => s.replace(/:[a-z_0-9]+:/g, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
