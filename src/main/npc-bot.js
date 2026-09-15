@@ -909,19 +909,17 @@ class NpcBot {
         }
 
         const text = msg.textContent.toLowerCase();
-        if (text.includes('hồi chiêu') || text.includes('cooldown')) {
+        if (text.includes('⏳') || text.includes('hồi chiêu') || text.includes('cooldown') || /đang hồi|đợi lượt/i.test(text)) {
           msg.setAttribute('data-bot-seen', 'true');
           if (msg.id) {
             const parts = msg.id.split('-');
             window.botMaxMsgId = parts[parts.length - 1];
           }
-          const match = text.match(/(?:(\\d+)\\s*[pm])?\\s*(\\d+)\\s*s/);
-          if (match) {
-            let sec = 0;
-            if (match[1]) sec += parseInt(match[1]) * 60;
-            if (match[2]) sec += parseInt(match[2]);
-            return sec;
+          const match = text.match(/(\d+)\s*(?:turn|s|giây|phút)/i);
+          if (match && parseInt(match[1]) > 0) {
+            return parseInt(match[1]);
           }
+          if (text.includes('⏳')) return 5;
           return 120;
         }
       }
