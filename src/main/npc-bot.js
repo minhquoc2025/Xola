@@ -78,6 +78,10 @@ class NpcBot {
     return Math.floor(Math.random() * (max - min + 1)) + min;
   }
 
+  async luanhoiClickWait(minMs = 1800) {
+    await this.delay(Math.max(minMs, this.buttonDelayMs || 0));
+  }
+
   handleLock(lockInfo) {
     this.log(`🔒 NPC ${this.npcNumber} bị khóa! → Chuyển NPC ${lockInfo.requiredNpc}, cần thắng ${lockInfo.winsLeft} lần.`);
     this.npcNumber = lockInfo.requiredNpc;
@@ -601,6 +605,91 @@ class NpcBot {
 
   async sendNpcCommand() {
     return this.sendChat(`!npc ${this.npcNumber}`);
+  }
+
+  async captureLuanhoiAnchor() {
+    const command = this.luanhoiCmd || '!luanhoi';
+    const anchorId = await this.exec(`(() => {
+      const command = ${JSON.stringify(command)};
+      const username = ${JSON.stringify(this.username || '')};
+      const getId = value => {
+        const match = String(value || '').match(/(\d{10,30})/);
+        return match ? match[1] : '';
+      };
+      let found = '';
+      let directFound = false;
+      for (const msg of document.querySelectorAll('[role="article"]')) {
+        const text = msg.textContent || '';
+        const hasCommandReply = Array.from(msg.querySelectorAll('[class*="repliedTextPreview"], [class*="repliedMessageClickable"], [class*="reply"]'))
+          .some(reply => (reply.textContent || '').includes(command));
+        if (hasCommandReply && (!username || text.includes(username))) directFound = true;
+        if (!text.includes(command) || (username && !text.includes(username))) continue;
+        const values = [msg.id, msg.getAttribute('data-list-item-id'), msg.getAttribute('data-message-id')];
+        for (const value of values) {
+          const id = getId(value);
+          if (id && (!found || BigInt(id) > BigInt(found))) found = id;
+        }
+      }
+      if (found) window.luanhoiAnchorId = found;
+      return found || (directFound ? 'direct' : '');
+    })()`);
+    if (anchorId && anchorId !== 'direct') this.log(`🔗 Đã lưu ID message !luanhoi: ${anchorId}.`);
+    else if (anchorId) this.log('🔗 Đã neo vào message game trực tiếp mới nhất có reply !luanhoi của bạn.');
+    else this.log('⚠️ Không lấy được ID thật của message !luanhoi; tạm thời không click message nào.');
+    return anchorId;
+  }
+
+  async markLuanhoiMessages() {
+    await this.exec(`(() => {
+      const anchorId = window.luanhoiAnchorId || '';
+      const articles = Array.from(document.querySelectorAll('[role="article"]'));
+      const attrNames = ['data-message-id', 'data-reference-id', 'data-message-reference', 'href'];
+      const getId = value => {
+        const match = String(value || '').match(/(\d{10,30})/);
+        return match ? match[1] : '';
+      };
+
+      for (const msg of articles) msg.removeAttribute('data-luanhoi-owned');
+      if (!anchorId) {
+        let direct = null;
+        const command = ${JSON.stringify(this.luanhoiCmd || '!luanhoi')};
+        const username = ${JSON.stringify(this.username || '')};
+        for (const msg of articles) {
+          const hasOwnedReply = Array.from(msg.querySelectorAll('[class*="repliedTextPreview"], [class*="repliedMessageClickable"], [class*="reply"]'))
+            .some(reply => {
+              const replyText = reply.textContent || '';
+              return replyText.includes(command);
+            });
+          if (hasOwnedReply && (!username || (msg.textContent || '').includes(username))) direct = msg;
+        }
+        if (direct) direct.setAttribute('data-luanhoi-owned', 'true');
+        return;
+      }
+      const ids = new Set([anchorId]);
+
+      for (let pass = 0; pass < 5; pass++) {
+        let changed = false;
+        for (const msg of articles) {
+          if (msg.getAttribute('data-luanhoi-owned') === 'true') {
+            const messageId = getId(msg.id) || getId(msg.getAttribute('data-list-item-id')) || getId(msg.getAttribute('data-message-id'));
+            if (messageId) ids.add(messageId);
+            continue;
+          }
+          const refs = Array.from(msg.querySelectorAll('[data-message-id], [data-reference-id], [data-message-reference], a[href]'));
+          const referencesOwned = refs.some(el => attrNames.some(name => {
+            const referenceId = getId(el.getAttribute(name));
+            return referenceId && ids.has(referenceId);
+          }));
+          if (referencesOwned) {
+            msg.setAttribute('data-luanhoi-owned', 'true');
+            const messageId = getId(msg.id) || getId(msg.getAttribute('data-list-item-id')) || getId(msg.getAttribute('data-message-id'));
+            if (messageId) ids.add(messageId);
+            changed = true;
+          }
+        }
+        if (!changed) break;
+      }
+    })()`);
   }
 
   async checkBattleEnd() {
@@ -1347,8 +1436,16 @@ class NpcBot {
     await this.exec('window.luanhoiBuffTierClicked = 0; true;');
 
     this.log(`\n=== 🌀 LUÂN HỒI: ${this.luanhoiCmd} ===`);
+    await this.exec('window.luanhoiAnchorBeforeId = window.botMaxMsgId || "0"; window.luanhoiAnchorId = ""; true;');
     await this.sendChat(this.luanhoiCmd);
     await this.delay(this.rand(3000, 4000));
+    if (!this.isRunning || this.runId !== runId) return;
+    const anchorId = await this.captureLuanhoiAnchor();
+    if (!anchorId) {
+      this.log('⛔ Luân hồi dừng để tránh thao tác nhầm battle khác.');
+      return;
+    }
+    await this.markLuanhoiMessages();
 
     // DEBUG: in text các message gần đây để xác định UI thật của game
     const msgsDebug = await this.exec(`(() => {
@@ -1386,16 +1483,17 @@ class NpcBot {
       const leftoverCont = await this.clickContinueOrStop('continue');
       if (leftoverCont) {
         this.log(`↪️ Phát hiện & bấm nút "Tiếp tục leo tháp" còn sót lại: ${leftoverCont}`);
-        await this.delay(this.rand(1500, 2500));
+        await this.luanhoiClickWait(2000);
         continue;
       }
       if (await this.clickDoor('up')) {
         this.log('🚪 Đã chọn cửa hướng lên (boss mốc).');
-        await this.delay(this.rand(1200, 2000));
+        await this.luanhoiClickWait(2000);
       }
       const b = await this.clickBuffByPriority();
       if (b) {
         this.log(`⚡ Đã chọn buff: "${b}"`);
+        await this.luanhoiClickWait(2000);
         entered = true;
         const tierNow = await this.readLuanhoiTier();
         if (tierNow > 0) this.luanhoiCurrentTier = tierNow;
@@ -1544,6 +1642,7 @@ class NpcBot {
   // Gộp 5 bước (buff, advance, battle-end, cooldown, click skill) vào 1 lần executeJavaScript/lượt
   // — thay vì 5-6 round-trip riêng biệt như trước, giảm trễ dội mỗi lượt đánh.
   async luanhoiBattleTick() {
+    await this.markLuanhoiMessages();
     const username = this.username || '';
     const names = this.luanhoiSkillNames;
     const startIdx = this.luanhoiSkillIdx % names.length;
@@ -1572,9 +1671,7 @@ class NpcBot {
       // ---- 1) BUFF (ưu tiên cao nhất) ----
       for (const msg of recent40) {
         const rawText = msg.textContent || '';
-        if (username && !rawText.includes(username)) {
-          if (!/(?:luân hồi|luanhoi|tầng|thap|hạ gục|han guc|đánh bại|boss)/i.test(rawText)) continue;
-        }
+        if (msg.getAttribute('data-luanhoi-owned') !== 'true') continue;
         const btns = msg.querySelectorAll('button, [role="button"]');
         if (btns.length === 0) continue;
         let maxP = -1, bestBtn = null, bestText = '';
@@ -1604,9 +1701,7 @@ class NpcBot {
         const clickedTier = window.luanhoiBuffTierClicked || 0;
         for (const msg of recent40) {
           const rawText = msg.textContent || '';
-          if (username && !rawText.includes(username)) {
-            if (!/(?:luân hồi|luanhoi|tầng|thap|hạ gục|han guc|đánh bại|boss|tiếp tục|ket thuc)/i.test(rawText)) continue;
-          }
+          if (msg.getAttribute('data-luanhoi-owned') !== 'true') continue;
           const tm = rawText.match(/(?:tầng|tầng luân hồi|tier)\s*([0-9]{1,3})/i);
           const newTier = tm ? parseInt(tm[1]) : null;
           const btns = msg.querySelectorAll('button, [role="button"]');
@@ -1629,9 +1724,7 @@ class NpcBot {
         const knownTier = window.luanhoiBuffTierClicked || 0;
         for (const msg of recent30) {
           const rawText = msg.textContent || '';
-          if (username && !rawText.includes(username)) {
-            if (!/(?:luân hồi|luanhoi|tầng|thap|hạ gục|han guc|đánh bại|boss|tiếp tục|ket thuc)/i.test(rawText)) continue;
-          }
+          if (msg.getAttribute('data-luanhoi-owned') !== 'true') continue;
           const text = rawText.toLowerCase();
           const hasWin = /chiến thắng|thắng!/.test(text);
           const hasLoss = /thất bại|bạn đã thua|thua!/.test(text);
@@ -1742,10 +1835,7 @@ class NpcBot {
         for (const msg of recent40) {
           const rawText = msg.textContent || '';
           const norm = removeVN(rawText);
-          if (username) {
-            const userFullName = removeVN(username);
-            if (!norm.includes(userFullName) && !norm.includes('luan') && !norm.includes('thap')) continue;
-          }
+          if (msg.getAttribute('data-luanhoi-owned') !== 'true') continue;
           const btns = msg.querySelectorAll('button, [role="button"]');
           for (const btn of btns) {
             if (btn.disabled) continue;
@@ -1820,7 +1910,7 @@ class NpcBot {
         noSkillSince = Date.now();
       }
 
-      await this.delay(this.rand(1200, 1800));
+      await this.luanhoiClickWait(2000);
     }
 
     return { ended: false };
@@ -1828,6 +1918,7 @@ class NpcBot {
 
   // Tìm skill luân hồi theo TÊN (bỏ qua nút buff Phàm/Linh/Huyền/Thiên và skill mặc định), click luân phiên
   async clickNextLuanhoiSkill() {
+    await this.markLuanhoiMessages();
     const username = this.username || '';
     const names = this.luanhoiSkillNames;
     const tierWords = ['pham', 'linh', 'huyen', 'thien'];
@@ -1852,7 +1943,7 @@ class NpcBot {
       for (const msg of recent) {
         const rawText = msg.textContent || '';
         const norm = removeVN(rawText);
-        if (userFullName && !norm.includes(userFullName) && !norm.includes('luan') && !norm.includes('thap')) continue;
+        if (!userFullName || !norm.includes(userFullName)) continue;
         const btns = msg.querySelectorAll('button, [role="button"]');
         if (btns.length === 0) continue;
         for (const btn of btns) {
@@ -1897,7 +1988,7 @@ class NpcBot {
       for (const msg of recent) {
         const rawText = msg.textContent || '';
         const norm = removeVN(rawText);
-        if (userFullName && !norm.includes(userFullName) && !norm.includes('luan') && !norm.includes('thap')) continue;
+        if (!userFullName || !norm.includes(userFullName)) continue;
         const btns = msg.querySelectorAll('button, [role="button"]');
         for (const btn of btns) {
           if (btn.disabled) continue;
@@ -1959,12 +2050,16 @@ class NpcBot {
   // Kiểm tra xem màn "Đánh Cược Độ Khó — Sau Tầng X" (chọn hướng) của đúng tầng boss vừa thắng
   // đã xuất hiện chưa — nếu có, nghĩa là đã qua bước "Tiếp tục leo tháp" rồi, không cần bấm lại nữa.
   async checkAlreadyPastContinue(bossTier) {
+    await this.markLuanhoiMessages();
+    const username = this.username || '';
     const val = await this.exec(`(() => {
       const bossTier = ${JSON.stringify(bossTier)};
+      const username = ${JSON.stringify(username)};
       const msgs = document.querySelectorAll('[role="article"]');
       const recent = Array.from(msgs).slice(-20).reverse();
       for (const msg of recent) {
         const text = msg.textContent || '';
+        if (msg.getAttribute('data-luanhoi-owned') !== 'true') continue;
         const m = text.match(/sau\\s*t[aầ]ng\\s*([0-9]{1,3})/i);
         if (m && m[1] && parseInt(m[1]) >= bossTier) return parseInt(m[1]);
       }
@@ -1974,16 +2069,14 @@ class NpcBot {
   }
 
   async readLuanhoiTier() {
+    await this.markLuanhoiMessages();
     const username = this.username || '';
     const val = await this.exec(`(() => {
        const username = ${JSON.stringify(username)};
        const msgs = document.querySelectorAll('[role="article"]');
        const recent = Array.from(msgs).slice(-40).reverse();
        for (const msg of recent) {
-         if (username && !msg.textContent.includes(username)) {
-           const rawTextChk = msg.textContent || '';
-           if (!/(?:luân hồi|luanhoi|tầng|thap)/i.test(rawTextChk)) continue;
-         }
+         if (msg.getAttribute('data-luanhoi-owned') !== 'true') continue;
          const text = msg.textContent;
          const m = text.match(/(?:tầng|tầng luân hồi|tier)\s*([0-9]{1,3})/i);
          if (m && m[1]) {
@@ -2012,6 +2105,7 @@ class NpcBot {
 
   // Click nút "Tiếp tục" hoặc "Dừng nhận thưởng"
   async clickContinueOrStop(which) {
+    await this.markLuanhoiMessages();
     const username = this.username || '';
     const contKeywords = ['tiếp tục leo tháp', 'tiep tuc leo thap', 'tiếp tục leo', 'tiep tuc leo', 'tiếp tục', 'tiep tuc', 'leo tháp', 'leo thap', 'tiếp', 'tiep'];
     const stopKeywords = ['ket thuc', 'kết thúc', 'dừng', 'dung', 'nhận thưởng'];
@@ -2025,9 +2119,9 @@ class NpcBot {
        const msgs = document.querySelectorAll('[role="article"]');
        const recent = Array.from(msgs).slice(-30).reverse();
 
-       const scan = (requireUsername) => {
+       const scan = () => {
          for (const msg of recent) {
-           if (requireUsername && username && !(msg.textContent || '').includes(username)) continue;
+           if (msg.getAttribute('data-luanhoi-owned') !== 'true') continue;
            const btns = msg.querySelectorAll('button, [role="button"]');
            if (btns.length === 0) continue;
            for (const btn of btns) {
@@ -2054,13 +2148,9 @@ class NpcBot {
          return null;
        };
 
-       // Ưu tiên tìm trong message có gắn đúng tên mình (an toàn khi nhiều người chơi chung phòng)
-       const strict = username ? scan(true) : null;
-       if (strict) return strict;
-
-       // Fallback: không thấy message gắn tên mình → quét không lọc tên (rủi ro bấm nhầm người khác)
-       const loose = scan(false);
-       if (loose) return username ? ('UNFILTERED:' + loose) : loose;
+      // Chỉ click message có gắn đúng tên mình; group chat có thể có nhiều battle cùng lúc.
+      const strict = scan();
+      if (strict) return strict;
 
         const btnDump = recent.slice(0, 5).map(m => {
           const btns = Array.from(m.querySelectorAll('button, [role="button"]')).map(b => (b.textContent||'').trim()).filter(Boolean);
@@ -2074,15 +2164,12 @@ class NpcBot {
       this.log('   ' + result.slice('NOTFOUND:'.length));
       return null;
     }
-    if (result && typeof result === 'string' && result.startsWith('UNFILTERED:')) {
-      this.log(`⚠️ [Cảnh báo] Không thấy nút "${which}" trong message gắn tên "${username}" → dùng fallback không lọc tên (có rủi ro bấm nhầm nút của người khác trong phòng đông).`);
-      return result.slice('UNFILTERED:'.length);
-    }
     return result;
   }
 
   // Click nút cửa theo hướng (mặc định up)
   async clickDoor(direction) {
+    await this.markLuanhoiMessages();
     const username = this.username || '';
     const dirMap = {
       up: ['lên', 'len', 'trên', 'tren', 'lên trên', 'len tren', '↑', '⬆'],
@@ -2099,10 +2186,7 @@ class NpcBot {
        const msgs = document.querySelectorAll('[role="article"]');
        const recent = Array.from(msgs).slice(-30).reverse();
        for (const msg of recent) {
-         if (username && !msg.textContent.includes(username)) {
-           const rawTextChk = msg.textContent || '';
-           if (!/(?:luân hồi|luanhoi|tầng|thap|hạ gục|han guc|đánh bại|boss|tiếp tục|ket thuc)/i.test(rawTextChk)) continue;
-         }
+         if (msg.getAttribute('data-luanhoi-owned') !== 'true') continue;
          const btns = msg.querySelectorAll('button, [role="button"]');
         if (btns.length === 0) continue;
         for (const btn of btns) {
@@ -2124,6 +2208,7 @@ class NpcBot {
 
   // Chọn buff ưu tiên Thiên > Huyền > Linh > Phàm. Dùng window.luanhoiBuffTierClicked làm guard chính.
   async clickBuffByPriority() {
+    await this.markLuanhoiMessages();
     const username = this.username || '';
     const clicked = await this.exec(`(() => {
       const tierOf = { 'thien': 3, 'huyen': 2, 'linh': 1, 'pham': 0 };
@@ -2134,9 +2219,7 @@ class NpcBot {
 
        for (const msg of recent) {
          const rawText = msg.textContent || '';
-         if (username && !rawText.includes(username)) {
-           if (!/(?:luân hồi|luanhoi|tầng|thap|hạ gục|han guc|đánh bại|boss)/i.test(rawText)) continue;
-         }
+         if (msg.getAttribute('data-luanhoi-owned') !== 'true') continue;
          const btns = msg.querySelectorAll('button, [role="button"]');
         if (btns.length === 0) continue;
         let maxP = -1, bestBtn = null, bestText = '';
