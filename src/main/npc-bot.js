@@ -36,7 +36,8 @@ class NpcBot {
      this.lastLuanhoiTarget = null;
      this.bicanh = false;
      this.bicanhCmd = '!bicanh';
-     this.bicanhSkills = ['Vạn Kiếm Quy Tông', 'Kiếm Khí Xung Thiên', 'Thái Cực Dưỡng Sinh', 'Hỏa Giáp', 'Băng Phong', 'Phá Giáp', 'Kiếm Cơ Bản'];
+     this.bicanhSkillOrder = [];
+     this.bicanhSkills = ['Kiếm Cơ Bản','Liên Hoàn Kích','Trọng Kích','Phá Giáp','Xuyên Tâm','Liệt Hỏa Trảm','Hấp Huyết','Kịch Độc','Lôi Kích','Tuyệt Sát','Thần Uy','Băng Phong','Phòng Ngự','Phản Kích','Hồi Phục','Hộ Thuẫn','Hỏa Giáp','Thái Cực Dưỡng Sinh','Kiếm Khí Xung Thiên','Kim Cương Phục Ma','Hỗn Nguyên Hộ Thể','Vạn Kiếm Quy Tông','Phong Ấn Thất Mạch'];
      this._bicanhSkillIdx = 0;
      this.stats = {
       wins: 0,
@@ -100,11 +101,14 @@ class NpcBot {
     if (config.tuLuyenAfterTarget !== undefined) this.tuLuyenAfterTarget = config.tuLuyenAfterTarget;
     if (config.username !== undefined) this.username = config.username;
     if (config.mode !== undefined) this.mode = config.mode;
-    if (config.luanhoi !== undefined) this.luanhoi = config.luanhoi;
-    if (config.luanhoiTarget !== undefined) this.luanhoiTarget = config.luanhoiTarget;
-    if (config.luanhoiCmd !== undefined) this.luanhoiCmd = config.luanhoiCmd;
-    if (config.luanhoiSkillNames !== undefined) this.luanhoiSkillNames = config.luanhoiSkillNames;
-  }
+     if (config.luanhoi !== undefined) this.luanhoi = config.luanhoi;
+     if (config.luanhoiTarget !== undefined) this.luanhoiTarget = config.luanhoiTarget;
+     if (config.luanhoiCmd !== undefined) this.luanhoiCmd = config.luanhoiCmd;
+     if (config.luanhoiSkillNames !== undefined) this.luanhoiSkillNames = config.luanhoiSkillNames;
+     if (config.bicanhSkillOrder !== undefined) {
+       this.bicanhSkillOrder = Array.isArray(config.bicanhSkillOrder) ? config.bicanhSkillOrder : config.bicanhSkillOrder.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+     }
+   }
 
   async start() {
     if (this.isRunning) {
@@ -921,11 +925,27 @@ class NpcBot {
           return 120;
         }
       }
-      return -1;
-    })()`);
-  }
+     return -1;
+   })()`);
+   }
 
-  async checkAlreadyFighting() {
+   async checkBicanhCooldown() {
+     return await this.exec(`(() => {
+       const msgs = document.querySelectorAll('[role="article"]');
+       const recent = Array.from(msgs).slice(-30).reverse();
+       for (const msg of recent) {
+         const text = msg.textContent || '';
+         if (text.includes('⏳') || /đang hồi|đợi lượt/i.test(text)) {
+           const match = text.match(/(\d+)\s*(?:turn|s|giây|phút)/i);
+           if (match && parseInt(match[1]) > 0) return parseInt(match[1]) * 1000;
+           return 3000;
+         }
+       }
+       return 0;
+     })()`);
+   }
+
+   async checkAlreadyFighting() {
     const username = this.username || '';
     return await this.exec(`(() => {
       const maxIdStr = window.botMaxMsgId || '0';
@@ -1863,18 +1883,31 @@ class NpcBot {
      }
      this.log(`✅ Đã click "${floorClicked}" — bắt đầu spam skill...`);
 
-     // Spam skill theo danh sách, lặp lại cho đến khi user bấm stop
-      while (this.isRunning && this.runId === runId) {
-        const skillName = this.bicanhSkills[this._bicanhSkillIdx % this.bicanhSkills.length];
-        const clicked = await this.clickNextBicanhSkill(skillName);
-        if (clicked) {
-          this.log(`🌀 Click skill bicanh: "${clicked}"`);
-          this._bicanhSkillIdx++;
+      // Spam skill theo danh sách, lặp lại cho đến khi user bấm stop
+       while (this.isRunning && this.runId === runId) {
+         let skillName;
+         if (this.bicanhSkillOrder.length > 0) {
+           const stt = this.bicanhSkillOrder[this._bicanhSkillIdx % this.bicanhSkillOrder.length];
+           skillName = this.bicanhSkills[stt - 1];
+         } else {
+           skillName = this.bicanhSkills[this._bicanhSkillIdx % this.bicanhSkills.length];
+         }
+         if (!skillName) { this._bicanhSkillIdx++; continue; }
+         const clicked = await this.clickNextBicanhSkill(skillName);
+         if (clicked) {
+            this.log(`🌀 Click skill bicanh: "${clicked}"`);
+            this._bicanhSkillIdx++;
+          }
+          const cd = await this.checkBicanhCooldown();
+          if (cd > 0) {
+            this.log(`⏳ Cooldown — chờ ${cd}ms`);
+            await this.delay(cd);
+          } else {
+            await this.delay(this.rand(800, 1500));
+          }
         }
-        await this.delay(this.rand(800, 1500));
-      }
 
-     this.log('⏹ BICANH MODE đã dừng.');
+      this.log('⏹ BICANH MODE đã dừng.');
    }
 
    // Tìm và click nút "Leo Tầng N" trong message gần nhất

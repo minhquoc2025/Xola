@@ -101,6 +101,7 @@ function getBicanhConfig() {
     mode: 'bicanh',
     username: (document.getElementById('username-bicanh').value || 'Quất Bất Lực').trim(),
     bicanhCmd: (document.getElementById('bicanh-cmd').value || '!bicanh').trim(),
+    bicanhSkillOrder: localStorage.getItem('bicanhSkillOrder') || '',
   };
 }
 
@@ -140,6 +141,97 @@ function updateBotButton() {
       btn.className = 'btn-start';
     }
   }
+}
+
+// === SKILL MODAL ===
+
+const ALL_SKILLS = [
+  // Tấn Công
+  { stt: 1, name: 'Kiếm Cơ Bản', cat: 'Tấn Công' },
+  { stt: 2, name: 'Liên Hoàn Kích', cat: 'Tấn Công' },
+  { stt: 3, name: 'Trọng Kích', cat: 'Tấn Công' },
+  { stt: 4, name: 'Phá Giáp', cat: 'Tấn Công' },
+  { stt: 5, name: 'Xuyên Tâm', cat: 'Tấn Công' },
+  // Đặc Biệt
+  { stt: 6, name: 'Liệt Hỏa Trảm', cat: 'Đặc Biệt' },
+  { stt: 7, name: 'Hấp Huyết', cat: 'Đặc Biệt' },
+  { stt: 8, name: 'Kịch Độc', cat: 'Đặc Biệt' },
+  { stt: 9, name: 'Lôi Kích', cat: 'Đặc Biệt' },
+  { stt: 10, name: 'Tuyệt Sát', cat: 'Đặc Biệt' },
+  { stt: 11, name: 'Thần Uy', cat: 'Đặc Biệt' },
+  { stt: 12, name: 'Băng Phong', cat: 'Đặc Biệt' },
+  // Chống Xỏ Lá
+  { stt: 13, name: 'Phòng Ngự', cat: 'Chống Xỏ Lá' },
+  { stt: 14, name: 'Phản Kích', cat: 'Chống Xỏ Lá' },
+  { stt: 15, name: 'Hồi Phục', cat: 'Chống Xỏ Lá' },
+  { stt: 16, name: 'Hộ Thuẫn', cat: 'Chống Xỏ Lá' },
+  { stt: 17, name: 'Hỏa Giáp', cat: 'Chống Xỏ Lá' },
+  // Luyện Khí
+  { stt: 18, name: 'Thái Cực Dưỡng Sinh', cat: 'Luyện Khí' },
+  { stt: 19, name: 'Kiếm Khí Xung Thiên', cat: 'Luyện Khì' },
+  { stt: 20, name: 'Kim Cương Phục Ma', cat: 'Luyện Khí' },
+  // Trúc Cơ
+  { stt: 21, name: 'Hỗn Nguyên Hộ Thể', cat: 'Trúc Cơ' },
+  { stt: 22, name: 'Vạn Kiếm Quy Tông', cat: 'Trúc Cơ' },
+  { stt: 23, name: 'Phong Ấn Thất Mạch', cat: 'Trúc Cơ' },
+];
+
+let skillModalOpen = false;
+
+function toggleSkillModal() {
+  skillModalOpen = !skillModalOpen;
+  const modal = document.getElementById('skill-modal');
+  if (skillModalOpen) {
+    modal.style.display = 'flex';
+    buildSkillGrid();
+    loadSkillOrder();
+  } else {
+    modal.style.display = 'none';
+  }
+}
+
+function buildSkillGrid() {
+  const left = document.getElementById('skill-grid-left');
+  const right = document.getElementById('skill-grid-right');
+  if (!left || !right) return;
+  left.innerHTML = '';
+  right.innerHTML = '';
+  const half = Math.ceil(ALL_SKILLS.length / 2);
+  for (let i = 0; i < ALL_SKILLS.length; i++) {
+    const sk = ALL_SKILLS[i];
+    const div = document.createElement('div');
+    div.className = 'skill-item';
+    div.innerHTML = `<span class="stt">${sk.stt}</span><span class="skill-name">${sk.name}</span><span class="skill-cat">${sk.cat}</span>`;
+    (i < half ? left : right).appendChild(div);
+  }
+}
+
+function loadSkillOrder() {
+  const saved = localStorage.getItem('bicanhSkillOrder');
+  const input = document.getElementById('skill-order-input');
+  if (saved && input) input.value = saved;
+}
+
+function saveSkillOrder() {
+  const input = document.getElementById('skill-order-input');
+  const status = document.getElementById('skill-order-status');
+  if (!input) return;
+  const raw = input.value.trim();
+  if (!raw) { status.textContent = '⚠️ Chưa nhập thứ tự'; status.style.color = '#e94560'; return; }
+  const order = raw.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n >= 1 && n <= 23);
+  if (order.length === 0) { status.textContent = '⚠️ Không có STT hợp lệ'; status.style.color = '#e94560'; return; }
+  localStorage.setItem('bicanhSkillOrder', raw);
+  status.textContent = `✅ Đã lưu: ${order.join(' → ')} (${order.length} skill)`;
+  status.style.color = '#4ecca3';
+  toggleSkillModal();
+}
+
+function resetSkillOrder() {
+  localStorage.removeItem('bicanhSkillOrder');
+  const input = document.getElementById('skill-order-input');
+  const status = document.getElementById('skill-order-status');
+  if (input) input.value = '';
+  if (status) { status.textContent = '🔄 Đã reset về mặc định'; status.style.color = '#4ecca3'; }
 }
 
 // === STATS ===

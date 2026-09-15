@@ -207,7 +207,27 @@
       background: #3a3a5a;
     }
 
-    /* === Stats Panel (50%) === */
+         /* === Skill Modal === */
+     .skill-item {
+       display: flex; align-items: center; gap: 6px;
+       padding: 4px 8px; margin: 2px 0;
+       background: #0a1628; border: 1px solid #1a2a4e;
+       border-radius: 4px; font-size: 11px; color: #ccc;
+       cursor: default;
+     }
+     .skill-item .stt {
+       background: #e94560; color: #fff;
+       width: 22px; height: 22px; border-radius: 50%;
+       display: flex; align-items: center; justify-content: center;
+       font-size: 10px; font-weight: 700; flex-shrink: 0;
+     }
+     .skill-item .skill-name { flex: 1; }
+     .skill-item .skill-cat {
+       font-size: 9px; color: #556688;
+       background: #1a2a4e; padding: 1px 5px; border-radius: 3px;
+     }
+
+     /* === Stats Panel (50%) === */
     #stats-panel {
       flex: 0.5;
       border: 1px solid #1a2a4e;
@@ -425,6 +445,28 @@
                 onclick="setMode('luanhoi')">🌀 Luân Hồi</button>
         <button id="tab-bicanh"
                 onclick="setMode('bicanh')">⚔️ Bicanh</button>
+        <button id="btn-config-modal" onclick="toggleSkillModal()" style="background:#2a2a4a;color:#eee;border:1px solid #3a3a5a;padding:5px 12px;border-radius:4px;cursor:pointer;font-size:11px;">⚙️ Skill Config</button>
+      </div>
+      <div id="skill-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:1000;justify-content:center;align-items:center;">
+        <div style="background:#1a1a2e;border:2px solid #e94560;border-radius:12px;padding:20px;width:90%;max-width:800px;max-height:85vh;overflow-y:auto;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
+            <h3 style="color:#e94560;margin:0;">⚔️ CẤU HÌNH SKILL BICANH</h3>
+            <button onclick="toggleSkillModal()" style="background:none;border:none;color:#eee;font-size:22px;cursor:pointer;">✕</button>
+          </div>
+          <p style="color:#aaa;font-size:11px;margin-bottom:10px;">Nhập STT cách nhau bởi dấu phẩy, ví dụ: <b style="color:#4ecca3;">3,4,5,9</b></p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:15px;">
+            <div id="skill-grid-left"></div><div id="skill-grid-right"></div>
+          </div>
+          <div style="margin-bottom:15px;">
+            <label style="color:#eee;font-size:12px;">Thứ tự click: </label>
+            <input id="skill-order-input" type="text" placeholder="VD: 1,2,3,4,5,6" style="width:100%;padding:8px 10px;background:#0a0a1a;border:1px solid #1a1a4e;border-radius:6px;color:#eee;font-size:14px;outline:none;box-sizing:border-box;">
+          </div>
+          <div style="display:flex;gap:10px;justify-content:flex-end;">
+            <button onclick="saveSkillOrder()" style="background:#1a5a2e;color:#fff;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:13px;">💾 Lưu</button>
+            <button onclick="resetSkillOrder()" style="background:#5a1a1a;color:#fff;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:13px;">Reset</button>
+          </div>
+          <div id="skill-order-status" style="margin-top:10px;color:#4ecca3;font-size:12px;"></div>
+        </div>
       </div>
       <!-- === AUTO FARM NPC CONFIG === -->
       <div id="config-npc"
