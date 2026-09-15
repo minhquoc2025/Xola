@@ -29,7 +29,7 @@ class NpcBot {
     this.luanhoi = false;
     this.luanhoiTarget = 10;
      this.luanhoiCmd = '!luanhoi';
-     this.luanhoiSkillNames = ['Vạn Kiếm Quy Tông', 'Hỗn Nguyên Hộ Thể', 'Kiếm Khí Xung Thiên', 'Thái Cực Dưỡng Sinh'];
+     this.luanhoiSkillNames = ['Kiếm Cơ Bản','Liên Hoàn Kích','Trọng Kích','Phá Giáp','Xuyên Tâm','Liệt Hỏa Trảm','Hấp Huyết','Kịch Độc','Lôi Kích','Tuyệt Sát','Thần Uy','Băng Phong','Phòng Ngự','Phản Kích','Hồi Phục','Hộ Thuẫn','Hỏa Giáp','Thái Cực Dưỡng Sinh','Kiếm Khí Xung Thiên','Kim Cương Phục Ma','Hỗn Nguyên Hộ Thể','Vạn Kiếm Quy Tông','Phong Ấn Thất Mạch'];
      this.luanhoiSkillIdx = 0;
      this.luanhoiCurrentTier = 0;
      this.luanhoiBuffInit = false;
@@ -37,7 +37,6 @@ class NpcBot {
      this.bicanh = false;
      this.bicanhCmd = '!bicanh';
      this.bicanhSkillOrder = [];
-     this.bicanhSkills = ['Kiếm Cơ Bản','Liên Hoàn Kích','Trọng Kích','Phá Giáp','Xuyên Tâm','Liệt Hỏa Trảm','Hấp Huyết','Kịch Độc','Lôi Kích','Tuyệt Sát','Thần Uy','Băng Phong','Phòng Ngự','Phản Kích','Hồi Phục','Hộ Thuẫn','Hỏa Giáp','Thái Cực Dưỡng Sinh','Kiếm Khí Xung Thiên','Kim Cương Phục Ma','Hỗn Nguyên Hộ Thể','Vạn Kiếm Quy Tông','Phong Ấn Thất Mạch'];
      this._bicanhSkillIdx = 0;
      this.stats = {
       wins: 0,
@@ -2200,13 +2199,13 @@ class NpcBot {
 
       // Spam skill theo danh sách, lặp lại cho đến khi user bấm stop
        while (this.isRunning && this.runId === runId) {
-         let skillName;
-         if (this.bicanhSkillOrder.length > 0) {
-           const stt = this.bicanhSkillOrder[this._bicanhSkillIdx % this.bicanhSkillOrder.length];
-           skillName = this.bicanhSkills[stt - 1];
-         } else {
-           skillName = this.bicanhSkills[this._bicanhSkillIdx % this.bicanhSkills.length];
-         }
+          let skillName;
+          if (this.bicanhSkillOrder.length > 0) {
+            const stt = this.bicanhSkillOrder[this._bicanhSkillIdx % this.bicanhSkillOrder.length];
+            skillName = this.luanhoiSkillNames[stt - 1];
+          } else {
+            skillName = this.luanhoiSkillNames[this._bicanhSkillIdx % this.luanhoiSkillNames.length];
+          }
          if (!skillName) { this._bicanhSkillIdx++; continue; }
          const clicked = await this.clickNextBicanhSkill(skillName);
          if (clicked) {
