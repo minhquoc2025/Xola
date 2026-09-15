@@ -50,8 +50,10 @@ function setMode(mode) {
   currentMode = mode;
   document.getElementById('tab-npc').classList.toggle('active', mode === 'npc');
   document.getElementById('tab-luanhoi').classList.toggle('active', mode === 'luanhoi');
+  document.getElementById('tab-bicanh').classList.toggle('active', mode === 'bicanh');
   document.getElementById('config-npc').classList.toggle('active', mode === 'npc');
   document.getElementById('config-luanhoi').classList.toggle('active', mode === 'luanhoi');
+  document.getElementById('config-bicanh').classList.toggle('active', mode === 'bicanh');
   updateBotButton();
 }
 
@@ -94,7 +96,16 @@ function getLuanHoiConfig() {
   };
 }
 
+function getBicanhConfig() {
+  return {
+    mode: 'bicanh',
+    username: (document.getElementById('username-bicanh').value || 'Quất Bất Lực').trim(),
+    bicanhCmd: (document.getElementById('bicanh-cmd').value || '!bicanh').trim(),
+  };
+}
+
 function getActiveConfig() {
+  if (currentMode === 'bicanh') return getBicanhConfig();
   return currentMode === 'luanhoi' ? getLuanHoiConfig() : getNpcConfig();
 }
 
@@ -109,7 +120,7 @@ async function toggleBot() {
     await window.api.botUpdateConfig(0, config);
     window.api.botStart(0);
     isNpcRunning = true;
-    const label = config.mode === 'luanhoi' ? 'Luân Hồi' : 'NPC';
+    const label = config.mode === 'luanhoi' ? 'Luân Hồi' : (config.mode === 'bicanh' ? 'Bicanh' : 'NPC');
     appendLog(`[${label}] ▶ Started`);
   }
   updateBotButton();
@@ -117,7 +128,8 @@ async function toggleBot() {
 
 function updateBotButton() {
   const isLH = currentMode === 'luanhoi';
-  const btns = [document.getElementById('btn-npc-toggle'), document.getElementById('btn-luanhoi-toggle')];
+  const isBC = currentMode === 'bicanh';
+  const btns = [document.getElementById('btn-npc-toggle'), document.getElementById('btn-luanhoi-toggle'), document.getElementById('btn-bicanh-toggle')];
   for (const btn of btns) {
     if (!btn) continue;
     if (isNpcRunning) {
@@ -154,8 +166,10 @@ async function updateStats() {
     const battleCount = status.battleCount || 0;
     const totalBattles = status.totalBattles || 0;
 
-    // Top row stats - Target shows battle progress
-    if (status.mode === 'luanhoi') {
+     // Top row stats - Target shows battle progress
+     if (status.mode === 'bicanh') {
+       document.getElementById('stat-total').textContent = `⚔️ Đang spam skill...`;
+     } else if (status.mode === 'luanhoi') {
       const cur = status.lastLuanhoiTarget != null ? status.lastLuanhoiTarget : 0;
       const tgt = status.luanhoiTarget || 0;
       document.getElementById('stat-total').textContent = `Tầng ${cur}/${tgt}`;

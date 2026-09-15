@@ -28,13 +28,17 @@ class NpcBot {
     this.mode = 'npc';
     this.luanhoi = false;
     this.luanhoiTarget = 10;
-    this.luanhoiCmd = '!luanhoi';
-    this.luanhoiSkillNames = ['Vạn Kiếm Quy Tông', 'Hỗn Nguyên Hộ Thể', 'Kiếm Khí Xung Thiên', 'Thái Cực Dưỡng Sinh'];
-    this.luanhoiSkillIdx = 0;
-    this.luanhoiCurrentTier = 0;
-    this.luanhoiBuffInit = false;
-    this.lastLuanhoiTarget = null;
-    this.stats = {
+     this.luanhoiCmd = '!luanhoi';
+     this.luanhoiSkillNames = ['Vạn Kiếm Quy Tông', 'Hỗn Nguyên Hộ Thể', 'Kiếm Khí Xung Thiên', 'Thái Cực Dưỡng Sinh'];
+     this.luanhoiSkillIdx = 0;
+     this.luanhoiCurrentTier = 0;
+     this.luanhoiBuffInit = false;
+     this.lastLuanhoiTarget = null;
+     this.bicanh = false;
+     this.bicanhCmd = '!bicanh';
+     this.bicanhSkills = ['Vạn Kiếm Quy Tông', 'Kiếm Khí Xung Thiên', 'Thái Cực Dưỡng Sinh', 'Hỏa Giáp', 'Băng Phong', 'Phá Giáp', 'Kiếm Cơ Bản'];
+     this._bicanhSkillIdx = 0;
+     this.stats = {
       wins: 0,
       losses: 0,
       coins: 0,
@@ -118,12 +122,17 @@ class NpcBot {
     this.luanhoiSkillIdx = 0;
     this.lastLuanhoiTarget = null;
     this.log('Bot started');
-    if (this.mode === 'luanhoi') {
-      this.log(`=== LUÂN HỒI MODE: Target tầng ${this.luanhoiTarget} ===`);
-      this.luanhoiLoop(this.runId);
-      return;
-    }
-    this.log('=== SMART MODE: Đọc turn real-time ===');
+     if (this.mode === 'luanhoi') {
+       this.log(`=== LUÂN HỒI MODE: Target tầng ${this.luanhoiTarget} ===`);
+       this.luanhoiLoop(this.runId);
+       return;
+     }
+     if (this.mode === 'bicanh') {
+       this.log(`=== BICANH MODE: Spam技能 theo thứ tự ===`);
+       this.bicanhLoop(this.runId);
+       return;
+     }
+     this.log('=== SMART MODE: Đọc turn real-time ===');
     if (this.username) {
       this.log(`=== GROUP MODE: Lọc tin nhắn theo "${this.username}" ===`);
     }
@@ -294,14 +303,16 @@ class NpcBot {
       targetMaxNpc: this.targetMaxNpc,
       tuLuyen: this.tuLuyen,
       tuLuyenAfterTarget: this.tuLuyenAfterTarget,
-      tuLuyenActive: this._tuLuyenActive,
-      climbWinsNeeded: this.climbWinsNeeded,
-      climbWinsDone: this.climbWinsDone,
-      stats: { ...this.stats },
-    };
-  }
+       tuLuyenActive: this._tuLuyenActive,
+       climbWinsNeeded: this.climbWinsNeeded,
+       climbWinsDone: this.climbWinsDone,
+       bicanh: this.bicanh,
+       bicanhCmd: this.bicanhCmd,
+       stats: { ...this.stats },
+     };
+   }
 
-  async mainLoop(runId) {
+   async mainLoop(runId) {
     if (!this.isRunning || this.runId !== runId) return;
 
     if (!this.autoClimb && this.battleCount >= this.totalBattles) {
@@ -1825,12 +1836,108 @@ class NpcBot {
       return null;
     })()`);
 
-    if (clicked) {
-      this.log(`🎯 Chọn buff: "${clicked.text}" (ưu tiên, tầng ${clicked.tier || '?'}).`);
-      return clicked.text;
-    }
-    return false;
-  }
-}
+     if (clicked) {
+       this.log(`🎯 Chọn buff: "${clicked.text}" (ưu tiên, tầng ${clicked.tier || '?'}).`);
+       return clicked.text;
+     }
+     return false;
+   }
 
-module.exports = { NpcBot };
+   // === BICANH MODE ===
+   // Gửi !bicanh, click nút "Leo Tầng N", rồi spam skill theo danh sách cho đến khi stop
+   async bicanhLoop(runId) {
+     if (!this.isRunning || this.runId !== runId) return;
+
+     this.log('\n=== ⚔️ BICANH MODE ===');
+     this.log('Gửi lệnh !bicanh...');
+     await this.sendChat(this.bicanhCmd);
+     await this.delay(this.rand(2000, 3000));
+
+     // Click nút "Leo Tầng N"
+     const floorClicked = await this.clickBicanhFloor();
+     if (!floorClicked) {
+       this.log('⚠️ Không tìm thấy nút Leo Tầng. Thử lại...');
+       await this.cooldownWait(5, runId);
+       if (this.isRunning && this.runId === runId) this.bicanhLoop(runId);
+       return;
+     }
+     this.log(`✅ Đã click "${floorClicked}" — bắt đầu spam skill...`);
+
+     // Spam skill theo danh sách, lặp lại cho đến khi user bấm stop
+      while (this.isRunning && this.runId === runId) {
+        const skillName = this.bicanhSkills[this._bicanhSkillIdx % this.bicanhSkills.length];
+        const clicked = await this.clickNextBicanhSkill(skillName);
+        if (clicked) {
+          this.log(`🌀 Click skill bicanh: "${clicked}"`);
+          this._bicanhSkillIdx++;
+        }
+        await this.delay(this.rand(800, 1500));
+      }
+
+     this.log('⏹ BICANH MODE đã dừng.');
+   }
+
+   // Tìm và click nút "Leo Tầng N" trong message gần nhất
+   async clickBicanhFloor() {
+     return await this.exec(`(() => {
+       const msgs = document.querySelectorAll('[role="article"]');
+       const recent = Array.from(msgs).slice(-20).reverse();
+       for (const msg of recent) {
+         const btns = msg.querySelectorAll('button, [role="button"]');
+         if (btns.length === 0) continue;
+         for (const btn of btns) {
+           if (btn.disabled) continue;
+           const raw = (btn.textContent || '').trim();
+           if (!raw || raw.length < 3) continue;
+           if (/[@|!]/.test(raw)) continue;
+           const txt = raw.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g,'d').replace(/\u0110/g,'d');
+           if (txt.includes('leotang') || txt.includes('leo')) {
+             btn.disabled = false;
+             btn.click();
+             return raw;
+           }
+         }
+       }
+       return null;
+     })()`);
+   }
+
+   // Click skill bicanh theo tên
+   async clickNextBicanhSkill(skillName) {
+     const username = this.username || '';
+     const nameNoD = skillName.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+       .replace(/\u0111/g,'d').replace(/\u0110/g,'d')
+       .replace(/\u01A1/g,'o').replace(/\u01A0/g,'o')
+       .replace(/\u01B0/g,'u').replace(/\u01AF/g,'u')
+       .toLowerCase();
+
+     return await this.exec(`(() => {
+       const username = ${JSON.stringify(username)};
+       const nameNoD = ${JSON.stringify(nameNoD)};
+       const usernameFirst = (username || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\u0111/g,'d').replace(/\u0110/g,'d').split(' ')[0].toLowerCase();
+       const msgs = document.querySelectorAll('[role="article"]');
+       const recent = Array.from(msgs).slice(-40).reverse();
+       for (const msg of recent) {
+         const rawText = msg.textContent || '';
+         const norm = rawText.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\u0111/g,'d').replace(/\u0110/g,'d').toLowerCase();
+         if (usernameFirst && !norm.includes(usernameFirst) && !norm.includes('luan') && !norm.includes('thap') && !norm.includes('bicanh')) continue;
+         const btns = msg.querySelectorAll('button, [role="button"]');
+         if (btns.length === 0) continue;
+         for (const btn of btns) {
+           if (btn.disabled) continue;
+           const raw = (btn.textContent || '').trim();
+           if (!raw || /[@|!]/.test(raw)) continue;
+           const clean = raw.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\u0111/g,'d').replace(/\u0110/g,'d').toLowerCase();
+           if (clean === nameNoD || clean.includes(nameNoD)) {
+             btn.disabled = false;
+             btn.click();
+             return raw;
+           }
+         }
+       }
+       return null;
+     })()`);
+   }
+ }
+
+ module.exports = { NpcBot };

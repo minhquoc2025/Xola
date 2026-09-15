@@ -423,6 +423,8 @@
                 onclick="setMode('npc')">⚔️ Auto Farm NPC</button>
         <button id="tab-luanhoi"
                 onclick="setMode('luanhoi')">🌀 Luân Hồi</button>
+        <button id="tab-bicanh"
+                onclick="setMode('bicanh')">⚔️ Bicanh</button>
       </div>
       <!-- === AUTO FARM NPC CONFIG === -->
       <div id="config-npc"
@@ -569,12 +571,38 @@
                    min="0.5"
                    max="10"
                    step="0.5">
-          </div>
-        </div>
-      </div>
-    </div>
+           </div>
+         </div>
+       </div>
 
-    <!-- Stats Panel (50%) -->
+       <!-- === BICANH CONFIG === -->
+       <div id="config-bicanh"
+            class="mode-config">
+         <div class="config-grid">
+           <div class="config-field full">
+             <button id="btn-bicanh-toggle"
+                     style="width: 100%;"
+                     class="btn-start"
+                     onclick="toggleBot()">▶ START</button>
+           </div>
+           <div class="config-field">
+             <label for="username-bicanh">Username</label>
+             <input id="username-bicanh"
+                    type="text"
+                    value="Quất Bất Lực"
+                    placeholder="Tên Discord">
+           </div>
+           <div class="config-field">
+             <label for="bicanh-cmd">Lệnh</label>
+             <input id="bicanh-cmd"
+                    type="text"
+                    value="!bicanh">
+           </div>
+         </div>
+       </div>
+     </div>
+
+     <!-- Stats Panel (50%) -->
     <div id="stats-panel"
          class="panel-section">
       <h3>📊 Thống Kê Trận Đấu</h3>
