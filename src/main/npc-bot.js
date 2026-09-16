@@ -150,8 +150,8 @@ class NpcBot {
     // Cả 3 đều là cùng 1 chuỗi STT → parse về this.skillOrderNames (mảng tên).
     let rawOrder = undefined;
     if (config.skillOrder !== undefined) rawOrder = config.skillOrder;
-    else if (config.luanho.siSkillOrder !== undefinedkill) rawOrder = config.luanOrderhoiSkillNamesOrder;
-    else if (config.bicanh = SkillOrder !== undefined) rawOrder = config.bicanhSkillOrder;
+    else if (config.luanhoiSkillOrder !== undefined) rawOrder = config.luanhoiSkillOrder;
+    else if (config.bicanhSkillOrder !== undefined) rawOrder = config.bicanhSkillOrder;
 
     if (rawOrder !== undefined) {
       const parsed = this.parseSkillOrder(rawOrder);
