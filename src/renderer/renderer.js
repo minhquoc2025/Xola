@@ -86,7 +86,7 @@ function getLuanHoiConfig() {
   return {
     mode: 'luanhoi',
     luanhoi: true,
-    username: (document.getElementById('username-lh').value || 'Quất Bất Lực').trim(),
+    username: (document.getElementById('username-lh').value || 'Kang 6 củ').trim(),
     luanhoiTarget: parseInt(document.getElementById('luanhoi-target').value) || 10,
     luanhoiCmd: (document.getElementById('luanhoi-cmd').value || '!luanhoi').trim(),
     buttonDelayMs: (parseFloat(document.getElementById('button-delay-lh').value) || 1) * 1000,
@@ -99,7 +99,7 @@ function getLuanHoiConfig() {
 function getBicanhConfig() {
   return {
     mode: 'bicanh',
-    username: (document.getElementById('username-bicanh').value || 'Quất Bất Lực').trim(),
+    username: (document.getElementById('username-bicanh').value || 'Kang 6 củ').trim(),
     bicanhCmd: (document.getElementById('bicanh-cmd').value || '!bicanh').trim(),
     bicanhSkillOrder: localStorage.getItem('bicanhSkillOrder') || '',
   };
@@ -174,6 +174,10 @@ const ALL_SKILLS = [
   { stt: 21, name: 'Hỗn Nguyên Hộ Thể', cat: 'Trúc Cơ' },
   { stt: 22, name: 'Vạn Kiếm Quy Tông', cat: 'Trúc Cơ' },
   { stt: 23, name: 'Phong Ấn Thất Mạch', cat: 'Trúc Cơ' },
+  // Trúc Cơ
+  { stt: 24, name: 'Cửu Chuyển Hồi Xuân', cat: 'Kim Đan' },
+  { stt: 25, name: 'Kim Đan Phá Sát ', cat: 'Kim Đan' },
+  { stt: 26, name: 'Tam Muội Chân Hỏa', cat: 'Kim Đan' },
 ];
 
 let skillModalOpen = false;
@@ -218,7 +222,7 @@ function saveSkillOrder() {
   if (!input) return;
   const raw = input.value.trim();
   if (!raw) { status.textContent = '⚠️ Chưa nhập thứ tự'; status.style.color = '#e94560'; return; }
-  const order = raw.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n >= 1 && n <= 23);
+  const order = raw.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n >= 1 && n <= 50);
   if (order.length === 0) { status.textContent = '⚠️ Không có STT hợp lệ'; status.style.color = '#e94560'; return; }
   localStorage.setItem('bicanhSkillOrder', raw);
   status.textContent = `✅ Đã lưu: ${order.join(' → ')} (${order.length} skill)`;
@@ -258,10 +262,10 @@ async function updateStats() {
     const battleCount = status.battleCount || 0;
     const totalBattles = status.totalBattles || 0;
 
-     // Top row stats - Target shows battle progress
-     if (status.mode === 'bicanh') {
-       document.getElementById('stat-total').textContent = `⚔️ Đang spam skill...`;
-     } else if (status.mode === 'luanhoi') {
+    // Top row stats - Target shows battle progress
+    if (status.mode === 'bicanh') {
+      document.getElementById('stat-total').textContent = `⚔️ Đang spam skill...`;
+    } else if (status.mode === 'luanhoi') {
       const cur = status.lastLuanhoiTarget != null ? status.lastLuanhoiTarget : 0;
       const tgt = status.luanhoiTarget || 0;
       document.getElementById('stat-total').textContent = `Tầng ${cur}/${tgt}`;
