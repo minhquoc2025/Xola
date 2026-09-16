@@ -57,15 +57,6 @@ function setMode(mode) {
   updateBotButton();
 }
 
-// === SHARED SKILL ORDER ===
-
-// Key dùng chung cho tất cả mode (NPC, Luân Hồi, Bí Cảnh)
-const SKILL_ORDER_KEY = 'skillOrder';
-
-function getSharedSkillOrder() {
-  return (localStorage.getItem(SKILL_ORDER_KEY) || '').trim();
-}
-
 // === NPC MODE ===
 
 function getNpcConfig() {
@@ -85,28 +76,42 @@ function getNpcConfig() {
     tuLuyen: document.getElementById('tu-luyen').checked,
     tuLuyenStartCmd: '!tuluyen',
     tuLuyenEndCmd: '!ketthuc',
-    skillOrder: getSharedSkillOrder(), // 👈 dùng chung
   };
 }
 
+function getSavedSkillOrderRaw() {
+  return localStorage.getItem('bicanhSkillOrder') || localStorage.getItem('luanhoiSkillOrder') || '';
+}
+
 function getLuanHoiConfig() {
+  const skillsEl = document.getElementById('luanhoi-skills');
+  const skillsStr = (skillsEl && skillsEl.value) || '';
+  const explicitSkills = skillsStr.split(',').map(s => s.trim()).filter(s => s.length > 0);
+  const savedOrderRaw = getSavedSkillOrderRaw();
+  const savedOrder = savedOrderRaw.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n >= 1 && n <= 23);
+  const savedSkillNames = savedOrder.length > 0
+    ? savedOrder.map(stt => ALL_SKILLS.find(s => s.stt === stt)?.name).filter(Boolean)
+    : [];
+
   return {
     mode: 'luanhoi',
     luanhoi: true,
-    username: (document.getElementById('username-lh').value || 'Kang 6 củ').trim(),
+    username: (document.getElementById('username-lh').value || 'Quất Bất Lực').trim(),
     luanhoiTarget: parseInt(document.getElementById('luanhoi-target').value) || 10,
     luanhoiCmd: (document.getElementById('luanhoi-cmd').value || '!luanhoi').trim(),
     buttonDelayMs: (parseFloat(document.getElementById('button-delay-lh').value) || 1) * 1000,
-    luanhoiSkillOrder: getSharedSkillOrder(), // 👈 dùng chung
+    luanhoiSkillNames: explicitSkills.length > 0
+      ? explicitSkills
+      : (savedSkillNames.length > 0 ? savedSkillNames : ['Vạn Kiếm Quy Tông', 'Hỗn Nguyên Hộ Thể', 'Kiếm Khí Xung Thiên', 'Thái Cực Dưỡng Sinh']),
   };
 }
 
 function getBicanhConfig() {
   return {
     mode: 'bicanh',
-    username: (document.getElementById('username-bicanh').value || 'Kang 6 củ').trim(),
+    username: (document.getElementById('username-bicanh').value || 'Quất Bất Lực').trim(),
     bicanhCmd: (document.getElementById('bicanh-cmd').value || '!bicanh').trim(),
-    bicanhSkillOrder: getSharedSkillOrder(), // 👈 dùng chung
+    bicanhSkillOrder: getSavedSkillOrderRaw(),
   };
 }
 
@@ -133,6 +138,8 @@ async function toggleBot() {
 }
 
 function updateBotButton() {
+  const isLH = currentMode === 'luanhoi';
+  const isBC = currentMode === 'bicanh';
   const btns = [document.getElementById('btn-npc-toggle'), document.getElementById('btn-luanhoi-toggle'), document.getElementById('btn-bicanh-toggle')];
   for (const btn of btns) {
     if (!btn) continue;
@@ -177,10 +184,6 @@ const ALL_SKILLS = [
   { stt: 21, name: 'Hỗn Nguyên Hộ Thể', cat: 'Trúc Cơ' },
   { stt: 22, name: 'Vạn Kiếm Quy Tông', cat: 'Trúc Cơ' },
   { stt: 23, name: 'Phong Ấn Thất Mạch', cat: 'Trúc Cơ' },
-  // Kim Đan
-  { stt: 24, name: 'Cửu Chuyển Hồi Xuân', cat: 'Kim Đan' },
-  { stt: 25, name: 'Kim Đan Phá Sát ', cat: 'Kim Đan' },
-  { stt: 26, name: 'Tam Muội Chân Hỏa', cat: 'Kim Đan' },
 ];
 
 let skillModalOpen = false;
@@ -214,10 +217,9 @@ function buildSkillGrid() {
 }
 
 function loadSkillOrder() {
-  const saved = localStorage.getItem(SKILL_ORDER_KEY);
+  const saved = getSavedSkillOrderRaw();
   const input = document.getElementById('skill-order-input');
   if (saved && input) input.value = saved;
-  else if (input) input.value = '';
 }
 
 function saveSkillOrder() {
@@ -226,16 +228,18 @@ function saveSkillOrder() {
   if (!input) return;
   const raw = input.value.trim();
   if (!raw) { status.textContent = '⚠️ Chưa nhập thứ tự'; status.style.color = '#e94560'; return; }
-  const order = raw.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n >= 1 && n <= 50);
+  const order = raw.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n >= 1 && n <= 23);
   if (order.length === 0) { status.textContent = '⚠️ Không có STT hợp lệ'; status.style.color = '#e94560'; return; }
-  localStorage.setItem(SKILL_ORDER_KEY, raw);
+  localStorage.setItem('bicanhSkillOrder', raw);
+  localStorage.setItem('luanhoiSkillOrder', raw);
   status.textContent = `✅ Đã lưu: ${order.join(' → ')} (${order.length} skill)`;
   status.style.color = '#4ecca3';
   toggleSkillModal();
 }
 
 function resetSkillOrder() {
-  localStorage.removeItem(SKILL_ORDER_KEY);
+  localStorage.removeItem('bicanhSkillOrder');
+  localStorage.removeItem('luanhoiSkillOrder');
   const input = document.getElementById('skill-order-input');
   const status = document.getElementById('skill-order-status');
   if (input) input.value = '';
@@ -266,9 +270,10 @@ async function updateStats() {
     const battleCount = status.battleCount || 0;
     const totalBattles = status.totalBattles || 0;
 
-    if (status.mode === 'bicanh') {
-      document.getElementById('stat-total').textContent = `⚔️ Đang spam skill...`;
-    } else if (status.mode === 'luanhoi') {
+     // Top row stats - Target shows battle progress
+     if (status.mode === 'bicanh') {
+       document.getElementById('stat-total').textContent = `⚔️ Đang spam skill...`;
+     } else if (status.mode === 'luanhoi') {
       const cur = status.lastLuanhoiTarget != null ? status.lastLuanhoiTarget : 0;
       const tgt = status.luanhoiTarget || 0;
       document.getElementById('stat-total').textContent = `Tầng ${cur}/${tgt}`;
@@ -284,6 +289,7 @@ async function updateStats() {
     document.getElementById('stat-exp').textContent = formatNumber(s.exp || 0);
     document.getElementById('stat-items-count').textContent = formatNumber((s.items || []).length);
 
+    // Last battle info
     const lastBattleDiv = document.getElementById('last-battle-info');
     const lb = s.lastBattle;
     if (lb && lb.result) {
@@ -300,6 +306,7 @@ async function updateStats() {
       lastBattleDiv.innerHTML = html;
     }
 
+    // Items list with counts
     const itemsListDiv = document.getElementById('items-list');
     const itemCounts = s.itemCounts || {};
     const itemEntries = Object.entries(itemCounts);
