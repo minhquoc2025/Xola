@@ -54,6 +54,7 @@ class NpcBot {
     this.bicanh = false;
     this.bicanhCmd = '!bicanh';
     this._bicanhSkillIdx = 0;
+    this._npcSkillIdx = 0; // 👈 con trỏ xoay vòng combo skill NPC (giữ đúng thứ tự 25→22→24→23...)
     this.stats = {
       wins: 0,
       losses: 0,
@@ -94,8 +95,16 @@ class NpcBot {
     return Math.floor(Math.random() * (max - min + 1)) + min;
   }
 
-  async luanhoiClickWait(minMs = 1800) {
+  async luanhoiClickWait(minMs = 700) {
     await this.delay(Math.max(minMs, this.buttonDelayMs || 0));
+  }
+
+  // Chuẩn hoá tên tiếng Việt để so khớp: bỏ dấu, bỏ đ/Đ, lowercase, trim.
+  normalizeVN(s) {
+    return (s || '')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/\u0111/g, 'd').replace(/\u0110/g, 'd')
+      .toLowerCase().trim();
   }
 
   // === SHARED SKILL ORDER ===
@@ -190,6 +199,7 @@ class NpcBot {
     this.luanhoiSkillIdx = 0;
     this.lastLuanhoiTarget = null;
     this._bicanhSkillIdx = 0;
+    this._npcSkillIdx = 0;
     this.log('Bot started');
     this.log(`📋 Skill order đang dùng: ${this.getActiveSkillNames().join(' → ')}`);
     if (this.mode === 'luanhoi') {
@@ -1195,35 +1205,90 @@ class NpcBot {
     })()`);
   }
 
-  chooseSkill(battleState) {
-    if (!battleState || !battleState.skills || battleState.skills.length === 0) {
-      return -1;
-    }
+  // Click TRỰC TIẾP 1 skill theo TÊN, tìm ngay trên nút thật của tin nhắn trận đấu hiện tại
+  // (không dựa vào mảng vị trí suy ra từ emoji cooldown — tránh lệch index).
+  // Trả về text nút đã click, hoặc null nếu không tìm thấy/không sẵn sàng.
+  async clickNpcSkillByName(name) {
+    const username = this.username || '';
+    const nameNoD = this.normalizeVN(name).replace(/[^a-z0-9]/g, '');
+    if (!nameNoD) return null;
+    return await this.exec(`(() => {
+      const removeVN = s => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').toLowerCase();
+      const nameNoD = ${JSON.stringify(nameNoD)};
+      const username = ${JSON.stringify(username)};
+      const maxIdStr = window.botMaxMsgId || '0';
+      const maxId = BigInt(maxIdStr);
+      const msgs = document.querySelectorAll('[role="article"]');
+      const recentMsgs = Array.from(msgs).slice(-30).reverse();
 
-    const { skills, userHpPercent, buttonCount } = battleState;
-    const healSkillIdx = this.healPosition - 1;
+      for (const msg of recentMsgs) {
+        if (msg.getAttribute('data-bot-seen') === 'true') continue;
+        if (username && !msg.textContent.includes(username)) continue;
+        if (msg.id) {
+          const parts = msg.id.split('-');
+          const idStr = parts[parts.length - 1];
+          try {
+            const id = BigInt(idStr);
+            if (id <= maxId) continue;
+          } catch(e) {}
+        }
+        const btns = msg.querySelectorAll('button[role="button"]');
+        if (btns.length === 0) continue;
 
-    if (healSkillIdx >= 0 && healSkillIdx < skills.length && userHpPercent >= 0) {
-      const healSkill = skills[healSkillIdx];
-      if (healSkill.ready && userHpPercent < 60) {
-        const btnIndex = this.healPosition;
-        this.log(`Smart: Chọn heal (position ${this.healPosition}, button ${btnIndex + 1}) - HP ${userHpPercent}%`);
-        return btnIndex;
+        // Đây là tin nhắn trận đấu hiện tại (mới nhất chưa xử lý) — chỉ tìm skill trong ĐÚNG tin này.
+        for (const btn of btns) {
+          if (btn.disabled) continue;
+          const raw = (btn.textContent || '').trim();
+          if (!raw || raw.length === 0 || btn.offsetParent === null) continue;
+          const clean = removeVN(raw).replace(/[^a-z0-9]/g, '');
+          if (!clean) continue;
+          if (clean.includes(nameNoD) || nameNoD.includes(clean)) {
+            btn.click();
+            return raw;
+          }
+        }
+        return null; // đã tìm đúng tin nhắn trận đấu nhưng không có skill này (chưa sẵn sàng/không có)
+      }
+      return null;
+    })()`);
+  }
+
+  // Thử click theo ĐÚNG thứ tự skill đã lưu (getActiveSkillNames), skill nào sẵn sàng
+  // (chưa bị disabled trên nút thật) và khớp tên thì click ngay, không đoán theo vị trí.
+  async chooseAndClickSkill(battleState) {
+    const userHpPercent = battleState ? battleState.userHpPercent : -1;
+
+    // Giữ nguyên logic heal an toàn khi máu thấp như code gốc (theo vị trí cấu hình cứng).
+    if (this.healPosition >= 1 && userHpPercent >= 0 && userHpPercent < 60) {
+      const healed = await this.clickSkillButton(this.healPosition);
+      if (healed) {
+        this.log(`Smart: Chọn heal (position ${this.healPosition}) - HP ${userHpPercent}%`);
+        return true;
       }
     }
 
-    for (const pos of this.skillPriority) {
-      if (pos < 1 || pos > skills.length || pos === this.healPosition) continue;
-      const skill = skills[pos - 1];
-      if (skill && skill.ready) {
-        const btnIndex = pos;
-        this.log(`Smart: Chọn skill position ${pos} (button ${btnIndex + 1}) - Sẵn sàng`);
-        return btnIndex;
+    const orderedNames = this.getActiveSkillNames();
+    if (!orderedNames || orderedNames.length === 0) return false;
+
+    // 👈 XOAY VÒNG combo theo đúng thứ tự đã lưu mỗi lượt (vd 25→22→24→23→25→...).
+    // Game này KHÔNG disable nút sau khi dùng (skill nào cũng luôn "✅"), nên nếu cứ thử
+    // lại từ đầu danh sách mỗi lượt thì skill đầu tiên sẽ luôn thắng ưu tiên và được
+    // dùng liên tục — vì vậy phải nhớ đã dùng tới đâu và tiếp tục từ skill KẾ TIẾP.
+    const startIdx = this._npcSkillIdx % orderedNames.length;
+    for (let i = 0; i < orderedNames.length; i++) {
+      const idx = (startIdx + i) % orderedNames.length;
+      const name = orderedNames[idx];
+      const clicked = await this.clickNpcSkillByName(name);
+      if (clicked) {
+        this.log(`Smart: Chọn skill "${name}" (${idx + 1}/${orderedNames.length} trong combo) → đã click "${clicked}"`);
+        this._npcSkillIdx = idx + 1; // lượt sau tiếp tục đúng skill kế tiếp trong combo
+        return true;
       }
     }
 
-    this.log('Smart: Không có skill nào sẵn sàng → click skill 1 (Kiếm cơ bản)');
-    return 0;
+    this.log('Smart: Không có skill nào trong danh sách đã lưu khớp/sẵn sàng lượt này.');
+    return false;
   }
 
   async scanAllButtons() {
@@ -1424,7 +1489,7 @@ class NpcBot {
         lastLogCount = battleInfo.buttons.length;
       }
 
-      let btnIndex = -1;
+      let handledBySmart = false;
 
       if (this.smartMode) {
         const battleState = await this.readBattleState();
@@ -1432,33 +1497,33 @@ class NpcBot {
           const skillStr = battleState.skills.map(s => 'pos' + s.position + '(' + (s.ready ? '✅' : '⏳' + s.cooldownTurns) + ')').join(' | ');
           this.log('Smart: HP ' + battleState.userHpPercent + '% (' + battleState.userHpCurrent + '/' + battleState.userHpMax + ') | Skills: ' + skillStr);
           this.log('Smart DEBUG status: ' + battleState.statusDump);
-          btnIndex = this.chooseSkill(battleState);
+          handledBySmart = await this.chooseAndClickSkill(battleState);
         } else {
           this.log('Smart: Không đọc được battle state, fallback pattern');
         }
       }
 
-      if (btnIndex === -1) {
+      if (!handledBySmart) {
         const pos = this.clickPattern[patternIndex % this.clickPattern.length];
-        btnIndex = pos - 1;
+        const btnIndex = pos - 1;
         if (!this.smartMode) {
           this.log(`Pattern: chọn vị trí ${pos}`);
         }
-      }
 
-      if (btnIndex >= 0 && btnIndex < battleInfo.buttons.length) {
-        const btn = battleInfo.buttons[btnIndex];
-        this.log(`Click [${btnIndex + 1}]: "${btn.text}"`);
+        if (btnIndex >= 0 && btnIndex < battleInfo.buttons.length) {
+          const btn = battleInfo.buttons[btnIndex];
+          this.log(`Click [${btnIndex + 1}]: "${btn.text}"`);
 
-        const clicked = await this.clickSkillButton(btnIndex);
-        if (!clicked) {
-          this.log(`Failed to click button at position ${btnIndex + 1}`);
+          const clicked = await this.clickSkillButton(btnIndex);
+          if (!clicked) {
+            this.log(`Failed to click button at position ${btnIndex + 1}`);
+          }
+
+          if (!this.smartMode) patternIndex++;
+        } else {
+          this.log(`Position ${btnIndex + 1} not available (only ${battleInfo.buttons.length} skills)`);
+          if (!this.smartMode) patternIndex = 0;
         }
-
-        if (!this.smartMode) patternIndex++;
-      } else {
-        this.log(`Position ${btnIndex + 1} not available (only ${battleInfo.buttons.length} skills)`);
-        if (!this.smartMode) patternIndex = 0;
       }
 
       await this.delay(this.buttonDelayMs);
@@ -1502,7 +1567,7 @@ class NpcBot {
       this.log('---------------------------------------');
     }
 
-    await this.cooldownWait(this.rand(5, 8), runId);
+    await this.cooldownWait(this.rand(2, 4), runId);
 
     if (this.isRunning && this.runId === runId) {
       this.luanhoiFightLoop(runId);
@@ -1520,17 +1585,17 @@ class NpcBot {
       const leftoverCont = await this.clickContinueOrStop('continue');
       if (leftoverCont) {
         this.log(`↪️ Phát hiện & bấm nút "Tiếp tục leo tháp" còn sót lại: ${leftoverCont}`);
-        await this.luanhoiClickWait(2000);
+        await this.luanhoiClickWait(700);
         continue;
       }
       if (await this.clickDoor('up')) {
         this.log('🚪 Đã chọn cửa hướng lên (boss mốc).');
-        await this.luanhoiClickWait(2000);
+        await this.luanhoiClickWait(700);
       }
       const b = await this.clickBuffByPriority();
       if (b) {
         this.log(`⚡ Đã chọn buff: "${b}"`);
-        await this.luanhoiClickWait(2000);
+        await this.luanhoiClickWait(700);
         entered = true;
         const tierNow = await this.readLuanhoiTier();
         if (tierNow > 0) this.luanhoiCurrentTier = tierNow;
@@ -1553,7 +1618,7 @@ class NpcBot {
         entered = true;
         break;
       }
-      await this.delay(this.rand(2000, 3000));
+      await this.delay(this.rand(700, 1100));
     }
 
     if (!entered) {
@@ -1563,7 +1628,7 @@ class NpcBot {
       return;
     }
 
-    await this.delay(this.rand(1500, 2500));
+    await this.delay(this.rand(600, 1000));
 
     const isAlreadyFighting = await this.checkAlreadyFighting();
     const battleResult = await this.luanhoiBattle(isAlreadyFighting, runId);
@@ -1591,7 +1656,7 @@ class NpcBot {
       this.log('❌ THUA BOSS!');
     }
 
-    await this.delay(this.rand(2500, 3500));
+    await this.delay(this.rand(900, 1400));
 
     let currentTier = await this.readLuanhoiTier();
     this.lastLuanhoiTarget = currentTier;
@@ -1638,7 +1703,7 @@ class NpcBot {
         cont = await this.clickContinueOrStop('continue');
         if (cont) break;
         this.log(`   ...chưa thấy nút "Tiếp tục leo tháp" (lần ${contAttempt}), thử lại...`);
-        await this.delay(this.rand(2000, 3000));
+        await this.delay(this.rand(800, 1200));
       }
       if (cont) {
         this.log(`✅ Đã click nút tiếp tục (${cont}).`);
@@ -1656,7 +1721,7 @@ class NpcBot {
       this.log(`🔄 Tầng thường ${currentTier} — game tự sang tầng kế, chờ chọn buff tiếp...`);
     }
 
-    await this.delay(this.rand(2500, 3500));
+    await this.delay(this.rand(900, 1400));
 
     if (this.isRunning && this.runId === runId) {
       this.luanhoiFightLoop(runId);
@@ -1667,8 +1732,11 @@ class NpcBot {
     await this.markLuanhoiMessages();
     const username = this.username || '';
     const names = this.getActiveSkillNames(); // 👈 DÙNG THỨ TỰ CHUNG
-    const startIdx = this.luanhoiSkillIdx % names.length;
-    const rotatedNames = names.map((_, i) => names[(startIdx + i) % names.length]);
+    // ⚠️ KHÔNG xoay vòng theo luanhoiSkillIdx nữa — luôn thử ĐÚNG thứ tự đã lưu
+    // (vd 25 → 22 → 24 → 23) mỗi lượt. Nếu skill ưu tiên đầu chưa sẵn sàng thì mới
+    // rơi xuống skill kế trong CHÍNH danh sách gốc, không dịch điểm bắt đầu cho lượt sau
+    // (trước đây bị dịch nên combo trôi dần, ví dụ bị thành 22→25→24→23).
+    const rotatedNames = names;
 
     const tick = await this.exec(`(() => {
       const removeVN = s => (s || '').normalize('NFD')
@@ -1871,9 +1939,10 @@ class NpcBot {
           const hit = availableBtns.find(b => b.noD.includes(n));
           if (hit) {
             hit.btn.click();
-            return { type: 'skill', text: hit.txt };
+            return { type: 'skill', text: hit.txt, matchedRank: namesNoD.indexOf(n), availableTexts: availableBtns.map(b => b.txt) };
           }
         }
+        return { type: 'none', availableTexts: availableBtns.map(b => b.txt) };
       }
 
       return { type: 'none' };
@@ -1881,6 +1950,13 @@ class NpcBot {
 
     if (tick && tick.type === 'skill') {
       this.luanhoiSkillIdx++;
+      if (tick.matchedRank > 0) {
+        const skipped = names.slice(0, tick.matchedRank).join(', ');
+        this.log(`⚠️ Combo: skill ưu tiên trước ("${skipped}") chưa sẵn sàng lượt này → dùng "${tick.text}" thay thế.`);
+        if (tick.availableTexts) this.log('   [Debug] Nút khả dụng lượt này: ' + tick.availableTexts.join(' | '));
+      }
+    } else if (tick && tick.type === 'none' && tick.availableTexts) {
+      this.log('⚠️ [Debug] Không khớp được skill nào trong combo với nút khả dụng: ' + tick.availableTexts.join(' | '));
     }
     return tick;
   }
@@ -1928,7 +2004,7 @@ class NpcBot {
         noSkillSince = Date.now();
       }
 
-      await this.luanhoiClickWait(2000);
+      await this.luanhoiClickWait(700);
     }
 
     return { ended: false };
@@ -1981,8 +2057,9 @@ class NpcBot {
 
     if (clicked) return clicked;
 
-    const startIdx = this.luanhoiSkillIdx % names.length;
-    const rotatedNames = names.map((_, i) => names[(startIdx + i) % names.length]);
+    // ⚠️ Luôn thử theo ĐÚNG thứ tự combo gốc (không xoay theo luanhoiSkillIdx) —
+    // xem giải thích chi tiết ở luanhoiBattleTick().
+    const rotatedNames = names;
     const any = await this.exec(`(() => {
       const removeVN = s => (s || '').normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
