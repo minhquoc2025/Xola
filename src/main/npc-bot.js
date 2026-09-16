@@ -29,7 +29,22 @@ class NpcBot {
     this.luanhoi = false;
     this.luanhoiTarget = 10;
     this.luanhoiCmd = '!luanhoi';
-    this.luanhoiSkillNames = ['Kiếm Cơ Bản', 'Liên Hoàn Kích', 'Trọng Kích', 'Phá Giáp', 'Xuyên Tâm', 'Liệt Hỏa Trảm', 'Hấp Huyết', 'Kịch Độc', 'Lôi Kích', 'Tuyệt Sát', 'Thần Uy', 'Băng Phong', 'Phòng Ngự', 'Phản Kích', 'Hồi Phục', 'Hộ Thuẫn', 'Hỏa Giáp', 'Thái Cực Dưỡng Sinh', 'Kiếm Khí Xung Thiên', 'Kim Cương Phục Ma', 'Hỗn Nguyên Hộ Thể', 'Vạn Kiếm Quy Tông', 'Phong Ấn Thất Mạch', 'Cửu Chuyển Hồi Xuân', 'Kim Đan Phá Sát', 'Tam Muội Chân Hỏa'];
+
+    // Danh sách tên 26 skill gốc (theo STT 1..26) — fallback khi user chưa cấu hình
+    this.allSkillNames = [
+      'Kiếm Cơ Bản', 'Liên Hoàn Kích', 'Trọng Kích', 'Phá Giáp', 'Xuyên Tâm',
+      'Liệt Hỏa Trảm', 'Hấp Huyết', 'Kịch Độc', 'Lôi Kích', 'Tuyệt Sát',
+      'Thần Uy', 'Băng Phong',
+      'Phòng Ngự', 'Phản Kích', 'Hồi Phục', 'Hộ Thuẫn', 'Hỏa Giáp',
+      'Thái Cực Dưỡng Sinh', 'Kiếm Khí Xung Thiên', 'Kim Cương Phục Ma',
+      'Hỗn Nguyên Hộ Thể', 'Vạn Kiếm Quy Tông', 'Phong Ấn Thất Mạch',
+      'Cửu Chuyển Hồi Xuân', 'Kim Đan Phá Sát', 'Tam Muội Chân Hỏa',
+    ];
+
+    // Mảng TÊN skill đã được parse từ thứ tự STT chung (dùng cho cả 3 mode).
+    // Rỗng = chưa cấu hình → fallback allSkillNames.
+    this.skillOrderNames = [];
+
     this.luanhoiSkillIdx = 0;
     this.luanhoiCurrentTier = 0;
     this.luanhoiBuffInit = false;
@@ -38,7 +53,6 @@ class NpcBot {
     this.luanhoiRestartDelaySec = 5;
     this.bicanh = false;
     this.bicanhCmd = '!bicanh';
-    this.bicanhSkillOrder = [];
     this._bicanhSkillIdx = 0;
     this.stats = {
       wins: 0,
@@ -84,6 +98,27 @@ class NpcBot {
     await this.delay(Math.max(minMs, this.buttonDelayMs || 0));
   }
 
+  // === SHARED SKILL ORDER ===
+  // Parse chuỗi STT (vd "22,21,19,18") → mảng TÊN skill.
+  // Dùng chung cho cả 3 mode. Nếu input rỗng → trả về mảng rỗng.
+  parseSkillOrder(raw) {
+    if (raw === null || raw === undefined) return [];
+    const str = String(raw).trim();
+    if (!str) return [];
+    return str.split(',')
+      .map(s => parseInt(s.trim(), 10))
+      .filter(n => !isNaN(n) && n >= 1 && n <= this.allSkillNames.length)
+      .map(n => this.allSkillNames[n - 1])
+      .filter(Boolean);
+  }
+
+  // Lấy danh sách tên skill đang áp dụng (đã cấu hình) hoặc fallback toàn bộ 26 skill
+  getActiveSkillNames() {
+    return (this.skillOrderNames && this.skillOrderNames.length > 0)
+      ? this.skillOrderNames
+      : this.allSkillNames;
+  }
+
   handleLock(lockInfo) {
     this.log(`🔒 NPC ${this.npcNumber} bị khóa! → Chuyển NPC ${lockInfo.requiredNpc}, cần thắng ${lockInfo.winsLeft} lần.`);
     this.npcNumber = lockInfo.requiredNpc;
@@ -109,13 +144,40 @@ class NpcBot {
     if (config.luanhoi !== undefined) this.luanhoi = config.luanhoi;
     if (config.luanhoiTarget !== undefined) this.luanhoiTarget = config.luanhoiTarget;
     if (config.luanhoiCmd !== undefined) this.luanhoiCmd = config.luanhoiCmd;
-    if (config.luanhoiSkillNames !== undefined) this.luanhoiSkillNames = config.luanhoiSkillNames;
+
+    // === THỨ TỰ SKILL DÙNG CHUNG ===
+    // Frontend gửi 1 trong 3 key: skillOrder / luanhoiSkillOrder / bicanhSkillOrder.
+    // Cả 3 đều là cùng 1 chuỗi STT → parse về this.skillOrderNames (mảng tên).
+    let rawOrder = undefined;
+    if (config.skillOrder !== undefined) rawOrder = config.skillOrder;
+    else if (config.luanho.siSkillOrder !== undefinedkill) rawOrder = config.luanOrderhoiSkillNamesOrder;
+    else if (config.bicanh = SkillOrder !== undefined) rawOrder = config.bicanhSkillOrder;
+
+    if (rawOrder !== undefined) {
+      const parsed = this.parseSkillOrder(rawOrder);
+      if (parsed.length > 0) {
+        this.skillOrderNames = parsed;
+        this.log(`🎯 Thứ tự skill (dùng chung): ${parsed.join(' → ')} (${parsed.length} skill)`);
+      } else {
+        this.log('⚠️ Thứ tự skill rỗng/không hợp lệ — dùng toàn bộ 26 skill mặc định.');
+        this.skillOrderNames = [];
+      }
+    }
+
+    // Tương thích ngược: nếu frontend cũ vẫn gửi luanhoiSkillNames (mảng tên)
+    // → coi như cấu hình mới cho tất cả mode.
+    if (config.luanhoiSkillNames !== undefined
+      && Array.isArray(config.luanhoiSkillNames)
+      && config.luanhoiSkillNames.length > 0
+      && rawOrder === undefined) {
+      config.luanhoiSkillNames.slice();
+      this.log(`🎯 (legacy) Dùng ${this.skillOrderNames.length} skill từ luanhoiSkillNames.`);
+    }
   }
 
   async start() {
     if (this.isRunning) {
       if (!this._tuLuyenActive) return;
-      // Đang idle tu luyện sau target → kết thúc tu luyện rồi farm tiếp vòng mới
       this.log('🔄 Yêu cầu Start khi đang tu luyện — kết thúc tu luyện, farm tiếp...');
       await this.endTuLuyen();
     }
@@ -127,14 +189,16 @@ class NpcBot {
     this.processedLockIds = new Set();
     this.luanhoiSkillIdx = 0;
     this.lastLuanhoiTarget = null;
+    this._bicanhSkillIdx = 0;
     this.log('Bot started');
+    this.log(`📋 Skill order đang dùng: ${this.getActiveSkillNames().join(' → ')}`);
     if (this.mode === 'luanhoi') {
       this.log(`=== LUÂN HỒI MODE: Target tầng ${this.luanhoiTarget} ===`);
       this.luanhoiLoop(this.runId);
       return;
     }
     if (this.mode === 'bicanh') {
-      this.log(`=== BICANH MODE: Spam技能 theo thứ tự ===`);
+      this.log(`=== BICANH MODE: Spam skill theo thứ tự ===`);
       this.bicanhLoop(this.runId);
       return;
     }
@@ -165,7 +229,6 @@ class NpcBot {
     }
   }
 
-  // Gửi lệnh bắt đầu tu luyện (dùng sau khi hoàn thành target)
   async startTuLuyenAfterTarget() {
     if (!this.tuLuyenAfterTarget || this._tuLuyenActive) return;
     try {
@@ -177,7 +240,6 @@ class NpcBot {
     }
   }
 
-  // Gửi lệnh kết thúc tu luyện
   async endTuLuyen() {
     if (!this._tuLuyenActive) return;
     try {
@@ -200,9 +262,6 @@ class NpcBot {
     let lastCoins = 0;
     let lastExp = 0;
 
-    // Summary là dòng TỔNG ở cuối ("💰 +532 🪙 ✨ +235 XP" hoặc "+572 +253 XP").
-    // Bỏ qua các dòng breakdown có tên phía trước ("💰 Quất Bất Lực: +350🪙 +159XP") — chứa ':' trước số.
-    // Lấy dòng hợp lệ CUỐI CÙNG vì tổng luôn nằm dưới các dòng cộng dồn từng nguồn.
     for (const line of allLines) {
       const trimmed = line.trim();
       if (!trimmed) continue;
@@ -228,9 +287,6 @@ class NpcBot {
       this.log(`[Rewards] Summary: +${lastCoins}🪙 +${lastExp}XP`);
     }
 
-    // Scan for item drops.
-    // Game list cùng vật phẩm ở NHIỀU chỗ trong 1 tin (dòng log trận + mục "🎁 Chiến Lợi Phẩm")
-    // → dedupe theo tên TRONG CÙNG trận, mỗi loại chỉ +1.
     const battleDrops = [];
     for (const line of allLines) {
       const trimmed = line.trim();
@@ -244,11 +300,9 @@ class NpcBot {
       }
     }
     for (const item of battleDrops) {
-      // Track unique items list
       if (!this.stats.items.includes(item)) {
         this.stats.items.push(item);
       }
-      // Track item counts
       this.stats.itemCounts[item] = (this.stats.itemCounts[item] || 0) + 1;
       rewards.push(`Rơi: ${item}`);
       this.log(`[Rewards] Item: Rơi: ${item} (tổng x${this.stats.itemCounts[item]})`);
@@ -258,7 +312,6 @@ class NpcBot {
       this.log('[Rewards] No summary line found! Full text: ' + text);
     }
 
-    // Store last battle info
     this.stats.lastBattle = {
       coins: lastCoins,
       exp: lastExp,
@@ -269,7 +322,6 @@ class NpcBot {
   }
 
   parseTargetNpc(text) {
-    // "🏆 Quất Bất Lực thắng NPC 🌙 Hằng Nga Tiên Tử!" or "💀 Quất Bất Lực thua NPC 🔮 Bí Ẩn Chi Linh!"
     const winMatch = text.match(/thắng NPC\s+(.+?)!/);
     if (winMatch) return winMatch[1].trim();
     const lossMatch = text.match(/thua NPC\s+(.+?)!/);
@@ -445,13 +497,11 @@ class NpcBot {
       this.log('⚠️ Không xác nhận được kết thúc trận (unknown). Bỏ qua tu luyện.');
     }
 
-    // Parse rewards from battle result message
     if (battleResult && battleResult.rewardText) {
       this.parseBattleRewards(battleResult.rewardText);
       const npc = this.parseTargetNpc(battleResult.rewardText);
       if (npc) this.stats.targetNpc = npc;
 
-      // Set last battle info
       if (this.stats.lastBattle) {
         this.stats.lastBattle.result = isWin ? 'win' : 'loss';
         this.stats.lastBattle.npc = npc || this.stats.targetNpc || `NPC ${this.npcNumber}`;
@@ -746,7 +796,6 @@ class NpcBot {
             }
           }
 
-          // Collect reward text from nearby messages
           rewardText = rawText;
 
           return { ended: true, result, rewardText };
@@ -756,8 +805,6 @@ class NpcBot {
     })()`);
   }
 
-  // Phiên bản checkBattleEnd riêng cho Luân Hồi: bỏ qua message đang trận (có nút "Chiến đấu")
-  // Kiểm tra trận có kết thúc không. advance/win/loss detection đơn giản bằng match + /i.
   async checkLuanhoiBattleEnd() {
     const username = this.username || '';
     return await this.exec(`(() => {
@@ -767,7 +814,6 @@ class NpcBot {
       const recent = Array.from(msgs).slice(-30);
       for (const msg of recent.reverse()) {
         if (username && !msg.textContent.includes(username)) {
-          // Cho phép message Luân Hồi (không chứa username nhưng có từ khóa đặc trưng)
           const rawTextChk = msg.textContent || '';
           if (!/(?:luân hồi|luanhoi|tầng|thap|hạ gục|han guc|đánh bại|boss|tiếp tục|ket thuc)/i.test(rawTextChk)) continue;
         }
@@ -791,7 +837,6 @@ class NpcBot {
           /luân hồi tháp|luanhoi thap|tháp luân hồi|thap luanhoi|thắng boss|kết thúc luân hồi|ket thuc luan hoi|tiếp tục leo tháp|tiep tuc leo thap|chọn 1 cổng|chon 1 cong|hạ gục boss|han guc boss|đánh bại boss|danh bai boss|chọn độ khó|chon do kho|kết thúc nhận|ket thuc nhan/i.test(rawText);
         if (!isLuanhoi) continue;
 
-        // Advance: message buff tầng mới > tầng đã click
         if (hasBuff && !hasWin && !hasLoss && knownTier > 0) {
           const tm = rawText.match(/(?:tầng|tầng luân hồi|tier)\s*([0-9]{1,3})/i);
           if (tm && parseInt(tm[1]) > knownTier) {
@@ -799,7 +844,6 @@ class NpcBot {
           }
         }
 
-        // Thắng BOSS mốc: nút "Tiếp tục leo tháp"
         if (!hasWin && !hasLoss) {
           const contKeywords = ['tiếp tục leo tháp', 'tiep tuc leo thap', 'tiếp tục leo', 'tiep tuc leo', 'leo tháp', 'leo thap', 'tiếp tục', 'tiep tuc'];
           for (const b of btns) {
@@ -812,23 +856,21 @@ class NpcBot {
           }
         }
 
-         // Thắng BOSS mốc khác: nút "Tiếp Tục"/"Kết Thúc" + "hạ gục boss"
-         if (!hasWin && !hasLoss) {
-           const bossHit = /hạ gục boss|han guc boss|đánh bại boss|danh bai boss/.test(rawText);
-           let hasCont = false, hasStop = false;
-           for (const b of btns) {
-             const rawTxt = (b.textContent || '').trim();
-             if (!rawTxt || /[@|!]/.test(rawTxt)) continue;
-             const t0 = rawTxt.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/:[a-z_0-9]+:/g, '');
-             if (/tiếp|tiep/.test(t0)) hasCont = true;   // "Tiếp Tục" → "tiep tu"
-             if (/kết thúc|ket thuc|dừng|dung/.test(t0)) hasStop = true;
-           }
-           if ((hasCont || hasStop) && bossHit) {
-             return { ended: true, result: 'win', rewardText: rawText };
-           }
-         }
+        if (!hasWin && !hasLoss) {
+          const bossHit = /hạ gục boss|han guc boss|đánh bại boss|danh bai boss/.test(rawText);
+          let hasCont = false, hasStop = false;
+          for (const b of btns) {
+            const rawTxt = (b.textContent || '').trim();
+            if (!rawTxt || /[@|!]/.test(rawTxt)) continue;
+            const t0 = rawTxt.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/:[a-z_0-9]+:/g, '');
+            if (/tiếp|tiep/.test(t0)) hasCont = true;
+            if (/kết thúc|ket thuc|dừng|dung/.test(t0)) hasStop = true;
+          }
+          if ((hasCont || hasStop) && bossHit) {
+            return { ended: true, result: 'win', rewardText: rawText };
+          }
+        }
 
-        // Nếu message có nút "Chiến đấu" và KHÔNG có buff → đang trận → chưa kết thúc
         let hasFightBtn = false;
         for (const b of btns) {
           const t = (b.textContent || '').trim().toLowerCase();
@@ -854,7 +896,6 @@ class NpcBot {
     })()`);
   }
 
-  // Chuyên scan message buff tầng MỚI (đã qua tầng). Dùng match + /i đơn giản (như readLuanhoiTier).
   async checkLuanhoiAdvance() {
     const username = this.username || '';
     return await this.exec(`(() => {
@@ -880,7 +921,6 @@ class NpcBot {
           if (tierWords.includes(clean)) { hasBuff = true; break; }
         }
         if (!hasBuff) continue;
-        // clickedTier≥1 (window tăng mỗi lần click buff). Advance khi thấy tầng mới > đã click.
         if (newTier !== null && newTier > clickedTier && clickedTier > 0) {
           return { ended: true, result: 'advance', rewardText: rawText };
         }
@@ -1432,8 +1472,6 @@ class NpcBot {
   async luanhoiLoop(runId) {
     if (!this.isRunning || this.runId !== runId) return;
 
-    // RESET trạng thái tầng mỗi run mới — không để giá trị cũ (từ run trước) làm sai logic
-    // advance/click buff (window.luanhoiBuffTierClicked phải về 0 để tầng 1 được chọn lại).
     this.luanhoiCurrentTier = 0;
     await this.exec('window.luanhoiBuffTierClicked = 0; true;');
 
@@ -1449,7 +1487,6 @@ class NpcBot {
     }
     await this.markLuanhoiMessages();
 
-    // DEBUG: in text các message gần đây để xác định UI thật của game
     const msgsDebug = await this.exec(`(() => {
       const msgs = document.querySelectorAll('[role="article"]');
       return Array.from(msgs).slice(-6).map((m, i) => {
@@ -1477,9 +1514,7 @@ class NpcBot {
 
     this.log('\n=== ⚔️ Chiến đấu luân hồi ===');
 
-    // PRE-BATTLE: game tự di chuyển tới tầng kế và hiện màn chọn cửa (boss 10/20/30) + buff.
-    // Đợi tới khi thấy buff (hoặc cửa) xuất hiện rồi chọn. Chỉ click khi nút hiện.
-    const preTimeout = Date.now() + 15000; // tối đa 15s chờ chọn buff
+    const preTimeout = Date.now() + 15000;
     let entered = false;
     while (this.isRunning && this.runId === runId && Date.now() < preTimeout) {
       const leftoverCont = await this.clickContinueOrStop('continue');
@@ -1501,7 +1536,6 @@ class NpcBot {
         if (tierNow > 0) this.luanhoiCurrentTier = tierNow;
         break;
       }
-      // Nếu buff đã chọn từ trước (khi advance giữa trận sang tầng mới) hoặc đã trong trận
       const curTier = await this.readLuanhoiTier();
       const clickedTier = await this.exec('window.luanhoiBuffTierClicked || 0');
       if (clickedTier > 0 && (curTier === 0 || clickedTier >= curTier)) {
@@ -1513,7 +1547,6 @@ class NpcBot {
         entered = true;
         break;
       }
-      // Fallback: kiểm tra xem có nút skill không (nghĩa là đã trong trận)
       const hasSkill = await this.clickNextLuanhoiSkill();
       if (hasSkill) {
         this.log(`🌀 Phát hiện skill giữa pre-battle: "${hasSkill}" → đã trong trận!`);
@@ -1544,7 +1577,6 @@ class NpcBot {
       return;
     }
 
-    // 'win' hoặc 'advance' (sang tầng) đều coi là thắng tầng đó
     const isWin = battleResult && battleResult.ended && battleResult.result === 'win';
     const isAdvance = battleResult && battleResult.ended && battleResult.result === 'advance';
 
@@ -1559,7 +1591,6 @@ class NpcBot {
       this.log('❌ THUA BOSS!');
     }
 
-    // Đợi game cập nhật message kết quả
     await this.delay(this.rand(2500, 3500));
 
     let currentTier = await this.readLuanhoiTier();
@@ -1572,8 +1603,6 @@ class NpcBot {
       this.log(`[DỪNG] clickContinueOrStop('stop') returned: ${stopResult}`);
       this.printStats();
 
-      // >>> NEW: tự động gửi lại lệnh !luanhoi để chạy vòng mới, giống cơ chế
-      // startTuLuyenAfterTarget() của mode NPC — thay vì stop() luôn.
       if (this.luanhoiAutoRestart) {
         this.log(`🔁 Tự động bắt đầu lại Luân Hồi (${this.luanhoiCmd}) sau ${this.luanhoiRestartDelaySec}s...`);
         await this.cooldownWait(this.luanhoiRestartDelaySec, runId);
@@ -1589,14 +1618,11 @@ class NpcBot {
       return;
     }
 
-    // Boss mốc (tầng 10, 20, 30...) không tự sang tầng: cần bấm "Tiếp tục leo tháp".
-    // CHỈ áp dụng khi thật sự vừa hạ gục boss (isWin) — nếu chỉ là "advance" (tự động sang tầng
-    // và tầng đó tình cờ là mốc 10) thì nghĩa là mới VỪA CHẠM MẶT boss, chưa đánh nó, phải fight tiếp.
     if (isWin && currentTier > 0 && currentTier % 10 === 0) {
       this.log(`🔄 Thắng BOSS tầng ${currentTier} — cần bấm "Tiếp tục leo tháp" để đi tiếp.`);
       let cont = null;
       const bossTier = currentTier;
-      const contDeadline = Date.now() + 30000; // chờ tối đa 30s — bot Xola có lúc trả lời chậm
+      const contDeadline = Date.now() + 30000;
       let contAttempt = 0;
       while (!cont && Date.now() < contDeadline) {
         if (!this.isRunning || this.runId !== runId) return;
@@ -1617,9 +1643,6 @@ class NpcBot {
       if (cont) {
         this.log(`✅ Đã click nút tiếp tục (${cont}).`);
       } else {
-        // Không tìm thấy nút "Tiếp tục" → readLuanhoiTier() đã đọc sai tầng (cao hơn thực tế).
-        // Thực tế người chơi đang ở tầng trước đó, chưa thắng boss mốc.
-        // Cập nhật lại tầng = currentTier - 1 để khớp thực tế.
         const correctedTier = currentTier - 1;
         this.log(`⚠️ [Debug] Không tìm thấy nút Tiếp tục leo tháp.`);
         this.log(`🔧 [Sửa tầng] readLuanhoiTier() trả về ${currentTier} nhưng thực tế chưa qua boss mốc. Cập nhật tầng: ${currentTier} → ${correctedTier}`);
@@ -1640,16 +1663,11 @@ class NpcBot {
     }
   }
 
-  // Chiến đấu luân hồi: game tự đánh nên chỉ cần chờ trận kết thúc
-  // Gộp 5 bước (buff, advance, battle-end, cooldown, click skill) vào 1 lần executeJavaScript/lượt
-  // — thay vì 5-6 round-trip riêng biệt như trước, giảm trễ dội mỗi lượt đánh.
   async luanhoiBattleTick() {
     await this.markLuanhoiMessages();
     const username = this.username || '';
-    const names = this.luanhoiSkillNames;
+    const names = this.getActiveSkillNames(); // 👈 DÙNG THỨ TỰ CHUNG
     const startIdx = this.luanhoiSkillIdx % names.length;
-    // KHÔNG tăng idx ở đây — chỉ tăng SAU KHI xác nhận đã thực sự bấm được 1 skill (xem dưới),
-    // để tránh lệch thứ tự xoay vòng khi lượt đó chỉ chọn buff/cooldown/không bấm được gì.
     const rotatedNames = names.map((_, i) => names[(startIdx + i) % names.length]);
 
     const tick = await this.exec(`(() => {
@@ -1698,7 +1716,7 @@ class NpcBot {
         return { type: 'buff', text: bestText, tier: msgTier };
       }
 
-      // ---- 2) ADVANCE (tầng mới xuất hiện qua card buff, chưa được click ở bước 1) ----
+      // ---- 2) ADVANCE ----
       {
         const clickedTier = window.luanhoiBuffTierClicked || 0;
         for (const msg of recent40) {
@@ -1721,7 +1739,7 @@ class NpcBot {
         }
       }
 
-      // ---- 3) BATTLE END (win/loss) ----
+      // ---- 3) BATTLE END ----
       {
         const knownTier = window.luanhoiBuffTierClicked || 0;
         for (const msg of recent30) {
@@ -1831,7 +1849,7 @@ class NpcBot {
         }
       }
 
-      // ---- 5) CLICK SKILL (đúng thứ tự xoay vòng, bắt đầu từ idx hiện tại) ----
+      // ---- 5) CLICK SKILL ----
       {
         const availableBtns = [];
         for (const msg of recent40) {
@@ -1862,7 +1880,7 @@ class NpcBot {
     })()`);
 
     if (tick && tick.type === 'skill') {
-      this.luanhoiSkillIdx++; // chỉ tăng khi THỰC SỰ bấm được skill — giữ đúng thứ tự xoay vòng
+      this.luanhoiSkillIdx++;
     }
     return tick;
   }
@@ -1871,8 +1889,6 @@ class NpcBot {
     const battleStartTime = Date.now();
     const maxBattleDurationMs = 180000;
 
-    // Trong khi chờ trận xong, cứ vài vòng gọi click skill (nếu game cần click). Không force-advance
-    // vội: chỉ thoát khi checkLuanhoiBattleEnd xác nhận trận đã kết thúc (buff tầng mới / win / loss).
     let noSkillSince = null;
 
     while (this.isRunning && this.runId === runId) {
@@ -1918,14 +1934,13 @@ class NpcBot {
     return { ended: false };
   }
 
-  // Tìm skill luân hồi theo TÊN (bỏ qua nút buff Phàm/Linh/Huyền/Thiên và skill mặc định), click luân phiên
+  // Tìm skill luân hồi theo TÊN — dùng danh sách chung (getActiveSkillNames)
   async clickNextLuanhoiSkill() {
     await this.markLuanhoiMessages();
     const username = this.username || '';
-    const names = this.luanhoiSkillNames;
+    const names = this.getActiveSkillNames(); // 👈 DÙNG THỨ TỰ CHUNG
     const tierWords = ['pham', 'linh', 'huyen', 'thien'];
 
-    // Lấy tên skill cần click lần này (luân phiên đảo thứ tự)
     const name = names[this.luanhoiSkillIdx % names.length];
     this.luanhoiSkillIdx++;
 
@@ -1966,8 +1981,6 @@ class NpcBot {
 
     if (clicked) return clicked;
 
-    // Fallback: skill theo idx không match được (cooldown/tên lệch) → thử các skill còn lại
-    // THEO ĐÚNG THỨ TỰ XOAY VÒNG (bắt đầu từ idx hiện tại), không phải "cứ thấy cái nào trước thì bấm cái đó"
     const startIdx = this.luanhoiSkillIdx % names.length;
     const rotatedNames = names.map((_, i) => names[(startIdx + i) % names.length]);
     const any = await this.exec(`(() => {
@@ -1985,7 +1998,6 @@ class NpcBot {
       const msgs = document.querySelectorAll('[role="article"]');
       const recent = Array.from(msgs).slice(-40).reverse();
 
-      // Gom hết nút khả dụng (chưa disable, không phải buff) trong các message hợp lệ trước
       const availableBtns = [];
       for (const msg of recent) {
         const rawText = msg.textContent || '';
@@ -2000,10 +2012,9 @@ class NpcBot {
           if (tierWords.includes(noD)) continue;
           availableBtns.push({ btn, noD, txt });
         }
-        if (availableBtns.length) break; // chỉ lấy nút của message hợp lệ gần nhất
+        if (availableBtns.length) break;
       }
 
-      // Theo đúng thứ tự xoay vòng: thử namesNoD[0] trước, rồi [1], [2]... chứ không lấy "cái đầu gặp trong DOM"
       for (const n of namesNoD) {
         const hit = availableBtns.find(b => b.noD.includes(n));
         if (hit) {
@@ -2016,7 +2027,6 @@ class NpcBot {
 
     if (any) return any;
 
-    // Debug: in toàn bộ button/role=button 1 lần duy nhất (tránh spam log mỗi vòng lặp)
     if (this.luanhoiSkillDebugCount === undefined) this.luanhoiSkillDebugCount = 0;
     this.luanhoiSkillDebugCount++;
     if (this.luanhoiSkillDebugCount <= 1) {
@@ -2048,9 +2058,6 @@ class NpcBot {
     return null;
   }
 
-  // Đọc tầng hiện tại từ message (dùng match + /i như checkLuanhoiAdvance/battleEnd)
-  // Kiểm tra xem màn "Đánh Cược Độ Khó — Sau Tầng X" (chọn hướng) của đúng tầng boss vừa thắng
-  // đã xuất hiện chưa — nếu có, nghĩa là đã qua bước "Tiếp tục leo tháp" rồi, không cần bấm lại nữa.
   async checkAlreadyPastContinue(bossTier) {
     await this.markLuanhoiMessages();
     const username = this.username || '';
@@ -2085,7 +2092,6 @@ class NpcBot {
            return parseInt(m[1]);
          }
        }
-       // Fallback: dùng tầng đã click buff gần nhất
        const w = window.luanhoiBuffTierClicked || 0;
        return w > 0 ? w : null;
      })()`);
@@ -2105,7 +2111,6 @@ class NpcBot {
     return val;
   }
 
-  // Click nút "Tiếp tục" hoặc "Dừng nhận thưởng"
   async clickContinueOrStop(which) {
     await this.markLuanhoiMessages();
     const username = this.username || '';
@@ -2150,7 +2155,6 @@ class NpcBot {
          return null;
        };
 
-      // Chỉ click message có gắn đúng tên mình; group chat có thể có nhiều battle cùng lúc.
       const strict = scan();
       if (strict) return strict;
 
@@ -2169,7 +2173,6 @@ class NpcBot {
     return result;
   }
 
-  // Click nút cửa theo hướng (mặc định up)
   async clickDoor(direction) {
     await this.markLuanhoiMessages();
     const username = this.username || '';
@@ -2208,7 +2211,6 @@ class NpcBot {
     })()`);
   }
 
-  // Chọn buff ưu tiên Thiên > Huyền > Linh > Phàm. Dùng window.luanhoiBuffTierClicked làm guard chính.
   async clickBuffByPriority() {
     await this.markLuanhoiMessages();
     const username = this.username || '';
@@ -2238,12 +2240,10 @@ class NpcBot {
         }
         if (!bestBtn) continue;
 
-        // Parse tầng từ message (match + /i)
         let msgTier = 0;
         const tm = rawText.match(/(?:tầng|tầng luân hồi|tier)\s*([0-9]{1,3})/i);
         if (tm && tm[1]) msgTier = parseInt(tm[1]);
 
-        // Nếu đã click buff cho tầng này rồi → bỏ qua
         const clickedTier = window.luanhoiBuffTierClicked || 0;
         if (msgTier > 0 && msgTier <= clickedTier) continue;
 
@@ -2263,7 +2263,6 @@ class NpcBot {
   }
 
   // === BICANH MODE ===
-  // Gửi !bicanh, click nút "Leo Tầng N", rồi spam skill theo danh sách cho đến khi stop
   async bicanhLoop(runId) {
     if (!this.isRunning || this.runId !== runId) return;
 
@@ -2272,7 +2271,6 @@ class NpcBot {
     await this.sendChat(this.bicanhCmd);
     await this.delay(this.rand(2000, 3000));
 
-    // Click nút "Leo Tầng N"
     const floorClicked = await this.clickBicanhFloor();
     if (!floorClicked) {
       this.log('⚠️ Không tìm thấy nút Leo Tầng. Thử lại...');
@@ -2282,15 +2280,11 @@ class NpcBot {
     }
     this.log(`✅ Đã click "${floorClicked}" — bắt đầu spam skill...`);
 
-    // Spam skill theo danh sách, lặp lại cho đến khi user bấm stop
+    const names = this.getActiveSkillNames(); // 👈 DÙNG THỨ TỰ CHUNG
+    this.log(`📋 Thứ tự spam bicanh: ${names.join(' → ')}`);
+
     while (this.isRunning && this.runId === runId) {
-      let skillName;
-      if (this.bicanhSkillOrder.length > 0) {
-        const stt = this.bicanhSkillOrder[this._bicanhSkillIdx % this.bicanhSkillOrder.length];
-        skillName = this.luanhoiSkillNames[stt - 1];
-      } else {
-        skillName = this.luanhoiSkillNames[this._bicanhSkillIdx % this.luanhoiSkillNames.length];
-      }
+      const skillName = names[this._bicanhSkillIdx % names.length];
       if (!skillName) { this._bicanhSkillIdx++; continue; }
       const clicked = await this.clickNextBicanhSkill(skillName);
       if (clicked) {
@@ -2309,7 +2303,6 @@ class NpcBot {
     this.log('⏹ BICANH MODE đã dừng.');
   }
 
-  // Tìm và click nút "Leo Tầng N" trong message gần nhất
   async clickBicanhFloor() {
     return await this.exec(`(() => {
        const msgs = document.querySelectorAll('[role="article"]');
@@ -2334,7 +2327,6 @@ class NpcBot {
      })()`);
   }
 
-  // Click skill bicanh theo tên
   async clickNextBicanhSkill(skillName) {
     const username = this.username || '';
     const nameNoD = skillName.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
