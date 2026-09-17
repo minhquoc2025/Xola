@@ -184,6 +184,10 @@ const ALL_SKILLS = [
   { stt: 21, name: 'Hỗn Nguyên Hộ Thể', cat: 'Trúc Cơ' },
   { stt: 22, name: 'Vạn Kiếm Quy Tông', cat: 'Trúc Cơ' },
   { stt: 23, name: 'Phong Ấn Thất Mạch', cat: 'Trúc Cơ' },
+  // Kim Đan
+  { stt: 24, name: 'Cửu Chuyển Hồi Xuân', cat: 'Kim Đan' },
+  { stt: 25, name: 'Kim Đan Phá Sát ', cat: 'Kim Đan' },
+  { stt: 26, name: 'Tam Muội Chân Hỏa', cat: 'Kim Đan' },
 ];
 
 let skillModalOpen = false;
@@ -270,10 +274,10 @@ async function updateStats() {
     const battleCount = status.battleCount || 0;
     const totalBattles = status.totalBattles || 0;
 
-     // Top row stats - Target shows battle progress
-     if (status.mode === 'bicanh') {
-       document.getElementById('stat-total').textContent = `⚔️ Đang spam skill...`;
-     } else if (status.mode === 'luanhoi') {
+    // Top row stats - Target shows battle progress
+    if (status.mode === 'bicanh') {
+      document.getElementById('stat-total').textContent = `⚔️ Đang spam skill...`;
+    } else if (status.mode === 'luanhoi') {
       const cur = status.lastLuanhoiTarget != null ? status.lastLuanhoiTarget : 0;
       const tgt = status.luanhoiTarget || 0;
       document.getElementById('stat-total').textContent = `Tầng ${cur}/${tgt}`;

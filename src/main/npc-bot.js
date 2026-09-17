@@ -26,7 +26,7 @@ class NpcBot {
     this._tuLuyenActive = false;
     this.username = '';
     this.mode = 'npc';
-    this.defaultSkillNames = ['Kiếm Cơ Bản','Liên Hoàn Kích','Trọng Kích','Phá Giáp','Xuyên Tâm','Liệt Hỏa Trảm','Hấp Huyết','Kịch Độc','Lôi Kích','Tuyệt Sát','Thần Uy','Băng Phong','Phòng Ngự','Phản Kích','Hồi Phục','Hộ Thuẫn','Hỏa Giáp','Thái Cực Dưỡng Sinh','Kiếm Khí Xung Thiên','Kim Cương Phục Ma','Hỗn Nguyên Hộ Thể','Vạn Kiếm Quy Tông','Phong Ấn Thất Mạch','Cửu Chuyển Hồi Xuân', 'Kim Đan Phá Sát', 'Tam Muội Chân Hỏa'];
+    this.defaultSkillNames = ['Kiếm Cơ Bản', 'Liên Hoàn Kích', 'Trọng Kích', 'Phá Giáp', 'Xuyên Tâm', 'Liệt Hỏa Trảm', 'Hấp Huyết', 'Kịch Độc', 'Lôi Kích', 'Tuyệt Sát', 'Thần Uy', 'Băng Phong', 'Phòng Ngự', 'Phản Kích', 'Hồi Phục', 'Hộ Thuẫn', 'Hỏa Giáp', 'Thái Cực Dưỡng Sinh', 'Kiếm Khí Xung Thiên', 'Kim Cương Phục Ma', 'Hỗn Nguyên Hộ Thể', 'Vạn Kiếm Quy Tông', 'Phong Ấn Thất Mạch', 'Cửu Chuyển Hồi Xuân', 'Kim Đan Phá Sát', 'Tam Muội Chân Hỏa'];
     this.luanhoi = false;
     this.luanhoiTarget = 10;
     this.luanhoiCmd = '!luanhoi';
@@ -39,7 +39,9 @@ class NpcBot {
     this.bicanhCmd = '!bicanh';
     this.bicanhSkillOrder = [];
     this._bicanhSkillIdx = 0;
-     this.stats = {
+    this.luanhoiAutoRestart = true;
+    this.luanhoiRestartDelaySec = 5;
+    this.stats = {
       wins: 0,
       losses: 0,
       coins: 0,
@@ -141,17 +143,17 @@ class NpcBot {
       this.luanhoiSkillNames = this.bicanhSkillOrder.map(stt => this.defaultSkillNames[stt - 1]).filter(Boolean);
     }
     this.log('Bot started');
-     if (this.mode === 'luanhoi') {
-       this.log(`=== LUÂN HỒI MODE: Target tầng ${this.luanhoiTarget} ===`);
-       this.luanhoiLoop(this.runId);
-       return;
-     }
-     if (this.mode === 'bicanh') {
-       this.log(`=== BICANH MODE: Spam技能 theo thứ tự ===`);
-       this.bicanhLoop(this.runId);
-       return;
-     }
-     this.log('=== SMART MODE: Đọc turn real-time ===');
+    if (this.mode === 'luanhoi') {
+      this.log(`=== LUÂN HỒI MODE: Target tầng ${this.luanhoiTarget} ===`);
+      this.luanhoiLoop(this.runId);
+      return;
+    }
+    if (this.mode === 'bicanh') {
+      this.log(`=== BICANH MODE: Spam技能 theo thứ tự ===`);
+      this.bicanhLoop(this.runId);
+      return;
+    }
+    this.log('=== SMART MODE: Đọc turn real-time ===');
     if (this.username) {
       this.log(`=== GROUP MODE: Lọc tin nhắn theo "${this.username}" ===`);
     }
@@ -938,10 +940,10 @@ class NpcBot {
       }
      return -1;
    })()`);
-   }
+  }
 
-   async checkBicanhCooldown() {
-     return await this.exec(`(() => {
+  async checkBicanhCooldown() {
+    return await this.exec(`(() => {
        const msgs = document.querySelectorAll('[role="article"]');
        const recent = Array.from(msgs).slice(-30).reverse();
        for (const msg of recent) {
@@ -954,9 +956,9 @@ class NpcBot {
        }
        return 0;
      })()`);
-   }
+  }
 
-   async checkAlreadyFighting() {
+  async checkAlreadyFighting() {
     const username = this.username || '';
     return await this.exec(`(() => {
       const maxIdStr = window.botMaxMsgId || '0';
@@ -1367,7 +1369,7 @@ class NpcBot {
 
     this.log(`\n=== 🌀 LUÂN HỒI: ${this.luanhoiCmd} ===`);
     await this.sendChat(this.luanhoiCmd);
-    await this.delay(this.rand(3000, 4000));
+    await this.delay(this.rand(2000, 3000));
 
     // DEBUG: in text các message gần đây để xác định UI thật của game
     const msgsDebug = await this.exec(`(() => {
@@ -1405,12 +1407,12 @@ class NpcBot {
       const leftoverCont = await this.clickContinueOrStop('continue');
       if (leftoverCont) {
         this.log(`↪️ Phát hiện & bấm nút "Tiếp tục leo tháp" còn sót lại: ${leftoverCont}`);
-        await this.delay(this.rand(1500, 2500));
+        await this.delay(this.rand(2000, 3000));
         continue;
       }
       if (await this.clickDoor('up')) {
         this.log('🚪 Đã chọn cửa hướng lên (boss mốc).');
-        await this.delay(this.rand(1200, 2000));
+        await this.delay(this.rand(2000, 3000));
       }
       const b = await this.clickBuffByPriority();
       if (b) {
@@ -1449,7 +1451,7 @@ class NpcBot {
       return;
     }
 
-    await this.delay(this.rand(1500, 2500));
+    await this.delay(this.rand(2000, 3000));
 
     const isAlreadyFighting = await this.checkAlreadyFighting();
     const battleResult = await this.luanhoiBattle(isAlreadyFighting, runId);
@@ -1479,7 +1481,7 @@ class NpcBot {
     }
 
     // Đợi game cập nhật message kết quả
-    await this.delay(this.rand(2500, 3500));
+    await this.delay(this.rand(2000, 3000));
 
     let currentTier = await this.readLuanhoiTier();
     this.lastLuanhoiTarget = currentTier;
@@ -2198,63 +2200,63 @@ class NpcBot {
       return null;
     })()`);
 
-     if (clicked) {
-       this.log(`🎯 Chọn buff: "${clicked.text}" (ưu tiên, tầng ${clicked.tier || '?'}).`);
-       return clicked.text;
-     }
-     return false;
-   }
+    if (clicked) {
+      this.log(`🎯 Chọn buff: "${clicked.text}" (ưu tiên, tầng ${clicked.tier || '?'}).`);
+      return clicked.text;
+    }
+    return false;
+  }
 
-   // === BICANH MODE ===
-   // Gửi !bicanh, click nút "Leo Tầng N", rồi spam skill theo danh sách cho đến khi stop
-   async bicanhLoop(runId) {
-     if (!this.isRunning || this.runId !== runId) return;
+  // === BICANH MODE ===
+  // Gửi !bicanh, click nút "Leo Tầng N", rồi spam skill theo danh sách cho đến khi stop
+  async bicanhLoop(runId) {
+    if (!this.isRunning || this.runId !== runId) return;
 
-     this.log('\n=== ⚔️ BICANH MODE ===');
-     this.log('Gửi lệnh !bicanh...');
-     await this.sendChat(this.bicanhCmd);
-     await this.delay(this.rand(2000, 3000));
+    this.log('\n=== ⚔️ BICANH MODE ===');
+    this.log('Gửi lệnh !bicanh...');
+    await this.sendChat(this.bicanhCmd);
+    await this.delay(this.rand(2000, 3000));
 
-     // Click nút "Leo Tầng N"
-     const floorClicked = await this.clickBicanhFloor();
-     if (!floorClicked) {
-       this.log('⚠️ Không tìm thấy nút Leo Tầng. Thử lại...');
-       await this.cooldownWait(5, runId);
-       if (this.isRunning && this.runId === runId) this.bicanhLoop(runId);
-       return;
-     }
-     this.log(`✅ Đã click "${floorClicked}" — bắt đầu spam skill...`);
+    // Click nút "Leo Tầng N"
+    const floorClicked = await this.clickBicanhFloor();
+    if (!floorClicked) {
+      this.log('⚠️ Không tìm thấy nút Leo Tầng. Thử lại...');
+      await this.cooldownWait(5, runId);
+      if (this.isRunning && this.runId === runId) this.bicanhLoop(runId);
+      return;
+    }
+    this.log(`✅ Đã click "${floorClicked}" — bắt đầu spam skill...`);
 
-      // Spam skill theo danh sách, lặp lại cho đến khi user bấm stop
-       while (this.isRunning && this.runId === runId) {
-          let skillName;
-          if (this.bicanhSkillOrder.length > 0) {
-            const stt = this.bicanhSkillOrder[this._bicanhSkillIdx % this.bicanhSkillOrder.length];
-            skillName = this.luanhoiSkillNames[stt - 1];
-          } else {
-            skillName = this.luanhoiSkillNames[this._bicanhSkillIdx % this.luanhoiSkillNames.length];
-          }
-         if (!skillName) { this._bicanhSkillIdx++; continue; }
-         const clicked = await this.clickNextBicanhSkill(skillName);
-         if (clicked) {
-            this.log(`🌀 Click skill bicanh: "${clicked}"`);
-            this._bicanhSkillIdx++;
-          }
-          const cd = await this.checkBicanhCooldown();
-          if (cd > 0) {
-            this.log(`⏳ Cooldown — chờ ${cd}ms`);
-            await this.delay(cd);
-          } else {
-            await this.delay(this.rand(800, 1500));
-          }
-        }
+    // Spam skill theo danh sách, lặp lại cho đến khi user bấm stop
+    while (this.isRunning && this.runId === runId) {
+      let skillName;
+      if (this.bicanhSkillOrder.length > 0) {
+        const stt = this.bicanhSkillOrder[this._bicanhSkillIdx % this.bicanhSkillOrder.length];
+        skillName = this.luanhoiSkillNames[stt - 1];
+      } else {
+        skillName = this.luanhoiSkillNames[this._bicanhSkillIdx % this.luanhoiSkillNames.length];
+      }
+      if (!skillName) { this._bicanhSkillIdx++; continue; }
+      const clicked = await this.clickNextBicanhSkill(skillName);
+      if (clicked) {
+        this.log(`🌀 Click skill bicanh: "${clicked}"`);
+        this._bicanhSkillIdx++;
+      }
+      const cd = await this.checkBicanhCooldown();
+      if (cd > 0) {
+        this.log(`⏳ Cooldown — chờ ${cd}ms`);
+        await this.delay(cd);
+      } else {
+        await this.delay(this.rand(800, 1500));
+      }
+    }
 
-      this.log('⏹ BICANH MODE đã dừng.');
-   }
+    this.log('⏹ BICANH MODE đã dừng.');
+  }
 
-   // Tìm và click nút "Leo Tầng N" trong message gần nhất
-   async clickBicanhFloor() {
-     return await this.exec(`(() => {
+  // Tìm và click nút "Leo Tầng N" trong message gần nhất
+  async clickBicanhFloor() {
+    return await this.exec(`(() => {
        const msgs = document.querySelectorAll('[role="article"]');
        const recent = Array.from(msgs).slice(-20).reverse();
        for (const msg of recent) {
@@ -2275,18 +2277,18 @@ class NpcBot {
        }
        return null;
      })()`);
-   }
+  }
 
-   // Click skill bicanh theo tên
-   async clickNextBicanhSkill(skillName) {
-     const username = this.username || '';
-     const nameNoD = skillName.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-       .replace(/\u0111/g,'d').replace(/\u0110/g,'d')
-       .replace(/\u01A1/g,'o').replace(/\u01A0/g,'o')
-       .replace(/\u01B0/g,'u').replace(/\u01AF/g,'u')
-       .toLowerCase();
+  // Click skill bicanh theo tên
+  async clickNextBicanhSkill(skillName) {
+    const username = this.username || '';
+    const nameNoD = skillName.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/\u0111/g, 'd').replace(/\u0110/g, 'd')
+      .replace(/\u01A1/g, 'o').replace(/\u01A0/g, 'o')
+      .replace(/\u01B0/g, 'u').replace(/\u01AF/g, 'u')
+      .toLowerCase();
 
-     return await this.exec(`(() => {
+    return await this.exec(`(() => {
        const username = ${JSON.stringify(username)};
        const nameNoD = ${JSON.stringify(nameNoD)};
        const usernameFirst = (username || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\u0111/g,'d').replace(/\u0110/g,'d').split(' ')[0].toLowerCase();
@@ -2312,7 +2314,7 @@ class NpcBot {
        }
        return null;
      })()`);
-   }
- }
+  }
+}
 
- module.exports = { NpcBot };
+module.exports = { NpcBot };
