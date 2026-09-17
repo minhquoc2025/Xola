@@ -1932,9 +1932,15 @@ class NpcBot {
       const state = await this.scanDianguc();
       if (!state) {
         missing++;
-        if (missing > 30) {
-          this.log('⚠️ Mất message Địa Ngục quá lâu, đã lưu Excel.');
+        // Khoảng nghỉ giữa các pha của game có thể rất lâu (nhiều người đánh xong
+        // game mới chuyển màn), nên chờ tới ~150s thay vì bỏ cuộc sớm gây đứng im.
+        // Bộ dò stall (10 phút không tiến triển) vẫn là lưới an toàn cuối cùng.
+        if (missing > 300) {
+          this.log('⚠️ Mất message Địa Ngục quá lâu (~150s), đã lưu Excel.');
           return 'ERROR';
+        }
+        if (missing % 60 === 0) {
+          this.log(`⏳ Đang chờ message Địa Ngục (${Math.round(missing / 2)}s)...`);
         }
         await this.delay(500);
         continue;
@@ -1980,9 +1986,17 @@ class NpcBot {
         this.recordDiangucDirection(this.diangucPending.step, this.diangucPending.direction, 'đúng');
         this.diangucPending = null;
         lastProgressAt = Date.now();
-      } else if (this.diangucPending) {
+      } else if (this.diangucPending && state.phase === 'DIRECTION') {
         // Card hướng cũ vẫn còn trong DOM cho tới khi game trả kết quả.
-        // Chờ xác nhận để không click cùng một hướng nhiều lần.
+        // Chỉ chặn khi scan vẫn còn ở màn chọn hướng; nếu game đã chuyển sang
+        // BUFF/BATTLE (nhưng lỡ không kèm chữ "đúng/sai đường") thì phải tiếp tục
+        // xử lý pha mới thay vì chờ vô thời hạn -> gây đứng im.
+        // Log 1 lần (rồi mỗi 30s) để không nhìn như bot bị treo.
+        const now = Date.now();
+        if (!this.diangucPending.waitingLoggedAt || now - this.diangucPending.waitingLoggedAt >= 30000) {
+          this.diangucPending.waitingLoggedAt = now;
+          this.log(`⏳ Đang chờ game xác nhận hướng bước ${this.diangucPending.step} (${this.diangucPending.direction})...`);
+        }
         await this.delay(this.diangucChoiceDelayMs);
         continue;
       }
