@@ -130,10 +130,10 @@ function getDiangucConfig() {
     username: (document.getElementById('username-dianguc').value || 'Quất Bất Lực').trim(),
     diangucCmd: (document.getElementById('dianguc-cmd').value || '!dianguc').trim(),
     luanhoiSkillNames: resolvedSkills,
-    diangucDelayMs: 1500,
-    diangucChoiceDelayMs: 1500,
-    diangucSkillDelayMs: 1700,
-    diangucWinDelayMs: 3000,
+    diangucDelayMs: 2000,
+    diangucChoiceDelayMs: 2000,
+    diangucSkillDelayMs: 2200,
+    diangucWinDelayMs: 3500,
   };
 }
 

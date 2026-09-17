@@ -70,10 +70,10 @@ class NpcBot {
     this.dianguc = false;
     this.diangucCmd = '!dianguc';
     this.diangucSkillNames = this.luanhoiSkillNames;
-    this.diangucDelayMs = 1500;
-    this.diangucChoiceDelayMs = 1500;
-    this.diangucSkillDelayMs = 1700;
-    this.diangucWinDelayMs = 3000;
+    this.diangucDelayMs = 2000;
+    this.diangucChoiceDelayMs = 2000;
+    this.diangucSkillDelayMs = 2200;
+    this.diangucWinDelayMs = 3500;
     this.diangucFloor = 0;
     this.diangucStep = 0;
     this.diangucPending = null;
@@ -1899,15 +1899,31 @@ class NpcBot {
         await this.stop();
         return;
       }
-      if (result === 'STOP' || result === 'ERROR') return;
+      if (result === 'STOP') return;
+      if (result === 'ERROR') {
+        this.log('⏸️ Địa Ngục dừng lượt này (hết thời gian/kẹt/lỗi), đã lưu Excel.');
+        await this.stop();
+        return;
+      }
       if (this.isRunning && this.runId === runId) await this.delay(2000);
     }
   }
 
   async diangucAttempt(runId) {
-    const deadline = Date.now() + 15 * 60 * 1000;
+    // Không dùng mốc thời gian cứng vì một lượt Địa Ngục hợp lệ có thể chạy rất lâu.
+    // Chỉ dừng khi bot "kẹt" (không tiến triển) hoặc vượt chặn trên an toàn.
+    const startedAt = Date.now();
+    const maxDurationMs = 120 * 60 * 1000;
+    const stallTimeoutMs = 10 * 60 * 1000;
+    let lastProgressAt = Date.now();
+    let lastProgressMarker = `${this.diangucFloor || 0}|${this.diangucStep || 0}`;
     let missing = 0;
-    while (this.isRunning && this.runId === runId && Date.now() < deadline) {
+    while (this.isRunning && this.runId === runId && Date.now() - startedAt < maxDurationMs) {
+      if (Date.now() - lastProgressAt > stallTimeoutMs) {
+        this.log(`⚠️ Địa Ngục không tiến triển trong ${Math.round(stallTimeoutMs / 60000)} phút (tầng ${this.diangucFloor}, bước ${this.diangucStep}), dừng lượt này.`);
+        this.saveDiangucData();
+        return 'ERROR';
+      }
       // Message buff/battle mới được bot tạo sau lần scan trước vẫn phải được
       // nối vào chuỗi reply của !dianguc trước khi quét trạng thái tiếp theo.
       await this.markDiangucMessages();
@@ -1933,6 +1949,11 @@ class NpcBot {
         this.diangucFloor = state.floor;
       }
       if (state.step) this.diangucStep = state.step;
+      const progressMarker = `${this.diangucFloor || 0}|${this.diangucStep || 0}`;
+      if (progressMarker !== lastProgressMarker) {
+        lastProgressMarker = progressMarker;
+        lastProgressAt = Date.now();
+      }
 
       const lower = state.text.toLowerCase();
       const isActiveChoice = ['DIRECTION', 'BUFF', 'MYSTERY'].includes(state.phase);
@@ -1952,9 +1973,11 @@ class NpcBot {
       if (this.diangucPending && lower.includes('sai đường')) {
         this.recordDiangucDirection(this.diangucPending.step, this.diangucPending.direction, 'sai');
         this.diangucPending = null;
+        lastProgressAt = Date.now();
       } else if (this.diangucPending && lower.includes('đúng đường')) {
         this.recordDiangucDirection(this.diangucPending.step, this.diangucPending.direction, 'đúng');
         this.diangucPending = null;
+        lastProgressAt = Date.now();
       } else if (this.diangucPending) {
         // Card hướng cũ vẫn còn trong DOM cho tới khi game trả kết quả.
         // Chờ xác nhận để không click cùng một hướng nhiều lần.
@@ -1967,6 +1990,7 @@ class NpcBot {
         this.log(clicked
           ? `🎲 Đã click sự kiện bí ẩn: ${state.buttons.find(button => !/^[@!]/.test(button.text) && !/^(?:quất bất lực|xỏ lá ba que)$/iu.test(button.text))?.text || 'nút đầu tiên'}`
           : '⚠️ Không tìm thấy nút lựa chọn sự kiện bí ẩn');
+        if (clicked) lastProgressAt = Date.now();
         await this.delay(1500);
         continue;
       }
@@ -1986,6 +2010,7 @@ class NpcBot {
           if (clicked) {
             this.diangucLastBuffKey = buffKey;
             this.diangucLastBuffClickAt = Date.now();
+            lastProgressAt = Date.now();
           }
           this.log(`${clicked ? '✨ Đã click buff' : '⚠️ Click buff thất bại'}: ${choice.tier} | ${choice.description || choice.button.text}`);
         } else {
@@ -2015,6 +2040,7 @@ class NpcBot {
             this.diangucResolvedBattleIds.add(state.id);
             this.log('✅ Đã thắng quái mở màn, chuyển sang quét màn chọn hướng.');
           }
+          lastProgressAt = Date.now();
           await this.delay(this.diangucWinDelayMs);
           continue;
         }
