@@ -232,7 +232,7 @@ function saveSkillOrder() {
   if (!input) return;
   const raw = input.value.trim();
   if (!raw) { status.textContent = '⚠️ Chưa nhập thứ tự'; status.style.color = '#e94560'; return; }
-  const order = raw.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n >= 1 && n <= 23);
+  const order = raw.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n >= 1 && n <= 50);
   if (order.length === 0) { status.textContent = '⚠️ Không có STT hợp lệ'; status.style.color = '#e94560'; return; }
   localStorage.setItem('bicanhSkillOrder', raw);
   localStorage.setItem('luanhoiSkillOrder', raw);
