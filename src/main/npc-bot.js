@@ -1716,6 +1716,7 @@ class NpcBot {
         const result = /đã chết|bạn đã thua|thất bại|thua!|💀|❌/i.test(rawText) ? 'loss'
           : /chiến thắng|đúng đường|thắng!/i.test(rawText) ? 'win' : null;
         const hasOutcomeMarker = /sai đường|đúng đường|đã chết|thắng!|thua!|thất bại|💀|❌/i.test(rawText);
+        const missedResponse = /không phản hồi kịp thời|khong phan hoi kip thoi/i.test(rawText);
         if (phase === 'UNKNOWN' && !hasOutcomeMarker) continue;
         return {
           id,
@@ -1728,6 +1729,7 @@ class NpcBot {
           floor: floorMatch ? Number(floorMatch[1]) : null,
           step: stepMatch ? Number(stepMatch[1]) : null,
           result,
+          missedResponse,
           target: /đánh\s*(?:boss\s*)?(41|51)|boss\s*(41|51)|tầng\s*51/i.test(rawText),
         };
       }
@@ -1948,7 +1950,7 @@ class NpcBot {
         if (this.diangucFloor && this.diangucFloor !== state.floor) this.diangucData = {};
         this.diangucFloor = state.floor;
       }
-      if (state.step) this.diangucStep = state.step;
+      if (state.step && !state.missedResponse) this.diangucStep = state.step;
       const progressMarker = `${this.diangucFloor || 0}|${this.diangucStep || 0}`;
       if (progressMarker !== lastProgressMarker) {
         lastProgressMarker = progressMarker;
@@ -1998,8 +2000,15 @@ class NpcBot {
         // Game dùng lại/ửa cùng một message cho mỗi màn buff, nên không thể đánh dấu
         // vĩnh viễn. Chỉ bỏ qua trong thời gian ngắn sau lần click gần nhất để tránh
         // click trùng, nhưng vẫn cho phép click ở bước kế tiếp.
+        if (state.missedResponse) {
+          // Game báo "không phản hồi kịp thời" -> buff bị hụt, phải click lại NGAY
+          // và GIỮ NGUYÊN bước để không làm hỏng dữ liệu hướng của bước đó.
+          this.diangucLastBuffKey = '';
+          this.diangucLastBuffClickAt = 0;
+          this.log(`⏰ Hụt buff (không phản hồi kịp thời), click lại ở bước ${this.diangucStep || '?'} (giữ nguyên bước).`);
+        }
         const buffKey = state.id || state.buttonText || '';
-        if (buffKey && buffKey === this.diangucLastBuffKey
+        if (!state.missedResponse && buffKey && buffKey === this.diangucLastBuffKey
           && Date.now() - this.diangucLastBuffClickAt < 5000) {
           await this.delay(this.diangucChoiceDelayMs);
           continue;
@@ -2010,7 +2019,9 @@ class NpcBot {
           if (clicked) {
             this.diangucLastBuffKey = buffKey;
             this.diangucLastBuffClickAt = Date.now();
-            lastProgressAt = Date.now();
+            // Click lại khi đang hụt không tính là "tiến triển" để nếu game thực sự kẹt
+            // thì bộ dò stall vẫn có thể dừng lượt sau 10 phút.
+            if (!state.missedResponse) lastProgressAt = Date.now();
           }
           this.log(`${clicked ? '✨ Đã click buff' : '⚠️ Click buff thất bại'}: ${choice.tier} | ${choice.description || choice.button.text}`);
         } else {
@@ -2035,15 +2046,10 @@ class NpcBot {
         continue;
       }
       if (state.phase === 'BATTLE') {
-        if (state.result === 'win') {
-          if (state.id && !this.diangucResolvedBattleIds.has(state.id)) {
-            this.diangucResolvedBattleIds.add(state.id);
-            this.log('✅ Đã thắng quái mở màn, chuyển sang quét màn chọn hướng.');
-          }
-          lastProgressAt = Date.now();
-          await this.delay(this.diangucWinDelayMs);
-          continue;
-        }
+        // KHÔNG dùng chữ "thắng!" làm điều kiện bỏ qua trận: trận phạt khi chọn sai
+        // hướng cũng nhắc "thắng!" ngay giữa trận. Nếu bỏ qua, bot ngừng click skill,
+        // trận không bao giờ kết thúc -> đứng im. Cứ đánh tiếp tới khi message chuyển
+        // pha (hết nút skill rồi mới sang màn chọn hướng).
         const clickedSkill = await this.clickNextDiangucSkill();
         if (clickedSkill) this.log(`⚔️ Địa Ngục click skill: ${clickedSkill}`);
         else this.log(`⚠️ Battle không tìm thấy skill trong message Địa Ngục: ${state.buttonText || '(trống)'}`);
