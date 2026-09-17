@@ -80,6 +80,8 @@ class NpcBot {
     this.diangucSkillIdx = 0;
     this.diangucResolvedBattleIds = new Set();
     this.diangucLastScanSignature = '';
+    this.diangucLastBuffKey = '';
+    this.diangucLastBuffClickAt = 0;
     this.diangucData = {};
     this.diangucLastSaved = 0;
     this.stats = {
@@ -183,6 +185,8 @@ class NpcBot {
     this.diangucSkillIdx = 0;
     this.diangucResolvedBattleIds = new Set();
     this.diangucLastScanSignature = '';
+    this.diangucLastBuffKey = '';
+    this.diangucLastBuffClickAt = 0;
     this.log('Bot started');
     if (this.mode === 'luanhoi') {
       this.log(`=== LUÂN HỒI MODE: Target tầng ${this.luanhoiTarget} ===`);
@@ -750,6 +754,10 @@ class NpcBot {
       };
 
       const command = ${JSON.stringify(this.diangucCmd || '!dianguc')};
+      const username = ${JSON.stringify(this.username || '')};
+      // Chỉ giữ card thuộc về user của bot này. Trong group chat nhiều người cùng
+      // chơi !dianguc, không lọc sẽ đánh nhầm battle của người khác.
+      const ownedByUser = msg => !username || (msg.textContent || '').includes(username);
       const ids = new Set(anchorId ? [anchorId] : []);
       let ownedCount = 0;
 
@@ -767,7 +775,7 @@ class NpcBot {
             const rawText = msg.textContent || '';
             const hasButtons = msg.querySelectorAll('button, [role="button"]').length > 0;
             const looksLikeGame = /tầng địa ngục|địa ngục\s*(?:tầng|bước)|đúng đường|sai đường|chọn 1 buff|hãy chọn hướng|sự kiện bí ẩn|trạng thái|diễn biến|gặp quái/i.test(rawText);
-            if (hasButtons && looksLikeGame && msg.getAttribute('data-dianguc-owned') !== 'true') {
+            if (hasButtons && looksLikeGame && ownedByUser(msg) && msg.getAttribute('data-dianguc-owned') !== 'true') {
               msg.setAttribute('data-dianguc-owned', 'true');
               ownedCount++;
             }
@@ -780,7 +788,7 @@ class NpcBot {
       for (const msg of articles) {
         const hasOwnedReply = Array.from(msg.querySelectorAll('[class*="repliedTextPreview"], [class*="repliedMessageClickable"], [class*="reply"]'))
           .some(reply => (reply.textContent || '').includes(command));
-        if (!hasOwnedReply) continue;
+        if (!hasOwnedReply || !ownedByUser(msg)) continue;
         msg.setAttribute('data-dianguc-owned', 'true');
         ownedCount++;
         const messageId = getId(msg.id) || getId(msg.getAttribute('data-list-item-id')) || getId(msg.getAttribute('data-message-id'));
@@ -801,7 +809,7 @@ class NpcBot {
             const referenceId = getId(el.getAttribute(name));
             return referenceId && ids.has(referenceId);
           }));
-          if (referencesOwned) {
+          if (referencesOwned && ownedByUser(msg)) {
             msg.setAttribute('data-dianguc-owned', 'true');
             ownedCount++;
             const messageId = getId(msg.id) || getId(msg.getAttribute('data-list-item-id')) || getId(msg.getAttribute('data-message-id'));
@@ -1674,7 +1682,6 @@ class NpcBot {
       const articles = Array.from(document.querySelectorAll('[role="article"]')).slice(-50).reverse();
       for (const msg of articles) {
         if (msg.getAttribute('data-dianguc-owned') !== 'true') continue;
-        if (msg.getAttribute('data-dianguc-resolved') === 'true') continue;
         const rawText = msg.textContent || '';
         const lower = rawText.toLowerCase();
         const id = getId(msg);
@@ -1690,12 +1697,14 @@ class NpcBot {
         if (!buttons.length) continue;
         const buttonText = buttons.map(button => button.text.toLowerCase()).join(' | ');
         const hasSkillButton = skills.some(skill => buttonText.includes(skill.toLowerCase()));
+        const ownName = ${JSON.stringify((this.username || '').trim())};
+        const normMeta = value => (value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').toLowerCase().trim();
         const metadataOnly = buttons.every(button => {
           const text = button.text.trim();
-          return /^[@!]/.test(text) || /^(?:quất bất lực|xỏ lá ba que)$/iu.test(text);
+          return /^[@!]/.test(text)
+            || /^(?:quất bất lực|xỏ lá ba que)$/iu.test(text)
+            || (ownName && normMeta(text) === normMeta(ownName));
         });
-        if (msg.getAttribute('data-dianguc-buff-clicked') === 'true'
-          && lower.includes('chọn 1 buff')) continue;
         const hasBattleMarker = ['chiến đấu', 'đánh quái', 'quái vật', 'trạng thái', 'diễn biến', 'gặp quái', 'atk:', 'def:']
           .some(marker => lower.includes(marker));
         const phase = lower.includes('sự kiện bí ẩn') ? 'MYSTERY'
@@ -1755,7 +1764,6 @@ class NpcBot {
       const button = buttons[${Number(index)}];
       if (!button) return false;
       button.click();
-      msg.setAttribute('data-dianguc-buff-clicked', 'true');
       return true;
     })()`);
   }
@@ -1845,7 +1853,18 @@ class NpcBot {
     this.loadDiangucData();
     while (this.isRunning && this.runId === runId) {
       this.diangucPending = null;
-      await this.exec('window.diangucAnchorId = ""; true;');
+      // Xoá mark của lần chạy trước để card của người khác không bị dính lại.
+      await this.exec(`(() => {
+        window.diangucAnchorId = '';
+        document.querySelectorAll('[role="article"]').forEach(msg => {
+          msg.removeAttribute('data-dianguc-owned');
+          msg.removeAttribute('data-dianguc-resolved');
+          msg.removeAttribute('data-dianguc-buff-clicked');
+          msg.removeAttribute('data-dianguc-target');
+          msg.removeAttribute('data-dianguc-anchor');
+        });
+        return true;
+      })()`);
       await this.sendChat(this.diangucCmd);
       await this.delay(2000);
       const anchor = await this.captureDiangucAnchor();
@@ -1952,9 +1971,22 @@ class NpcBot {
         continue;
       }
       if (state.phase === 'BUFF') {
+        // Game dùng lại/ửa cùng một message cho mỗi màn buff, nên không thể đánh dấu
+        // vĩnh viễn. Chỉ bỏ qua trong thời gian ngắn sau lần click gần nhất để tránh
+        // click trùng, nhưng vẫn cho phép click ở bước kế tiếp.
+        const buffKey = state.id || state.buttonText || '';
+        if (buffKey && buffKey === this.diangucLastBuffKey
+          && Date.now() - this.diangucLastBuffClickAt < 5000) {
+          await this.delay(this.diangucChoiceDelayMs);
+          continue;
+        }
         const choice = this.chooseDiangucBuff(state.text, state.buttons);
         if (choice) {
           const clicked = await this.clickDiangucBuff(state.targetKey, choice.index);
+          if (clicked) {
+            this.diangucLastBuffKey = buffKey;
+            this.diangucLastBuffClickAt = Date.now();
+          }
           this.log(`${clicked ? '✨ Đã click buff' : '⚠️ Click buff thất bại'}: ${choice.tier} | ${choice.description || choice.button.text}`);
         } else {
           this.log(`⚠️ Không tìm thấy buff hợp lệ: ${state.buttonText || '(trống)'}`);
@@ -1981,11 +2013,6 @@ class NpcBot {
         if (state.result === 'win') {
           if (state.id && !this.diangucResolvedBattleIds.has(state.id)) {
             this.diangucResolvedBattleIds.add(state.id);
-            await this.exec(`(() => {
-              const msg = document.getElementById(${JSON.stringify(state.id)});
-              if (msg) msg.setAttribute('data-dianguc-resolved', 'true');
-              return true;
-            })()`);
             this.log('✅ Đã thắng quái mở màn, chuyển sang quét màn chọn hướng.');
           }
           await this.delay(this.diangucWinDelayMs);
