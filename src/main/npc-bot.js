@@ -1402,11 +1402,15 @@ async clickNextNpcSkill() {
     const skillName = this.luanhoiSkillNames[stt - 1];
     if (!skillName) return null;
 
-    const nameNoD = skillName.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-      .replace(/\u0111/g, 'd').replace(/\u0110/g, 'd')
-      .replace(/\u01A1/g, 'o').replace(/\u01A0/g, 'o')
-      .replace(/\u01B0/g, 'u').replace(/\u01AF/g, 'u')
-      .toLowerCase();
+    const normalizeSkill = value => String(value || '').normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\u0111/gi, 'd').replace(/\u01A1/gi, 'o').replace(/\u01B0/gi, 'u')
+      .toLowerCase().replace(/[^a-z0-9]/g, '');
+    const nameNoD = normalizeSkill(skillName);
+    const configuredNames = this.bicanhSkillOrder
+      .map(index => this.luanhoiSkillNames[index - 1])
+      .filter(Boolean)
+      .map(normalizeSkill);
     const username = this.username || '';
     const usernameFirst = username.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').split(' ')[0].toLowerCase();
@@ -1414,6 +1418,12 @@ async clickNextNpcSkill() {
     return await this.exec(`(() => {
       const usernameFirst = ${JSON.stringify(usernameFirst)};
       const nameNoD = ${JSON.stringify(nameNoD)};
+      const configuredNames = ${JSON.stringify(configuredNames)};
+      const normalizeSkill = value => String(value || '').normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\u0111/gi, 'd').replace(/\u01A1/gi, 'o').replace(/\u01B0/gi, 'u')
+        .toLowerCase().replace(/[^a-z0-9]/g, '');
+      const tierWords = new Set(['pham', 'linh', 'huyen', 'thien']);
       const msgs = document.querySelectorAll('[role="article"]');
       const recent = Array.from(msgs).slice(-40).reverse();
       for (const msg of recent) {
@@ -1421,16 +1431,22 @@ async clickNextNpcSkill() {
         const norm = rawText.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\u0111/g,'d').replace(/\u0110/g,'d').toLowerCase();
         if (usernameFirst && !norm.includes(usernameFirst) && !norm.includes('bicanh') && !norm.includes('npc') && !norm.includes('battle')) continue;
         const btns = msg.querySelectorAll('button[role="button"]');
-        for (const btn of btns) {
-          if (btn.disabled || btn.offsetParent === null) continue;
-          const raw = (btn.textContent || '').trim();
-          if (!raw || /[@|!]/.test(raw)) continue;
-          const clean = raw.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\u0111/g,'d').replace(/\u0110/g,'d').toLowerCase();
-          if (clean === nameNoD || clean.includes(nameNoD)) {
-            btn.disabled = false;
-            btn.click();
-            return raw;
-          }
+        const available = Array.from(btns).map(btn => ({
+          btn,
+          raw: (btn.textContent || '').trim(),
+        })).filter(item => {
+          if (item.btn.disabled || item.btn.offsetParent === null || !item.raw || /[@|!]/.test(item.raw)) return false;
+          return !tierWords.has(normalizeSkill(item.raw));
+        }).map(item => ({ ...item, clean: normalizeSkill(item.raw) }));
+        if (!available.length) continue;
+
+        // DOM chỉ render các nút còn dùng được; không dùng index của snapshot cũ.
+        const target = available.find(item => item.clean.includes(nameNoD));
+        const fallback = available.find(item => configuredNames.includes(item.clean) || configuredNames.some(name => item.clean.includes(name)));
+        const chosen = target || fallback || available[0];
+        if (chosen) {
+          chosen.btn.click();
+          return chosen.raw;
         }
       }
       return null;
