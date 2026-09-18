@@ -42,6 +42,37 @@ function toggleMute() {
   appendLog(isMuted ? '[🔇] Đã tắt tiếng toàn bộ âm thanh' : '[🔊] Đã bật tiếng');
 }
 
+const ALL_SKILLS = [
+  // Tấn Công
+  { stt: 1, name: 'Kiếm Cơ Bản', cat: 'Tấn Công' },
+  { stt: 2, name: 'Liên Hoàn Kích', cat: 'Tấn Công' },
+  { stt: 3, name: 'Trọng Kích', cat: 'Tấn Công' },
+  { stt: 4, name: 'Phá Giáp', cat: 'Tấn Công' },
+  { stt: 5, name: 'Xuyên Tâm', cat: 'Tấn Công' },
+  // Đặc Biệt
+  { stt: 6, name: 'Liệt Hỏa Trảm', cat: 'Đặc Biệt' },
+  { stt: 7, name: 'Hấp Huyết', cat: 'Đặc Biệt' },
+  { stt: 8, name: 'Kịch Độc', cat: 'Đặc Biệt' },
+  { stt: 9, name: 'Lôi Kích', cat: 'Đặc Biệt' },
+  { stt: 10, name: 'Tuyệt Sát', cat: 'Đặc Biệt' },
+  { stt: 11, name: 'Thần Uy', cat: 'Đặc Biệt' },
+  { stt: 12, name: 'Băng Phong', cat: 'Đặc Biệt' },
+  // Chống Xỏ Lá
+  { stt: 13, name: 'Phòng Ngự', cat: 'Chống Xỏ Lá' },
+  { stt: 14, name: 'Phản Kích', cat: 'Chống Xỏ Lá' },
+  { stt: 15, name: 'Hồi Phục', cat: 'Chống Xỏ Lá' },
+  { stt: 16, name: 'Hộ Thuẫn', cat: 'Chống Xỏ Lá' },
+  { stt: 17, name: 'Hỏa Giáp', cat: 'Chống Xỏ Lá' },
+  // Luyện Khí
+  { stt: 18, name: 'Thái Cực Dưỡng Sinh', cat: 'Luyện Khí' },
+  { stt: 19, name: 'Kiếm Khí Xung Thiên', cat: 'Luyện Khì' },
+  { stt: 20, name: 'Kim Cương Phục Ma', cat: 'Luyện Khí' },
+  // Trúc Cơ
+  { stt: 21, name: 'Hỗn Nguyên Hộ Thể', cat: 'Trúc Cơ' },
+  { stt: 22, name: 'Vạn Kiếm Quy Tông', cat: 'Trúc Cơ' },
+  { stt: 23, name: 'Phong Ấn Thất Mạch', cat: 'Trúc Cơ' },
+];
+
 // === MODE ===
 
 let currentMode = 'npc';
@@ -174,39 +205,6 @@ function updateBotButton() {
     }
   }
 }
-
-// === SKILL MODAL ===
-
-const ALL_SKILLS = [
-  // Tấn Công
-  { stt: 1, name: 'Kiếm Cơ Bản', cat: 'Tấn Công' },
-  { stt: 2, name: 'Liên Hoàn Kích', cat: 'Tấn Công' },
-  { stt: 3, name: 'Trọng Kích', cat: 'Tấn Công' },
-  { stt: 4, name: 'Phá Giáp', cat: 'Tấn Công' },
-  { stt: 5, name: 'Xuyên Tâm', cat: 'Tấn Công' },
-  // Đặc Biệt
-  { stt: 6, name: 'Liệt Hỏa Trảm', cat: 'Đặc Biệt' },
-  { stt: 7, name: 'Hấp Huyết', cat: 'Đặc Biệt' },
-  { stt: 8, name: 'Kịch Độc', cat: 'Đặc Biệt' },
-  { stt: 9, name: 'Lôi Kích', cat: 'Đặc Biệt' },
-  { stt: 10, name: 'Tuyệt Sát', cat: 'Đặc Biệt' },
-  { stt: 11, name: 'Thần Uy', cat: 'Đặc Biệt' },
-  { stt: 12, name: 'Băng Phong', cat: 'Đặc Biệt' },
-  // Chống Xỏ Lá
-  { stt: 13, name: 'Phòng Ngự', cat: 'Chống Xỏ Lá' },
-  { stt: 14, name: 'Phản Kích', cat: 'Chống Xỏ Lá' },
-  { stt: 15, name: 'Hồi Phục', cat: 'Chống Xỏ Lá' },
-  { stt: 16, name: 'Hộ Thuẫn', cat: 'Chống Xỏ Lá' },
-  { stt: 17, name: 'Hỏa Giáp', cat: 'Chống Xỏ Lá' },
-  // Luyện Khí
-  { stt: 18, name: 'Thái Cực Dưỡng Sinh', cat: 'Luyện Khí' },
-  { stt: 19, name: 'Kiếm Khí Xung Thiên', cat: 'Luyện Khì' },
-  { stt: 20, name: 'Kim Cương Phục Ma', cat: 'Luyện Khí' },
-  // Trúc Cơ
-  { stt: 21, name: 'Hỗn Nguyên Hộ Thể', cat: 'Trúc Cơ' },
-  { stt: 22, name: 'Vạn Kiếm Quy Tông', cat: 'Trúc Cơ' },
-  { stt: 23, name: 'Phong Ấn Thất Mạch', cat: 'Trúc Cơ' },
-];
 
 let skillModalOpen = false;
 

@@ -1396,7 +1396,7 @@ class NpcBot {
     return false;
   }
 
-  async clickNextNpcSkill() {
+async clickNextNpcSkill() {
     if (!this.bicanhSkillOrder || this.bicanhSkillOrder.length === 0) return null;
     const stt = this.bicanhSkillOrder[this._bicanhSkillIdx % this.bicanhSkillOrder.length];
     const skillName = this.luanhoiSkillNames[stt - 1];
@@ -1419,7 +1419,7 @@ class NpcBot {
       for (const msg of recent) {
         const rawText = msg.textContent || '';
         const norm = rawText.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\u0111/g,'d').replace(/\u0110/g,'d').toLowerCase();
-        if (usernameFirst && !norm.includes(usernameFirst)) continue;
+        if (usernameFirst && !norm.includes(usernameFirst) && !norm.includes('bicanh') && !norm.includes('npc') && !norm.includes('battle')) continue;
         const btns = msg.querySelectorAll('button[role="button"]');
         for (const btn of btns) {
           if (btn.disabled || btn.offsetParent === null) continue;
