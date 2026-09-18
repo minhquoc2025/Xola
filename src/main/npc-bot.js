@@ -1676,8 +1676,6 @@ class NpcBot {
     const skillNames = this.diangucSkillNames;
     return await this.exec(`(() => {
       const getId = msg => msg.id || msg.getAttribute('data-list-item-id') || msg.getAttribute('data-message-id') || '';
-      const maxIdText = String(window.botMaxMsgId || '').match(/\d{1,30}/);
-      const maxId = maxIdText ? BigInt(maxIdText[0]) : 0n;
       const skills = ${JSON.stringify(skillNames)};
       const articles = Array.from(document.querySelectorAll('[role="article"]')).slice(-50).reverse();
       for (const msg of articles) {
@@ -1687,10 +1685,6 @@ class NpcBot {
         const id = getId(msg);
         const targetKey = id || ('dianguc-' + Date.now() + '-' + articles.indexOf(msg));
         msg.setAttribute('data-dianguc-target', targetKey);
-        if (id) {
-          const idMatch = id.match(/(\\d{10,30})$/);
-          if (idMatch && BigInt(idMatch[1]) <= maxId) continue;
-        }
         const buttons = Array.from(msg.querySelectorAll('button[role="button"], [role="button"]'))
           .filter(button => button.offsetParent !== null && (button.textContent || '').trim())
           .map((button, index) => ({ index, text: (button.textContent || '').trim() }));
@@ -1986,6 +1980,13 @@ class NpcBot {
         this.recordDiangucDirection(this.diangucPending.step, this.diangucPending.direction, 'đúng');
         this.diangucPending = null;
         lastProgressAt = Date.now();
+      } else if (this.diangucPending && state.missedResponse && state.phase === 'DIRECTION') {
+        // Game hết giờ phản hồi ("không phản hồi kịp thời") nhưng vẫn hiện lại màn
+        // chọn hướng. Huỷ trạng thái chờ để nhánh DIRECTION phía dưới click lại hướng
+        // của CÙNG bước này: không ghi gì, không đổi diangucStep (guard đã chặn ở trên).
+        const missedStep = this.diangucPending.step;
+        this.diangucPending = null;
+        this.log(`⏰ Hụt hướng (không phản hồi kịp thời) ở bước ${missedStep}, click lại hướng cho cùng bước (giữ nguyên bước).`);
       } else if (this.diangucPending && state.phase === 'DIRECTION') {
         // Card hướng cũ vẫn còn trong DOM cho tới khi game trả kết quả.
         // Chỉ chặn khi scan vẫn còn ở màn chọn hướng; nếu game đã chuyển sang
