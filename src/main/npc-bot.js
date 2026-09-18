@@ -39,11 +39,6 @@ class NpcBot {
     this.cooldownMs = 120000;
     this.defeatCooldownSec = 300;
     this.buttonDelayMs = 1000;
-    this.clickPattern = [3, 2, 1];
-    this.smartMode = true;
-    this.healPosition = 3;
-    this.skillPriority = [2, 1];
-    this.processedLockIds = new Set();
     this.autoClimb = false;
     this.targetMaxNpc = 60;
     this.climbWinsNeeded = 0;
@@ -141,7 +136,6 @@ class NpcBot {
     if (config.totalBattles !== undefined) this.totalBattles = config.totalBattles;
     if (config.cooldownMs !== undefined) this.cooldownMs = config.cooldownMs;
     if (config.buttonDelayMs !== undefined) this.buttonDelayMs = config.buttonDelayMs;
-    if (config.clickPattern !== undefined) this.clickPattern = config.clickPattern;
     if (config.autoClimb !== undefined) this.autoClimb = config.autoClimb;
     if (config.targetMaxNpc !== undefined) this.targetMaxNpc = config.targetMaxNpc;
     if (config.tuLuyen !== undefined) this.tuLuyen = config.tuLuyen;
@@ -164,6 +158,10 @@ class NpcBot {
     if (config.diangucChoiceDelayMs !== undefined) this.diangucChoiceDelayMs = config.diangucChoiceDelayMs;
     if (config.diangucSkillDelayMs !== undefined) this.diangucSkillDelayMs = config.diangucSkillDelayMs;
     if (config.diangucWinDelayMs !== undefined) this.diangucWinDelayMs = config.diangucWinDelayMs;
+    if (config.bicanhSkillOrder !== undefined) {
+      this.bicanhSkillOrder = Array.isArray(config.bicanhSkillOrder) ? config.bicanhSkillOrder : [];
+      this._bicanhSkillIdx = 0;
+    }
   }
 
   async start() {
@@ -204,7 +202,9 @@ class NpcBot {
       this.diangucLoop(this.runId);
       return;
     }
-    this.log('=== SMART MODE: Đọc turn real-time ===');
+    this.log('=== NPC MODE: Combo skill theo cấu hình Bicanh ===');
+    this.log(`=== COMBO: ${this.bicanhSkillOrder.join(' → ')} ===`);
+    this._bicanhSkillIdx = 0;
     if (this.username) {
       this.log(`=== GROUP MODE: Lọc tin nhắn theo "${this.username}" ===`);
     }
@@ -370,8 +370,6 @@ class NpcBot {
       totalBattles: this.totalBattles,
       npcNumber: this.npcNumber,
       cooldownMs: this.cooldownMs,
-      clickPattern: this.clickPattern,
-      smartMode: this.smartMode,
       autoClimb: this.autoClimb,
       targetMaxNpc: this.targetMaxNpc,
       tuLuyen: this.tuLuyen,
@@ -1246,129 +1244,6 @@ class NpcBot {
     })()`);
   }
 
-  async readBattleState() {
-    const username = this.username || '';
-    return await this.exec(`(() => {
-      const msgs = document.querySelectorAll('[role="article"]');
-      const maxIdStr = window.botMaxMsgId || '0';
-      const maxId = BigInt(maxIdStr);
-      const username = ${JSON.stringify(username)};
-      const recentMsgs = Array.from(msgs).slice(-30).reverse();
-
-      let battleMsg = null;
-      for (const msg of recentMsgs) {
-        if (msg.getAttribute('data-bot-seen') === 'true') continue;
-        if (username && !msg.textContent.includes(username)) continue;
-        if (msg.id) {
-          const parts = msg.id.split('-');
-          const idStr = parts[parts.length - 1];
-          try {
-            const id = BigInt(idStr);
-            if (id <= maxId) continue;
-          } catch(e) {}
-        }
-        const btns = msg.querySelectorAll('button[role="button"]');
-        if (btns.length > 0) { battleMsg = msg; break; }
-      }
-      if (!battleMsg) return null;
-
-      const text = battleMsg.textContent;
-
-      const hpMatch = text.match(/(\\d[\\d,.]*)\\s*\\/\\s*(\\d[\\d,.]*)\\s*\\((\\d+)%\\)/);
-      let userHpPercent = -1, userHpCurrent = -1, userHpMax = -1;
-      if (hpMatch) {
-        userHpCurrent = parseInt(hpMatch[1].replace(/[,\\.]/g, ''));
-        userHpMax = parseInt(hpMatch[2].replace(/[,\\.]/g, ''));
-        userHpPercent = parseInt(hpMatch[3]);
-      }
-
-      const btns = battleMsg.querySelectorAll('button[role="button"]');
-      const buttonTexts = [];
-      btns.forEach(btn => {
-        const t = btn.textContent.trim();
-        if (t.length > 0 && btn.offsetParent !== null) buttonTexts.push(t);
-      });
-
-      const skillCount = Math.max(0, buttonTexts.length - 1);
-
-      const allEmoji = Array.from(battleMsg.querySelectorAll('img[data-name]'));
-      const emojiSeq = allEmoji.map(e => (e.getAttribute('data-name') || '').toLowerCase());
-
-      const statusList = [];
-      let barFound = false;
-      for (let i = 0; i < emojiSeq.length; i++) {
-        const name = emojiSeq[i];
-        if (!barFound) {
-          if (name.includes('bar_chart')) barFound = true;
-          continue;
-        }
-        if (/white_check_mark|check_mark_button|heavy_check_mark/.test(name)) {
-          statusList.push({ ready: true, cooldownTurns: 0 });
-        } else if (/hourglass/.test(name)) {
-          let cooldownTurns = 1;
-          const imgEls = battleMsg.querySelectorAll('img[data-name]');
-          for (const img of imgEls) {
-            if (/hourglass/.test((img.getAttribute('data-name') || '').toLowerCase())) {
-              let nextText = '';
-              let node = img.nextSibling;
-              while (node && nextText.length < 5) {
-                if (node.nodeType === 3) nextText += node.textContent;
-                else break;
-                node = node.nextSibling;
-              }
-              const numMatch = nextText.match(/(\\d+)/);
-              if (numMatch) { cooldownTurns = parseInt(numMatch[1]); break; }
-            }
-          }
-          statusList.push({ ready: false, cooldownTurns });
-        }
-      }
-
-      const skills = [];
-      for (let i = 0; i < skillCount; i++) {
-        const s = statusList[i] || { ready: true, cooldownTurns: 0 };
-        skills.push({ position: i + 1, ready: s.ready, cooldownTurns: s.cooldownTurns });
-      }
-
-      return {
-        userHpPercent, userHpCurrent, userHpMax,
-        skills, buttonCount: buttonTexts.length, buttonTexts,
-        statusDump: statusList.map(s => s.ready ? '✅' : '⏳' + s.cooldownTurns).join(' ')
-      };
-    })()`);
-  }
-
-  chooseSkill(battleState) {
-    if (!battleState || !battleState.skills || battleState.skills.length === 0) {
-      return -1;
-    }
-
-    const { skills, userHpPercent, buttonCount } = battleState;
-    const healSkillIdx = this.healPosition - 1;
-
-    if (healSkillIdx >= 0 && healSkillIdx < skills.length && userHpPercent >= 0) {
-      const healSkill = skills[healSkillIdx];
-      if (healSkill.ready && userHpPercent < 60) {
-        const btnIndex = this.healPosition;
-        this.log(`Smart: Chọn heal (position ${this.healPosition}, button ${btnIndex + 1}) - HP ${userHpPercent}%`);
-        return btnIndex;
-      }
-    }
-
-    for (const pos of this.skillPriority) {
-      if (pos < 1 || pos > skills.length || pos === this.healPosition) continue;
-      const skill = skills[pos - 1];
-      if (skill && skill.ready) {
-        const btnIndex = pos;
-        this.log(`Smart: Chọn skill position ${pos} (button ${btnIndex + 1}) - Sẵn sàng`);
-        return btnIndex;
-      }
-    }
-
-    this.log('Smart: Không có skill nào sẵn sàng → click skill 1 (Kiếm cơ bản)');
-    return 0;
-  }
-
   async scanAllButtons() {
     return await this.exec(`(() => {
       const allBtns = document.querySelectorAll('button[role="button"]');
@@ -1488,126 +1363,78 @@ class NpcBot {
   }
 
   async clickButtonsUntilEnd(isResuming = false, runId = null) {
-    let patternIndex = 0;
-    let noButtonsCount = 0;
-    let lastLogCount = 0;
-    let debugScanned = false;
-    const battleStartTime = Date.now();
-    const maxBattleDurationMs = 300000;
+    if (!this.bicanhSkillOrder || this.bicanhSkillOrder.length === 0) {
+      this.log('⚠️ Không có combo skill Bicanh. Bắt đầu click skill 1 (Kiếm cơ bản)...');
+    } else {
+      this.log(`=== COMBO: ${this.bicanhSkillOrder.join(' → ')} ===`);
+    }
 
     while (this.isRunning && this.runId === runId) {
-      if (Date.now() - battleStartTime > maxBattleDurationMs) {
-        this.log('⚠️ Battle timeout (5 phút). Force-end...');
-        return { type: 'ended', result: 'unknown' };
-      }
-
       const battleEndResult = await this.checkBattleEnd();
       if (battleEndResult && battleEndResult.ended) {
         this.log(`>>> BATTLE ENDED: ${battleEndResult.result === 'win' ? '✅ THẮNG' : '❌ THUA'} <<<`);
         return { type: 'ended', result: battleEndResult.result, rewardText: battleEndResult.rewardText };
       }
 
-      const cooldownSec = await this.checkCooldownMessage();
-      if (cooldownSec > 0) {
-        if (this.autoClimb) {
-          const lockInfo = await this.checkLockedMessage();
-          if (lockInfo) {
-            this.log(`>>> LOCK detected: NPC ${lockInfo.requiredNpc} need ${lockInfo.winsLeft} more wins <<<`);
-            return { type: 'locked', requiredNpc: lockInfo.requiredNpc, winsLeft: lockInfo.winsLeft, lockMsgId: lockInfo.lockMsgId };
-          }
-        }
-        this.log(`>>> COOLDOWN detected: ${cooldownSec}s <<<`);
-        return { type: 'cooldown', sec: cooldownSec };
-      }
-
-      const battleInfo = await this.findBattleButtons();
-
-      if (!battleInfo || !battleInfo.buttons || battleInfo.buttons.length === 0) {
-        noButtonsCount++;
-
-        if (!debugScanned && noButtonsCount === 3) {
-          debugScanned = true;
-          const allBtns = await this.scanAllButtons();
-          if (allBtns && allBtns.length > 0) {
-            this.log(`=== DEBUG: All ${allBtns.length} buttons on screen ===`);
-            allBtns.forEach(b => {
-              this.log(`  [${b.idx}] "${b.text}" (msg: ${b.msgId}, preview: ${b.msgPreview.substring(0, 40)}...)`);
-            });
-          } else {
-            this.log('=== DEBUG: No buttons found anywhere on screen ===');
-          }
-        }
-
-        if (noButtonsCount > 30) {
-          this.log('No buttons found for too long, assuming battle ended...');
-          return { type: 'ended', result: 'unknown' };
-        }
-        if (noButtonsCount % 10 === 0) {
-          this.log(`Waiting for buttons... (${noButtonsCount})`);
-        }
-
-        if (isResuming && noButtonsCount % 3 === 0) {
-          await this.exec(`(() => {
-            const scrollers = document.querySelectorAll('div[class*="scroller_"]');
-            for (const s of scrollers) {
-              if (s.scrollHeight > s.clientHeight) s.scrollBy(0, -600);
-            }
-          })()`);
-        }
-
-        await this.delay(1000);
-        continue;
-      }
-
-      noButtonsCount = 0;
-      debugScanned = false;
-
-      if (battleInfo.buttons.length !== lastLogCount) {
-        this.log(`Found ${battleInfo.buttons.length} skills: ${battleInfo.buttons.map(b => b.text).join(' | ')}`);
-        lastLogCount = battleInfo.buttons.length;
-      }
-
-      let btnIndex = -1;
-
-      if (this.smartMode) {
-        const battleState = await this.readBattleState();
-        if (battleState) {
-          const skillStr = battleState.skills.map(s => 'pos' + s.position + '(' + (s.ready ? '✅' : '⏳' + s.cooldownTurns) + ')').join(' | ');
-          this.log('Smart: HP ' + battleState.userHpPercent + '% (' + battleState.userHpCurrent + '/' + battleState.userHpMax + ') | Skills: ' + skillStr);
-          this.log('Smart DEBUG status: ' + battleState.statusDump);
-          btnIndex = this.chooseSkill(battleState);
-        } else {
-          this.log('Smart: Không đọc được battle state, fallback pattern');
-        }
-      }
-
-      if (btnIndex === -1) {
-        const pos = this.clickPattern[patternIndex % this.clickPattern.length];
-        btnIndex = pos - 1;
-        if (!this.smartMode) {
-          this.log(`Pattern: chọn vị trí ${pos}`);
-        }
-      }
-
-      if (btnIndex >= 0 && btnIndex < battleInfo.buttons.length) {
-        const btn = battleInfo.buttons[btnIndex];
-        this.log(`Click [${btnIndex + 1}]: "${btn.text}"`);
-
-        const clicked = await this.clickSkillButton(btnIndex);
-        if (!clicked) {
-          this.log(`Failed to click button at position ${btnIndex + 1}`);
-        }
-
-        if (!this.smartMode) patternIndex++;
+      const clicked = await this.clickNextNpcSkill();
+      if (clicked) {
+        this.log(`🌀 Click skill NPC: "${clicked}"`);
+        this._bicanhSkillIdx++;
       } else {
-        this.log(`Position ${btnIndex + 1} not available (only ${battleInfo.buttons.length} skills)`);
-        if (!this.smartMode) patternIndex = 0;
+        this.log(`⚠️ Không tìm thấy skill trong combo. Đợi...`);
       }
 
-      await this.delay(this.buttonDelayMs);
+      const cd = await this.checkBicanhCooldown();
+      if (cd > 0) {
+        this.log(`⏳ Cooldown — chờ ${cd}ms`);
+        await this.delay(cd);
+      } else {
+        await this.delay(this.rand(800, 1500));
+      }
     }
 
     return false;
+  }
+
+  async clickNextNpcSkill() {
+    if (!this.bicanhSkillOrder || this.bicanhSkillOrder.length === 0) return null;
+    const stt = this.bicanhSkillOrder[this._bicanhSkillIdx % this.bicanhSkillOrder.length];
+    const skillName = this.luanhoiSkillNames[stt - 1];
+    if (!skillName) return null;
+
+    const nameNoD = skillName.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/\u0111/g, 'd').replace(/\u0110/g, 'd')
+      .replace(/\u01A1/g, 'o').replace(/\u01A0/g, 'o')
+      .replace(/\u01B0/g, 'u').replace(/\u01AF/g, 'u')
+      .toLowerCase();
+    const username = this.username || '';
+    const usernameFirst = username.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').split(' ')[0].toLowerCase();
+
+    return await this.exec(`(() => {
+      const usernameFirst = ${JSON.stringify(usernameFirst)};
+      const nameNoD = ${JSON.stringify(nameNoD)};
+      const msgs = document.querySelectorAll('[role="article"]');
+      const recent = Array.from(msgs).slice(-40).reverse();
+      for (const msg of recent) {
+        const rawText = msg.textContent || '';
+        const norm = rawText.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\u0111/g,'d').replace(/\u0110/g,'d').toLowerCase();
+        if (usernameFirst && !norm.includes(usernameFirst)) continue;
+        const btns = msg.querySelectorAll('button[role="button"]');
+        for (const btn of btns) {
+          if (btn.disabled || btn.offsetParent === null) continue;
+          const raw = (btn.textContent || '').trim();
+          if (!raw || /[@|!]/.test(raw)) continue;
+          const clean = raw.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\u0111/g,'d').replace(/\u0110/g,'d').toLowerCase();
+          if (clean === nameNoD || clean.includes(nameNoD)) {
+            btn.disabled = false;
+            btn.click();
+            return raw;
+          }
+        }
+      }
+      return null;
+    })()`);
   }
 
   loadDiangucData() {

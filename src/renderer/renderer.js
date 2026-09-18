@@ -62,24 +62,23 @@ function setMode(mode) {
 // === NPC MODE ===
 
 function getNpcConfig() {
-  const patternStr = document.getElementById('click-pattern').value || '3,2,1';
-  const clickPattern = patternStr.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
-  return {
-    mode: 'npc',
-    username: (document.getElementById('username').value || '').trim(),
-    npcNumber: parseInt(document.getElementById('npc-number').value) || 1,
-    totalBattles: parseInt(document.getElementById('total-battles').value) || 5,
-    cooldownMs: (parseInt(document.getElementById('cooldown-seconds').value) || 120) * 1000,
-    buttonDelayMs: (parseFloat(document.getElementById('button-delay').value) || 1) * 1000,
-    smartMode: true,
-    clickPattern: clickPattern.length > 0 ? clickPattern : [3, 2, 1],
-    autoClimb: document.getElementById('auto-climb').checked,
-    targetMaxNpc: parseInt(document.getElementById('target-max-npc').value) || 60,
-    tuLuyen: document.getElementById('tu-luyen').checked,
-    tuLuyenStartCmd: '!tuluyen',
-    tuLuyenEndCmd: '!ketthuc',
-  };
-}
+   const configuredOrder = localStorage.getItem('bicanhSkillOrder') || '';
+   const comboArray = configuredOrder.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n >= 1 && n <= 23);
+   return {
+     mode: 'npc',
+     username: (document.getElementById('username').value || '').trim(),
+     npcNumber: parseInt(document.getElementById('npc-number').value) || 1,
+     totalBattles: parseInt(document.getElementById('total-battles').value) || 5,
+     cooldownMs: (parseInt(document.getElementById('cooldown-seconds').value) || 120) * 1000,
+     buttonDelayMs: (parseFloat(document.getElementById('button-delay').value) || 1) * 1000,
+     autoClimb: document.getElementById('auto-climb').checked,
+     targetMaxNpc: parseInt(document.getElementById('target-max-npc').value) || 60,
+     tuLuyen: document.getElementById('tu-luyen').checked,
+     tuLuyenStartCmd: '!tuluyen',
+     tuLuyenEndCmd: '!ketthuc',
+     bicanhSkillOrder: comboArray.length > 0 ? comboArray : [],
+   };
+ }
 
 function getLuanHoiConfig() {
   const configuredOrder = localStorage.getItem('bicanhSkillOrder') || '';
