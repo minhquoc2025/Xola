@@ -105,7 +105,7 @@ function getNpcConfig() {
      npcNumber: parseInt(document.getElementById('npc-number').value) || 1,
      totalBattles: parseInt(document.getElementById('total-battles').value) || 5,
      cooldownMs: (parseInt(document.getElementById('cooldown-seconds').value) || 120) * 1000,
-     buttonDelayMs: (parseFloat(document.getElementById('button-delay').value) || 1) * 1000,
+     buttonDelayMs: (parseFloat(document.getElementById('button-delay').value) || 2) * 1000,
      autoClimb: document.getElementById('auto-climb').checked,
      targetMaxNpc: parseInt(document.getElementById('target-max-npc').value) || 60,
      tuLuyen: document.getElementById('tu-luyen').checked,
@@ -124,7 +124,7 @@ function getLuanHoiConfig() {
     username: (document.getElementById('username-lh').value || 'Quất Bất Lực').trim(),
     luanhoiTarget: parseInt(document.getElementById('luanhoi-target').value) || 10,
     luanhoiCmd: (document.getElementById('luanhoi-cmd').value || '!luanhoi').trim(),
-    buttonDelayMs: (parseFloat(document.getElementById('button-delay-lh').value) || 1) * 1000,
+    buttonDelayMs: (parseFloat(document.getElementById('button-delay-lh').value) || 2) * 1000,
     luanhoiSkillNames: skills.length > 0
       ? skills
       : ['Vạn Kiếm Quy Tông', 'Hỗn Nguyên Hộ Thể', 'Kiếm Khí Xung Thiên', 'Thái Cực Dưỡng Sinh'],
@@ -166,7 +166,7 @@ function getDiangucConfig() {
     luanhoiSkillNames: resolvedSkills,
     diangucDelayMs: 2000,
     diangucChoiceDelayMs: 2000,
-    diangucSkillDelayMs: 2200,
+    diangucSkillDelayMs: 3500,
     diangucWinDelayMs: 3500,
   };
 }

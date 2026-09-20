@@ -38,7 +38,7 @@ class NpcBot {
     this.npcNumber = 1;
     this.cooldownMs = 120000;
     this.defeatCooldownSec = 300;
-    this.buttonDelayMs = 1000;
+    this.buttonDelayMs = 2000;
     this.autoClimb = false;
     this.targetMaxNpc = 60;
     this.climbWinsNeeded = 0;
@@ -117,6 +117,57 @@ class NpcBot {
 
   rand(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
+  normalizeMatchText(value) {
+    return String(value || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\u0111/g, 'd')
+      .replace(/\u01A1/g, 'o')
+      .replace(/\u01B0/g, 'u')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+  }
+
+  isUserMentionedAsSpeaker(text, username) {
+    const rawText = String(text || '');
+    const normalizedText = this.normalizeMatchText(rawText);
+    const normalizedUsername = this.normalizeMatchText(username);
+    if (!normalizedUsername || !normalizedText) return false;
+
+    const usernameIndex = normalizedText.indexOf(normalizedUsername);
+    if (usernameIndex < 0) return false;
+
+    const beforeUsername = normalizedText.slice(0, usernameIndex).trim();
+    return !/(?:^|[\s(])(?:[a-z0-9]+)\s*:\s*$/.test(beforeUsername);
+  }
+
+  isOwnedGameMessage(text, username, keywords = []) {
+    if (!username) return true;
+    const rawText = String(text || '');
+    const normalizedText = this.normalizeMatchText(rawText);
+    const normalizedUsername = this.normalizeMatchText(username);
+    if (!normalizedUsername || !normalizedText) return true;
+
+    const userTokens = normalizedUsername.split(/\s+/).filter(Boolean);
+    const usernameIndex = userTokens
+      .map(token => normalizedText.indexOf(token))
+      .filter(index => index >= 0)
+      .sort((a, b) => a - b)[0];
+    if (usernameIndex === undefined) return false;
+
+    const beforeUsername = normalizedText.slice(0, usernameIndex).trim();
+    if (/(?:^|[\s(])(?:[a-z0-9]+)\s*:\s*$/.test(beforeUsername)) return false;
+
+    const gameKeywords = [
+      'npc', 'battle', 'đánh', 'thắng', 'thua', 'kết quả', 'cooldown', 'hồi chiêu',
+      'bị khóa', 'giết npc', 'luân hồi', 'địa ngục', 'fight', 'result', 'boss',
+      ...keywords
+    ].map(keyword => this.normalizeMatchText(keyword));
+
+    return gameKeywords.some(keyword => keyword && normalizedText.includes(this.normalizeMatchText(keyword)));
   }
 
   async luanhoiClickWait(minMs = 1800) {
@@ -883,12 +934,20 @@ class NpcBot {
       const maxIdStr = window.botMaxMsgId || '0';
       const maxId = BigInt(maxIdStr);
       const username = ${JSON.stringify(username)};
+      const matchesUserMessage = text => {
+        const value = String(text || '');
+        if (!username) return true;
+        const normalizedText = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').toLowerCase();
+        const normalizedUser = username.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').toLowerCase();
+        if (!normalizedText.includes(normalizedUser)) return false;
+        return ['npc', 'battle', 'fight', 'đánh', 'thắng', 'thua', 'kết quả', 'result', 'hồi chiêu', 'cooldown', 'bị khóa', 'giết npc'].some(keyword => normalizedText.includes(keyword));
+      };
       const msgs = document.querySelectorAll('[role="article"]');
       const recent = Array.from(msgs).slice(-30);
       let rewardText = '';
       for (const msg of recent.reverse()) {
         if (msg.getAttribute('data-bot-seen') === 'true') continue;
-        if (username && !msg.textContent.includes(username)) continue;
+        if (username && !matchesUserMessage(msg.textContent)) continue;
 
         if (msg.id) {
           const parts = msg.id.split('-');
@@ -946,15 +1005,19 @@ class NpcBot {
     const username = this.username || '';
     return await this.exec(`(() => {
       const username = ${JSON.stringify(username)};
+      const matchesUserMessage = text => {
+        const value = String(text || '');
+        if (!username) return true;
+        const normalizedText = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').toLowerCase();
+        const normalizedUser = username.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').toLowerCase();
+        if (!normalizedText.includes(normalizedUser)) return false;
+        return ['luân hồi', 'luanhoi', 'tầng', 'thap', 'boss', 'tiếp tục', 'ket thuc', 'hạ gục', 'han guc', 'đánh bại', 'danh bai', 'thắng', 'thua', 'chiến đấu', 'fight'].some(keyword => normalizedText.includes(keyword));
+      };
       const knownTier = window.luanhoiBuffTierClicked || 0;
       const msgs = document.querySelectorAll('[role="article"]');
       const recent = Array.from(msgs).slice(-30);
       for (const msg of recent.reverse()) {
-        if (username && !msg.textContent.includes(username)) {
-          // Cho phép message Luân Hồi (không chứa username nhưng có từ khóa đặc trưng)
-          const rawTextChk = msg.textContent || '';
-          if (!/(?:luân hồi|luanhoi|tầng|thap|hạ gục|han guc|đánh bại|boss|tiếp tục|ket thuc)/i.test(rawTextChk)) continue;
-        }
+        if (username && !matchesUserMessage(msg.textContent)) continue;
         const rawText = msg.textContent || '';
         const text = rawText.toLowerCase();
 
@@ -1043,15 +1106,20 @@ class NpcBot {
     const username = this.username || '';
     return await this.exec(`(() => {
       const username = ${JSON.stringify(username)};
+      const matchesUserMessage = text => {
+        const value = String(text || '');
+        if (!username) return true;
+        const normalizedText = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').toLowerCase();
+        const normalizedUser = username.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').toLowerCase();
+        if (!normalizedText.includes(normalizedUser)) return false;
+        return ['luân hồi', 'luanhoi', 'tầng', 'thap', 'boss', 'tiếp tục', 'ket thuc', 'hạ gục', 'han guc', 'đánh bại', 'danh bai', 'thắng', 'thua', 'fight', 'chiến đấu'].some(keyword => normalizedText.includes(keyword));
+      };
       const clickedTier = window.luanhoiBuffTierClicked || 0;
       const tierWords = ['pham', 'linh', 'huyen', 'thien'];
       const msgs = document.querySelectorAll('[role="article"]');
       const recent = Array.from(msgs).slice(-40).reverse();
       for (const msg of recent) {
-        if (username && !msg.textContent.includes(username)) {
-          const rawTextChk = msg.textContent || '';
-          if (!/(?:luân hồi|luanhoi|tầng|thap|hạ gục|han guc|đánh bại|boss|tiếp tục|ket thuc)/i.test(rawTextChk)) continue;
-        }
+        if (username && !matchesUserMessage(msg.textContent)) continue;
         const rawText = msg.textContent || '';
         const tm = rawText.match(/(?:tầng|tầng luân hồi|tier)\s*([0-9]{1,3})/i);
         const newTier = tm ? parseInt(tm[1]) : null;
@@ -1074,13 +1142,24 @@ class NpcBot {
   }
 
   async checkLockedMessage() {
+    const username = this.username || '';
     return await this.exec(`(() => {
       const maxIdStr = window.botMaxMsgId || '0';
       const maxId = BigInt(maxIdStr);
+      const username = ${JSON.stringify(username)};
+      const matchesUserMessage = text => {
+        const value = String(text || '');
+        if (!username) return true;
+        const normalizedText = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').toLowerCase();
+        const normalizedUser = username.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').toLowerCase();
+        if (!normalizedText.includes(normalizedUser)) return false;
+        return ['bị khóa', 'bi khoa', 'giết npc', 'npc', 'thắng', 'thua', 'battle', 'fight'].some(keyword => normalizedText.includes(keyword));
+      };
       const processedIds = ${JSON.stringify(Array.from(this.processedLockIds))};
       const msgs = document.querySelectorAll('[role="article"]');
       const recent = Array.from(msgs).slice(-30);
       for (const msg of recent.reverse()) {
+        if (username && !matchesUserMessage(msg.textContent)) continue;
         if (msg.id) {
           const parts = msg.id.split('-');
           const idStr = parts[parts.length - 1];
@@ -1162,11 +1241,19 @@ class NpcBot {
       const maxIdStr = window.botMaxMsgId || '0';
       const maxId = BigInt(maxIdStr);
       const username = ${JSON.stringify(username)};
+      const matchesUserMessage = text => {
+        const value = String(text || '');
+        if (!username) return true;
+        const normalizedText = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').toLowerCase();
+        const normalizedUser = username.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').toLowerCase();
+        if (!normalizedText.includes(normalizedUser)) return false;
+        return ['hồi chiêu', 'cooldown', 'đợi lượt', 'đang hồi', 'npc', 'battle', 'fight', 'đánh'].some(keyword => normalizedText.includes(keyword));
+      };
       const msgs = document.querySelectorAll('[role="article"]');
       const recent = Array.from(msgs).slice(-30);
       for (const msg of recent.reverse()) {
         if (msg.getAttribute('data-bot-seen') === 'true') continue;
-        if (username && !msg.textContent.includes(username)) continue;
+        if (username && !matchesUserMessage(msg.textContent)) continue;
 
         if (msg.id) {
           const parts = msg.id.split('-');
@@ -1218,11 +1305,19 @@ class NpcBot {
       const maxIdStr = window.botMaxMsgId || '0';
       const maxId = BigInt(maxIdStr);
       const username = ${JSON.stringify(username)};
+      const matchesUserMessage = text => {
+        const value = String(text || '');
+        if (!username) return true;
+        const normalizedText = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').toLowerCase();
+        const normalizedUser = username.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').toLowerCase();
+        if (!normalizedText.includes(normalizedUser)) return false;
+        return ['đang đánh npc', 'already fighting', 'npc', 'battle', 'fight', 'đánh'].some(keyword => normalizedText.includes(keyword));
+      };
       const msgs = document.querySelectorAll('[role="article"]');
       const recent = Array.from(msgs).slice(-30);
       for (const msg of recent.reverse()) {
         if (msg.getAttribute('data-bot-seen') === 'true') continue;
-        if (username && !msg.textContent.includes(username)) continue;
+        if (username && !matchesUserMessage(msg.textContent)) continue;
 
         if (msg.id) {
           const parts = msg.id.split('-');
@@ -1274,6 +1369,22 @@ class NpcBot {
   async findBattleButtons() {
     const username = this.username || '';
     return await this.exec(`(() => {
+      const isOwnedGameMessage = (text, userName, keywords = []) => {
+        const rawText = String(text || '');
+        const normalizedText = rawText.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').replace(/\s+/g, ' ').trim().toLowerCase();
+        const normalizedUser = String(userName || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').replace(/\s+/g, ' ').trim().toLowerCase();
+        if (!normalizedUser || !normalizedText) return true;
+        const userTokens = normalizedUser.split(/\s+/).filter(Boolean);
+        const usernameIndex = userTokens
+          .map(token => normalizedText.indexOf(token))
+          .filter(index => index >= 0)
+          .sort((a, b) => a - b)[0];
+        if (usernameIndex === undefined) return false;
+        const beforeUsername = normalizedText.slice(0, usernameIndex).trim();
+        if (/(?:^|[\s(])(?:[a-z0-9]+)\s*:\s*$/.test(beforeUsername)) return false;
+        const gameKeywords = ['npc', 'battle', 'fight', 'đánh', 'thắng', 'thua', 'boss', ...keywords].map(keyword => String(keyword || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').trim().toLowerCase());
+        return gameKeywords.some(keyword => keyword && normalizedText.includes(keyword));
+      };
       const msgs = document.querySelectorAll('[role="article"]');
       const maxIdStr = window.botMaxMsgId || '0';
       const maxId = BigInt(maxIdStr);
@@ -1284,7 +1395,7 @@ class NpcBot {
       const recentMsgs = Array.from(msgs).slice(-30).reverse();
       for (const msg of recentMsgs) {
         if (msg.getAttribute('data-bot-seen') === 'true') continue;
-        if (username && !msg.textContent.includes(username)) continue;
+        if (username && !isOwnedGameMessage(msg.textContent, username, ['npc', 'battle', 'fight', 'đánh'])) continue;
 
         if (msg.id) {
           const parts = msg.id.split('-');
@@ -1322,6 +1433,22 @@ class NpcBot {
   async clickSkillButton(btnIndex) {
     const username = this.username || '';
     return await this.exec(`(() => {
+      const isOwnedGameMessage = (text, userName, keywords = []) => {
+        const rawText = String(text || '');
+        const normalizedText = rawText.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').replace(/\s+/g, ' ').trim().toLowerCase();
+        const normalizedUser = String(userName || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').replace(/\s+/g, ' ').trim().toLowerCase();
+        if (!normalizedUser || !normalizedText) return true;
+        const userTokens = normalizedUser.split(/\s+/).filter(Boolean);
+        const usernameIndex = userTokens
+          .map(token => normalizedText.indexOf(token))
+          .filter(index => index >= 0)
+          .sort((a, b) => a - b)[0];
+        if (usernameIndex === undefined) return false;
+        const beforeUsername = normalizedText.slice(0, usernameIndex).trim();
+        if (/(?:^|[\s(])(?:[a-z0-9]+)\s*:\s*$/.test(beforeUsername)) return false;
+        const gameKeywords = ['npc', 'battle', 'fight', 'đánh', 'thắng', 'thua', 'boss', ...keywords].map(keyword => String(keyword || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').trim().toLowerCase());
+        return gameKeywords.some(keyword => keyword && normalizedText.includes(keyword));
+      };
       const msgs = document.querySelectorAll('[role="article"]');
       const maxIdStr = window.botMaxMsgId || '0';
       const maxId = BigInt(maxIdStr);
@@ -1330,7 +1457,7 @@ class NpcBot {
       let targetMsg = null;
       for (const msg of recentMsgs) {
         if (msg.getAttribute('data-bot-seen') === 'true') continue;
-        if (username && !msg.textContent.includes(username)) continue;
+        if (username && !isOwnedGameMessage(msg.textContent, username, ['npc', 'battle', 'fight', 'đánh'])) continue;
         if (msg.id) {
           const parts = msg.id.split('-');
           const idStr = parts[parts.length - 1];
@@ -1392,7 +1519,7 @@ class NpcBot {
         this.log(`⏳ Cooldown — chờ ${cd}ms`);
         await this.delay(cd);
       } else {
-        await this.delay(this.rand(800, 1500));
+        await this.delay(this.rand(1500, 2000));
       }
     }
 
@@ -1427,6 +1554,7 @@ async clickNextNpcSkill() {
         .replace(/\u0111/gi, 'd').replace(/\u01A1/gi, 'o').replace(/\u01B0/gi, 'u')
         .toLowerCase().replace(/[^a-z0-9]/g, '');
       const tierWords = new Set(['pham', 'linh', 'huyen', 'thien']);
+      const disallowedNames = new Set(['trangbi', 'chiso', 'thongtin', 'shop', 'cua hang', 'thongbao', 'doimatkhau']);
       const msgs = document.querySelectorAll('[role="article"]');
       const recent = Array.from(msgs).slice(-40).reverse();
       for (const msg of recent) {
@@ -1439,14 +1567,17 @@ async clickNextNpcSkill() {
           raw: (btn.textContent || '').trim(),
         })).filter(item => {
           if (item.btn.disabled || item.btn.offsetParent === null || !item.raw || /[@|!]/.test(item.raw)) return false;
-          return !tierWords.has(normalizeSkill(item.raw));
+          const clean = normalizeSkill(item.raw);
+          if (!clean || tierWords.has(clean)) return false;
+          if (disallowedNames.has(clean) || clean.includes('trangbi') || clean.includes('chiso')) return false;
+          return true;
         }).map(item => ({ ...item, clean: normalizeSkill(item.raw) }));
         if (!available.length) continue;
 
-        // DOM chỉ render các nút còn dùng được; không dùng index của snapshot cũ.
-        const target = available.find(item => item.clean.includes(nameNoD));
+        // Chỉ click nút skill thực sự, không chạm các nút HUD/setting như Trang Bị/Chỉ Số.
+        const target = available.find(item => item.clean.includes(nameNoD) || item.clean === nameNoD);
         const fallback = available.find(item => configuredNames.includes(item.clean) || configuredNames.some(name => item.clean.includes(name)));
-        const chosen = target || fallback || available[0];
+        const chosen = target || fallback;
         if (chosen) {
           chosen.btn.click();
           return chosen.raw;
@@ -2297,9 +2428,17 @@ async clickNextNpcSkill() {
       {
         const maxIdStr = window.botMaxMsgId || '0';
         const maxId = BigInt(maxIdStr);
+        const matchesUserMessage = text => {
+          const value = String(text || '');
+          if (!username) return true;
+          const normalizedText = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').toLowerCase();
+          const normalizedUser = username.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').toLowerCase();
+          if (!normalizedText.includes(normalizedUser)) return false;
+          return ['hồi chiêu', 'cooldown', 'đợi lượt', 'đang hồi', 'npc', 'battle', 'fight', 'đánh'].some(keyword => normalizedText.includes(keyword));
+        };
         for (const msg of recent30) {
           if (msg.getAttribute('data-bot-seen') === 'true') continue;
-          if (username && !msg.textContent.includes(username)) continue;
+          if (username && !matchesUserMessage(msg.textContent)) continue;
           if (msg.id) {
             const parts = msg.id.split('-');
             const idStr = parts[parts.length - 1];
