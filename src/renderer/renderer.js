@@ -71,6 +71,10 @@ const ALL_SKILLS = [
   { stt: 21, name: 'Hỗn Nguyên Hộ Thể', cat: 'Trúc Cơ' },
   { stt: 22, name: 'Vạn Kiếm Quy Tông', cat: 'Trúc Cơ' },
   { stt: 23, name: 'Phong Ấn Thất Mạch', cat: 'Trúc Cơ' },
+  // Kết Đan
+  { stt: 24, name: 'Cửu Chuyển Hồi Xuân', cat: 'Kết Đan' },
+  { stt: 25, name: 'Kim Đan Phá Sát', cat: 'Kết Đan' },
+  { stt: 26, name: 'Tam Muội Chân Hỏa', cat: 'Kết Đan' },
 ];
 
 // === MODE ===
@@ -94,7 +98,7 @@ function setMode(mode) {
 
 function getNpcConfig() {
    const configuredOrder = localStorage.getItem('bicanhSkillOrder') || '';
-   const comboArray = configuredOrder.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n >= 1 && n <= 23);
+   const comboArray = configuredOrder.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n >= 1 && n <= ALL_SKILLS.length);
    return {
      mode: 'npc',
      username: (document.getElementById('username').value || '').trim(),
@@ -248,7 +252,7 @@ function saveSkillOrder() {
   if (!input) return;
   const raw = input.value.trim();
   if (!raw) { status.textContent = '⚠️ Chưa nhập thứ tự'; status.style.color = '#e94560'; return; }
-  const order = raw.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n >= 1 && n <= 23);
+  const order = raw.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n >= 1 && n <= ALL_SKILLS.length);
   if (order.length === 0) { status.textContent = '⚠️ Không có STT hợp lệ'; status.style.color = '#e94560'; return; }
   localStorage.setItem('bicanhSkillOrder', raw);
   status.textContent = `✅ Đã lưu: ${order.join(' → ')} (${order.length} skill)`;
