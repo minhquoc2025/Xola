@@ -489,16 +489,18 @@ class NpcBot {
     }
 
     const isUnknown = typeof battleResult === 'object' && battleResult.result === 'unknown';
-    if (isUnknown && this.autoClimb) {
-      const lockInfo = await this.checkLockedMessage();
-      if (lockInfo) {
-        this.handleLock(lockInfo);
-        if (this.isRunning && this.runId === runId) this.mainLoop(runId);
-        return;
+    if (isUnknown) {
+      if (this.autoClimb) {
+        const lockInfo = await this.checkLockedMessage();
+        if (lockInfo) {
+          this.handleLock(lockInfo);
+          if (this.isRunning && this.runId === runId) await this.mainLoop(runId);
+          return;
+        }
       }
-      this.log(`⚠️ NPC ${this.npcNumber}: không tìm thấy nút chiến đấu. Chờ ${this.defeatCooldownSec}s rồi thử lại...`);
+      this.log(`⚠️ NPC ${this.npcNumber}: không xác nhận được kết quả trận. Chờ ${this.defeatCooldownSec}s rồi thử lại...`);
       await this.cooldownWait(this.defeatCooldownSec, runId);
-      if (this.isRunning && this.runId === runId) this.mainLoop(runId);
+      if (this.isRunning && this.runId === runId) await this.mainLoop(runId);
       return;
     }
 
@@ -900,14 +902,11 @@ class NpcBot {
         const text = msg.textContent.toLowerCase();
         const rawText = msg.textContent;
 
-        const hasResult = text.includes('kết quả trận đấu') || text.includes('battle ended') || text.includes('kết thúc');
-        const hasWin = text.includes('chiến thắng') || text.includes('thắng npc') ||
-                       rawText.includes('✅') || text.includes('thắng!') ||
-                       rawText.includes('🥇');
-        const hasLoss = text.includes('thất bại') || text.includes('thua') ||
-                        rawText.includes('❌') || rawText.includes('💀') || rawText.includes('😵');
+        const hasResult = text.includes('kết quả trận đấu') || text.includes('battle ended');
+        const hasWin = /chiến thắng!|thắng npc|✅\s*thắng|🥇/.test(text);
+        const hasLoss = /thất bại|thua npc|❌\s*thua|thua!/.test(text);
 
-        if (hasResult || hasWin || hasLoss) {
+        if ((hasResult && (hasWin || hasLoss)) || hasWin || hasLoss) {
           msg.setAttribute('data-bot-seen', 'true');
           if (msg.id) {
             const parts = msg.id.split('-');
@@ -915,7 +914,11 @@ class NpcBot {
           }
 
           let result;
-          if (hasResult) {
+          if (hasWin && !hasLoss) {
+            result = 'win';
+          } else if (hasLoss && !hasWin) {
+            result = 'loss';
+          } else if (hasResult) {
             result = hasLoss && !hasWin ? 'loss' : 'win';
           } else {
             if (rawText.includes('✅ Thắng') || rawText.includes('🥇')) {
