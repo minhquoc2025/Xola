@@ -1515,10 +1515,14 @@ async clickNextNpcSkill() {
       .filter(Boolean)
       .map(normalizeSkill);
     const username = this.username || '';
+    const usernameNorm = String(username || '').normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').toLowerCase();
     const usernameFirst = username.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').split(' ')[0].toLowerCase();
 
     return await this.exec(`(() => {
+      const usernameNorm = ${JSON.stringify(usernameNorm)};
       const usernameFirst = ${JSON.stringify(usernameFirst)};
       const nameNoD = ${JSON.stringify(nameNoD)};
       const configuredNames = ${JSON.stringify(configuredNames)};
@@ -1533,7 +1537,8 @@ async clickNextNpcSkill() {
       for (const msg of recent) {
         const rawText = msg.textContent || '';
         const norm = rawText.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\u0111/g,'d').replace(/\u0110/g,'d').toLowerCase();
-        if (usernameFirst && !norm.includes(usernameFirst) && !norm.includes('bicanh') && !norm.includes('npc') && !norm.includes('battle')) continue;
+        // Chỉ tương tác với battle của CHÍNH MÌNH: message phải chứa username
+        if (usernameNorm && !norm.includes(usernameNorm) && !(usernameFirst && norm.includes(usernameFirst))) continue;
         const btns = msg.querySelectorAll('button[role="button"]');
         const available = Array.from(btns).map(btn => ({
           btn,
