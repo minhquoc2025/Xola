@@ -182,6 +182,14 @@ class NpcBot {
     if (lockInfo.lockMsgId) this.processedLockIds.add(lockInfo.lockMsgId);
   }
 
+  normalizeSkillOrder(value) {
+    const raw = Array.isArray(value) ? value : String(value || '').split(',');
+    const normalized = raw
+      .map(item => Number(String(item).trim()))
+      .filter(item => Number.isInteger(item) && item >= 1 && item <= 26);
+    return [...new Set(normalized)];
+  }
+
   updateConfig(config) {
     if (config.npcNumber !== undefined) this.npcNumber = config.npcNumber;
     if (config.totalBattles !== undefined) this.totalBattles = config.totalBattles;
@@ -210,7 +218,7 @@ class NpcBot {
     if (config.diangucSkillDelayMs !== undefined) this.diangucSkillDelayMs = config.diangucSkillDelayMs;
     if (config.diangucWinDelayMs !== undefined) this.diangucWinDelayMs = config.diangucWinDelayMs;
     if (config.bicanhSkillOrder !== undefined) {
-      this.bicanhSkillOrder = Array.isArray(config.bicanhSkillOrder) ? config.bicanhSkillOrder : [];
+      this.bicanhSkillOrder = this.normalizeSkillOrder(config.bicanhSkillOrder);
       this._bicanhSkillIdx = 0;
     }
   }

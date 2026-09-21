@@ -45,5 +45,11 @@ if (!mainContent.includes('matchesUserMessage') && !mainContent.includes('isOwne
   throw new Error('Missing user-aware message filter helper');
 }
 
+bot.updateConfig({ bicanhSkillOrder: '1,2,3' });
+if (!Array.isArray(bot.bicanhSkillOrder) || JSON.stringify(bot.bicanhSkillOrder) !== JSON.stringify([1, 2, 3])) {
+  throw new Error('Bot failed to normalize bicanh combo skill order from CSV string to array');
+}
+
 console.log('Skill list check passed');
 console.log('NPC message matching guard passed');
+console.log('Combo skill normalization guard passed');

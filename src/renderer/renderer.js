@@ -96,9 +96,17 @@ function setMode(mode) {
 
 // === NPC MODE ===
 
+function normalizeSkillOrder(value) {
+  const items = Array.isArray(value) ? value : String(value || '').split(',');
+  const normalized = items
+    .map(item => Number(String(item).trim()))
+    .filter(item => Number.isInteger(item) && item >= 1 && item <= ALL_SKILLS.length);
+  return [...new Set(normalized)];
+}
+
 function getNpcConfig() {
    const configuredOrder = localStorage.getItem('bicanhSkillOrder') || '';
-   const comboArray = configuredOrder.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n >= 1 && n <= ALL_SKILLS.length);
+   const comboArray = normalizeSkillOrder(configuredOrder);
    return {
      mode: 'npc',
      username: (document.getElementById('username').value || '').trim(),
@@ -136,7 +144,7 @@ function getBicanhConfig() {
     mode: 'bicanh',
     username: (document.getElementById('username-bicanh').value || 'Quất Bất Lực').trim(),
     bicanhCmd: (document.getElementById('bicanh-cmd').value || '!bicanh').trim(),
-    bicanhSkillOrder: localStorage.getItem('bicanhSkillOrder') || '',
+    bicanhSkillOrder: normalizeSkillOrder(localStorage.getItem('bicanhSkillOrder') || ''),
   };
 }
 
