@@ -325,7 +325,7 @@ class NpcBot {
       const trimmed = line.trim();
       if (!trimmed) continue;
 
-      let summaryMatch = trimmed.match(/^\+(\d+)\s+\+(\d+)\s*XP/i);
+      let summaryMatch = trimmed.match(/^\+([\d.,]+)\s+\+\s*([\d.,]+)\s*XP/i);
       if (!summaryMatch) {
         const m = trimmed.match(/^([^:+]*)\+([\d.,]+)\s*🪙[^+]*\+\s*([\d.,]+)\s*XP/i);
         if (m && !m[1].includes(':')) {
@@ -930,73 +930,46 @@ class NpcBot {
 
   async checkBattleEnd() {
     const username = this.username || '';
-    return await this.exec(`(() => {
-      const maxIdStr = window.botMaxMsgId || '0';
-      const maxId = BigInt(maxIdStr);
+    const res = await this.exec(`(() => {
       const username = ${JSON.stringify(username)};
-      const matchesUserMessage = text => {
-        const value = String(text || '');
-        if (!username) return true;
-        const normalizedText = value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').toLowerCase();
-        const normalizedUser = username.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').toLowerCase();
-        if (!normalizedText.includes(normalizedUser)) return false;
-        return ['npc', 'battle', 'fight', 'đánh', 'thắng', 'thua', 'kết quả', 'result', 'hồi chiêu', 'cooldown', 'bị khóa', 'giết npc'].some(keyword => normalizedText.includes(keyword));
-      };
       const msgs = document.querySelectorAll('[role="article"]');
-      const recent = Array.from(msgs).slice(-30);
-      let rewardText = '';
-      for (const msg of recent.reverse()) {
+      for (const msg of msgs) {
         if (msg.getAttribute('data-bot-seen') === 'true') continue;
-        if (username && !matchesUserMessage(msg.textContent)) continue;
-
-        if (msg.id) {
-          const parts = msg.id.split('-');
-          const idStr = parts[parts.length - 1];
-          try {
-            const id = BigInt(idStr);
-            if (id <= maxId) continue;
-          } catch(e) {}
-        }
-
-        const text = msg.textContent.toLowerCase();
-        const rawText = msg.textContent;
-
-        const hasResult = text.includes('kết quả trận đấu') || text.includes('battle ended');
-        const hasWin = /chiến thắng!|thắng npc|✅\s*thắng|🥇/.test(text);
-        const hasLoss = /thất bại|thua npc|❌\s*thua|thua!/.test(text);
-
-        if ((hasResult && (hasWin || hasLoss)) || hasWin || hasLoss) {
-          msg.setAttribute('data-bot-seen', 'true');
-          if (msg.id) {
-            const parts = msg.id.split('-');
-            window.botMaxMsgId = parts[parts.length - 1];
-          }
-
-          let result;
-          if (hasWin && !hasLoss) {
-            result = 'win';
-          } else if (hasLoss && !hasWin) {
-            result = 'loss';
-          } else if (hasResult) {
-            result = hasLoss && !hasWin ? 'loss' : 'win';
-          } else {
-            if (rawText.includes('✅ Thắng') || rawText.includes('🥇')) {
-              result = 'win';
-            } else if (hasLoss) {
-              result = 'loss';
-            } else {
-              result = hasWin ? 'win' : 'unknown';
-            }
-          }
-
-          // Collect reward text from nearby messages
-          rewardText = rawText;
-
-          return { ended: true, result, rewardText };
-        }
+        const rawText = msg.textContent || '';
+        const text = rawText.toLowerCase();
+        const isResult = text.includes('kết quả trận đấu') || text.includes('battle ended') || text.includes('chiến thắng') || text.includes('thất bại') || text.includes('thắng npc') || text.includes('thua npc') || rawText.includes('✅') || rawText.includes('❌');
+        if (!rawText.trim() || !isResult) continue;
+        if (username && !rawText.includes(username)) continue;
+        msg.setAttribute('data-bot-seen', 'true');
+        return { text: rawText.substring(0, 8000), username };
       }
       return null;
     })()`);
+    if (!res || !res.text) return null;
+
+    const t = res.text.toLowerCase();
+    const ul = String(res.username || '').toLowerCase();
+    const iWin = t.lastIndexOf('chiến thắng');
+    const iLoss = t.lastIndexOf('thất bại');
+    const iUser = t.lastIndexOf(ul);
+    let result = 'unknown';
+    if (iWin >= 0 && iLoss >= 0 && iUser >= 0) {
+      result = Math.abs(iUser - iWin) <= Math.abs(iUser - iLoss) ? 'win' : 'loss';
+    } else if (iWin >= 0 && iLoss < 0) {
+      result = 'win';
+    } else if (iLoss >= 0 && iWin < 0) {
+      result = 'loss';
+    } else if (res.text.includes('✅') && !res.text.includes('❌')) {
+      result = 'win';
+    } else if (res.text.includes('❌') && !res.text.includes('✅')) {
+      result = 'loss';
+    } else if (t.includes('thắng')) {
+      result = 'win';
+    } else if (t.includes('thua')) {
+      result = 'loss';
+    }
+
+    return { ended: true, result, rewardText: res.text };
   }
 
   // Phiên bản checkBattleEnd riêng cho Luân Hồi: bỏ qua message đang trận (có nút "Chiến đấu")
