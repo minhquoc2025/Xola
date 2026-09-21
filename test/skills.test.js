@@ -41,6 +41,14 @@ if (!bot.isOwnedGameMessage('Hiep đã đánh NPC rồi, còn 3 giây nữa', 'H
   throw new Error('Bot failed to recognize the current user battle message');
 }
 
+if (bot.isOwnedGameMessage('Nam: Hiep, xem trận bí cảnh của tôi', 'Hiep', ['bicanh', 'bi cảnh', 'bí cảnh', 'thap', 'tầng', 'đánh'])) {
+  throw new Error('Bot incorrectly treated another player\'s Bicanh message as the current user battle');
+}
+
+if (!bot.isOwnedGameMessage('Hiep đã đánh bí cảnh và leo tầng 107', 'Hiep', ['bicanh', 'bi cảnh', 'bí cảnh', 'thap', 'tầng', 'đánh'])) {
+  throw new Error('Bot failed to recognize the current user Bicanh battle message');
+}
+
 if (!mainContent.includes('matchesUserMessage') && !mainContent.includes('isOwnedGameMessage')) {
   throw new Error('Missing user-aware message filter helper');
 }

@@ -3015,15 +3015,30 @@ async clickNextNpcSkill() {
       .toLowerCase();
 
     return await this.exec(`(() => {
+       const isOwnedGameMessage = (text, userName, keywords = []) => {
+         const rawText = String(text || '');
+         const normalizedText = rawText.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').replace(/\s+/g, ' ').trim().toLowerCase();
+         const normalizedUser = String(userName || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').replace(/\s+/g, ' ').trim().toLowerCase();
+         if (!normalizedUser || !normalizedText) return true;
+         const userTokens = normalizedUser.split(/\s+/).filter(Boolean);
+         const usernameIndex = userTokens
+           .map(token => normalizedText.indexOf(token))
+           .filter(index => index >= 0)
+           .sort((a, b) => a - b)[0];
+         if (usernameIndex === undefined) return false;
+         const beforeUsername = normalizedText.slice(0, usernameIndex).trim();
+         if (/(?:^|[\s(])(?:[a-z0-9]+)\s*:\s*$/.test(beforeUsername)) return false;
+         const gameKeywords = ['bicanh', 'bi cảnh', 'bí cảnh', 'thap', 'tầng', 'leo tầng', 'fight', 'battle', 'đánh', 'thắng', 'thua', 'cooldown', ...keywords].map(keyword => String(keyword || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').trim().toLowerCase());
+         return gameKeywords.some(keyword => keyword && normalizedText.includes(keyword));
+       };
        const username = ${JSON.stringify(username)};
        const nameNoD = ${JSON.stringify(nameNoD)};
-       const usernameFirst = (username || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\u0111/g,'d').replace(/\u0110/g,'d').split(' ')[0].toLowerCase();
        const msgs = document.querySelectorAll('[role="article"]');
        const recent = Array.from(msgs).slice(-40).reverse();
        for (const msg of recent) {
          const rawText = msg.textContent || '';
          const norm = rawText.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\u0111/g,'d').replace(/\u0110/g,'d').toLowerCase();
-         if (usernameFirst && !norm.includes(usernameFirst) && !norm.includes('luan') && !norm.includes('thap') && !norm.includes('bicanh')) continue;
+         if (username && !isOwnedGameMessage(rawText, username, ['bicanh', 'bi cảnh', 'bí cảnh', 'thap', 'tầng', 'leo tầng', 'fight', 'battle', 'đánh'])) continue;
          const btns = msg.querySelectorAll('button, [role="button"]');
          if (btns.length === 0) continue;
          for (const btn of btns) {
