@@ -2919,11 +2919,11 @@ async clickNextNpcSkill() {
     await this.sendChat(this.bicanhCmd);
     await this.delay(this.rand(2000, 3000));
 
-    // Click nút "Leo Tầng N"
-    const floorClicked = await this.clickBicanhFloor();
+    // Click nút "Leo Tầng N" — game có thể trả lời chậm nên poll chờ tối đa 20s
+    const floorClicked = await this.waitForBicanhButton(runId);
     if (!floorClicked) {
-      this.log('⚠️ Không tìm thấy nút Leo Tầng. Thử lại...');
-      await this.cooldownWait(5, runId);
+      this.log('⚠️ Không thấy nút Leo Tầng/Tiếp tục sau khi chờ. Thử lại...');
+      await this.cooldownWait(8, runId);
       if (this.isRunning && this.runId === runId) this.bicanhLoop(runId);
       return;
     }
@@ -2956,6 +2956,22 @@ async clickNextNpcSkill() {
     this.log('⏹ BICANH MODE đã dừng.');
   }
 
+  // Poll tìm nút "Leo Tầng N" / "Tiếp tục" — game trả lời chậm nên phải chờ và thử lại nhiều lần
+  async waitForBicanhButton(runId) {
+    const deadline = Date.now() + 20000; // tối đa 20s
+    let attempt = 1;
+    while (this.isRunning && this.runId === runId && Date.now() < deadline) {
+      const clicked = await this.clickBicanhFloor();
+      if (clicked) {
+        if (attempt > 1) this.log(`👉 Tìm thấy nút sau ${attempt} lần thử.`);
+        return clicked;
+      }
+      await this.delay(this.rand(1500, 2500));
+      attempt++;
+    }
+    return null;
+  }
+
   // Tìm và click nút "Leo Tầng N" trong message gần nhất
   async clickBicanhFloor() {
     return await this.exec(`(() => {
@@ -2970,7 +2986,7 @@ async clickNextNpcSkill() {
            if (!raw || raw.length < 3) continue;
            if (/[@|!]/.test(raw)) continue;
            const txt = raw.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g,'d').replace(/\u0110/g,'d');
-           if (txt.includes('leotang') || txt.includes('leo')) {
+           if (txt.includes('leotang') || txt.includes('leo') || txt.includes('tieptuc') || txt.includes('tiep tuc')) {
              btn.disabled = false;
              btn.click();
              return raw;
