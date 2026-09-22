@@ -89,6 +89,8 @@ class NpcBot {
       targetNpc: null,
       lastBattle: null,
     };
+    this.luanhoiAutoRestart = true;
+    this.luanhoiRestartDelaySec = 5;
   }
 
   ts() {
@@ -1507,7 +1509,7 @@ class NpcBot {
     return false;
   }
 
-async clickNextNpcSkill() {
+  async clickNextNpcSkill() {
     if (!this.bicanhSkillOrder || this.bicanhSkillOrder.length === 0) return null;
     const stt = this.bicanhSkillOrder[this._bicanhSkillIdx % this.bicanhSkillOrder.length];
     const skillName = this.luanhoiSkillNames[stt - 1];
@@ -2098,17 +2100,17 @@ async clickNextNpcSkill() {
       const leftoverCont = await this.clickContinueOrStop('continue');
       if (leftoverCont) {
         this.log(`↪️ Phát hiện & bấm nút "Tiếp tục leo tháp" còn sót lại: ${leftoverCont}`);
-        await this.luanhoiClickWait(2000);
+        await this.luanhoiClickWait(1200);
         continue;
       }
       if (await this.clickDoor('up')) {
         this.log('🚪 Đã chọn cửa hướng lên (boss mốc).');
-        await this.luanhoiClickWait(2000);
+        await this.luanhoiClickWait(1200);
       }
       const b = await this.clickBuffByPriority();
       if (b) {
         this.log(`⚡ Đã chọn buff: "${b}"`);
-        await this.luanhoiClickWait(2000);
+        await this.luanhoiClickWait(1200);
         entered = true;
         const tierNow = await this.readLuanhoiTier();
         if (tierNow > 0) this.luanhoiCurrentTier = tierNow;
@@ -2133,7 +2135,7 @@ async clickNextNpcSkill() {
         entered = true;
         break;
       }
-      await this.delay(this.rand(2000, 3000));
+      await this.delay(this.rand(1200, 2200));
     }
 
     if (!entered) {
