@@ -1482,6 +1482,7 @@ class NpcBot {
       this.log(`=== COMBO: ${this.bicanhSkillOrder.join(' → ')} ===`);
     }
 
+    let noSkillCount = 0;
     while (this.isRunning && this.runId === runId) {
       const battleEndResult = await this.checkBattleEnd();
       if (battleEndResult && battleEndResult.ended) {
@@ -1493,8 +1494,10 @@ class NpcBot {
       if (clicked) {
         this.log(`🌀 Click skill NPC: "${clicked}"`);
         this._bicanhSkillIdx++;
+        noSkillCount = 0;
       } else {
-        this.log(`⚠️ Không tìm thấy skill trong combo. Đợi...`);
+        noSkillCount++;
+        this.log(`⚠️ Không tìm thấy skill trong combo. Đợi... (${noSkillCount})`);
       }
 
       const cd = await this.checkBicanhCooldown();
@@ -1503,6 +1506,14 @@ class NpcBot {
         await this.delay(cd);
       } else {
         await this.delay(this.rand(1500, 2000));
+      }
+
+      if (noSkillCount >= 15) {
+        this.log('⚠️ Không tìm thấy skill sau 5 lần — gửi lại !npc để bắt đầu lại battle...');
+        noSkillCount = 0;
+        this._bicanhSkillIdx = 0;
+        await this.sendNpcCommand();
+        await this.delay(4000);
       }
     }
 
