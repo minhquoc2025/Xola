@@ -178,8 +178,7 @@ function resolveSkillNames(value) {
 
 function getDiangucConfig() {
   const configuredOrder = localStorage.getItem('bicanhSkillOrder') || '';
-  const inputValue = document.getElementById('dianguc-skills').value || '';
-  const skillNames = resolveSkillNames(configuredOrder || inputValue);
+  const skillNames = resolveSkillNames(configuredOrder);
   const resolvedSkills = skillNames.length > 0
     ? skillNames
     : ['Vạn Kiếm Quy Tông', 'Hỗn Nguyên Hộ Thể', 'Kiếm Khí Xung Thiên', 'Thái Cực Dưỡng Sinh'];

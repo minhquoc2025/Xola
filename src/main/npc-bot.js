@@ -66,7 +66,6 @@ class NpcBot {
     this._bicanhSkillIdx = 0;
     this.dianguc = false;
     this.diangucCmd = '!dianguc';
-    this.diangucSkillNames = this.luanhoiSkillNames;
     this.diangucDelayMs = 2000;
     this.diangucChoiceDelayMs = 2000;
     this.diangucWinDelayMs = 3500;
@@ -213,13 +212,9 @@ class NpcBot {
     if (config.luanhoi !== undefined) this.luanhoi = config.luanhoi;
     if (config.luanhoiTarget !== undefined) this.luanhoiTarget = config.luanhoiTarget;
     if (config.luanhoiCmd !== undefined) this.luanhoiCmd = config.luanhoiCmd;
-    if (config.luanhoiSkillNames !== undefined) {
-      this.luanhoiSkillNames = config.luanhoiSkillNames;
-      this.diangucSkillNames = config.luanhoiSkillNames;
-    }
+    if (config.luanhoiSkillNames !== undefined) this.luanhoiSkillNames = config.luanhoiSkillNames;
     if (config.dianguc !== undefined) this.dianguc = config.dianguc;
     if (config.diangucCmd !== undefined) this.diangucCmd = config.diangucCmd;
-    if (config.diangucSkillNames !== undefined) this.diangucSkillNames = config.diangucSkillNames;
     if (config.diangucDelayMs !== undefined) this.diangucDelayMs = config.diangucDelayMs;
     if (config.diangucChoiceDelayMs !== undefined) this.diangucChoiceDelayMs = config.diangucChoiceDelayMs;
     if (config.diangucWinDelayMs !== undefined) this.diangucWinDelayMs = config.diangucWinDelayMs;
@@ -263,7 +258,7 @@ class NpcBot {
     }
     if (this.mode === 'dianguc') {
       this.log(`=== ĐỊA NGỤC MODE: ${this.diangucCmd} ===`);
-      this.log(`=== ĐỊA NGỤC SKILLS: ${this.diangucSkillNames.join(' -> ')} ===`);
+      this.log(`=== ĐỊA NGỤC SKILLS: ${this.luanhoiSkillNames.join(' -> ')} ===`);
       this.diangucLoop(this.runId);
       return;
     }
@@ -1653,7 +1648,7 @@ class NpcBot {
   }
 
   async scanDianguc() {
-    const skillNames = this.diangucSkillNames;
+    const skillNames = this.luanhoiSkillNames;
     return await this.exec(`(() => {
       const getId = msg => msg.id || msg.getAttribute('data-list-item-id') || msg.getAttribute('data-message-id') || '';
       const skills = ${JSON.stringify(skillNames)};
@@ -2687,7 +2682,7 @@ class NpcBot {
   }
 
   async clickNextDiangucSkill() {
-    const names = this.diangucSkillNames;
+    const names = this.luanhoiSkillNames;
     const startIndex = this.diangucSkillIdx % names.length;
     const rotatedNames = names.map((_, index) => names[(startIndex + index) % names.length]);
     const clicked = await this.exec(`(() => {
