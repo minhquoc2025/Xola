@@ -105,6 +105,20 @@ function normalizeSkillOrder(value) {
   return [...new Set(normalized)];
 }
 
+const SKILL_CLICK_DELAY_KEY = 'skillClickDelayMs';
+const SKILL_CLICK_DELAY_DEFAULT = 1000;
+
+function clampSkillClickDelayMs(value) {
+  if (value === null || value === undefined || String(value).trim() === '') return SKILL_CLICK_DELAY_DEFAULT;
+  const ms = Number(value);
+  if (!Number.isFinite(ms)) return SKILL_CLICK_DELAY_DEFAULT;
+  return Math.min(10000, Math.max(100, Math.round(ms)));
+}
+
+function getSkillClickDelayMs() {
+  return clampSkillClickDelayMs(localStorage.getItem(SKILL_CLICK_DELAY_KEY));
+}
+
 function getNpcConfig() {
    const configuredOrder = localStorage.getItem('bicanhSkillOrder') || '';
    const comboArray = normalizeSkillOrder(configuredOrder);
@@ -114,13 +128,13 @@ function getNpcConfig() {
      npcNumber: parseInt(document.getElementById('npc-number').value) || 1,
      totalBattles: parseInt(document.getElementById('total-battles').value) || 5,
      cooldownMs: (parseInt(document.getElementById('cooldown-seconds').value) || 120) * 1000,
-     buttonDelayMs: (parseFloat(document.getElementById('button-delay').value) || 2) * 1000,
      autoClimb: document.getElementById('auto-climb').checked,
      targetMaxNpc: parseInt(document.getElementById('target-max-npc').value) || 60,
      tuLuyen: document.getElementById('tu-luyen').checked,
      tuLuyenStartCmd: '!tuluyen',
      tuLuyenEndCmd: '!ketthuc',
      bicanhSkillOrder: comboArray.length > 0 ? comboArray : [],
+     skillClickDelayMs: getSkillClickDelayMs(),
    };
  }
 
@@ -137,6 +151,7 @@ function getLuanHoiConfig() {
     luanhoiSkillNames: skills.length > 0
       ? skills
       : ['Vạn Kiếm Quy Tông', 'Hỗn Nguyên Hộ Thể', 'Kiếm Khí Xung Thiên', 'Thái Cực Dưỡng Sinh'],
+    skillClickDelayMs: getSkillClickDelayMs(),
   };
 }
 
@@ -146,6 +161,7 @@ function getBicanhConfig() {
     username: (document.getElementById('username-bicanh').value || 'Quất Bất Lực').trim(),
     bicanhCmd: (document.getElementById('bicanh-cmd').value || '!bicanh').trim(),
     bicanhSkillOrder: normalizeSkillOrder(localStorage.getItem('bicanhSkillOrder') || ''),
+    skillClickDelayMs: getSkillClickDelayMs(),
   };
 }
 
@@ -175,8 +191,7 @@ function getDiangucConfig() {
     luanhoiSkillNames: resolvedSkills,
     diangucDelayMs: 2000,
     diangucChoiceDelayMs: 2000,
-    diangucSkillDelayMs: 3500,
-    diangucWinDelayMs: 3500,
+    skillClickDelayMs: getSkillClickDelayMs(),
   };
 }
 
@@ -253,28 +268,54 @@ function loadSkillOrder() {
   const saved = localStorage.getItem('bicanhSkillOrder');
   const input = document.getElementById('skill-order-input');
   if (saved && input) input.value = saved;
+  const delayInput = document.getElementById('skill-click-delay');
+  if (delayInput) delayInput.value = getSkillClickDelayMs();
 }
 
 function saveSkillOrder() {
   const input = document.getElementById('skill-order-input');
+  const delayInput = document.getElementById('skill-click-delay');
   const status = document.getElementById('skill-order-status');
-  if (!input) return;
+  if (!status) return;
+
+  let delayMs = getSkillClickDelayMs();
+  if (delayInput) {
+    delayMs = clampSkillClickDelayMs(delayInput.value);
+    delayInput.value = delayMs;
+    localStorage.setItem(SKILL_CLICK_DELAY_KEY, String(delayMs));
+  }
+
+  if (!input) {
+    status.textContent = `✅ Delay: ${delayMs}ms`;
+    status.style.color = '#4ecca3';
+    toggleSkillModal();
+    return;
+  }
+
   const raw = input.value.trim();
-  if (!raw) { status.textContent = '⚠️ Chưa nhập thứ tự'; status.style.color = '#e94560'; return; }
+  if (!raw) {
+    status.textContent = `✅ Delay: ${delayMs}ms — ⚠️ chưa nhập thứ tự skill`;
+    status.style.color = '#e9c44a';
+    toggleSkillModal();
+    return;
+  }
   const order = raw.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n >= 1 && n <= ALL_SKILLS.length);
   if (order.length === 0) { status.textContent = '⚠️ Không có STT hợp lệ'; status.style.color = '#e94560'; return; }
   localStorage.setItem('bicanhSkillOrder', raw);
-  status.textContent = `✅ Đã lưu: ${order.join(' → ')} (${order.length} skill)`;
+  status.textContent = `✅ Delay: ${delayMs}ms — ${order.join(' → ')} (${order.length} skill)`;
   status.style.color = '#4ecca3';
   toggleSkillModal();
 }
 
 function resetSkillOrder() {
   localStorage.removeItem('bicanhSkillOrder');
+  localStorage.removeItem(SKILL_CLICK_DELAY_KEY);
   const input = document.getElementById('skill-order-input');
+  const delayInput = document.getElementById('skill-click-delay');
   const status = document.getElementById('skill-order-status');
   if (input) input.value = '';
-  if (status) { status.textContent = '🔄 Đã reset về mặc định'; status.style.color = '#4ecca3'; }
+  if (delayInput) delayInput.value = SKILL_CLICK_DELAY_DEFAULT;
+  if (status) { status.textContent = `🔄 Đã reset về mặc định (delay ${SKILL_CLICK_DELAY_DEFAULT}ms)`; status.style.color = '#4ecca3'; }
 }
 
 // === STATS ===

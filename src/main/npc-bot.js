@@ -39,6 +39,8 @@ class NpcBot {
     this.cooldownMs = 120000;
     this.defeatCooldownSec = 300;
     this.buttonDelayMs = 2000;
+    // Delay giữa 2 lần click skill — dùng chung cho NPC / Luân Hồi / Bí Cảnh / Địa Ngục
+    this.skillClickDelayMs = 1000;
     this.autoClimb = false;
     this.targetMaxNpc = 60;
     this.climbWinsNeeded = 0;
@@ -67,7 +69,6 @@ class NpcBot {
     this.diangucSkillNames = this.luanhoiSkillNames;
     this.diangucDelayMs = 2000;
     this.diangucChoiceDelayMs = 2000;
-    this.diangucSkillDelayMs = 2200;
     this.diangucWinDelayMs = 3500;
     this.diangucFloor = 0;
     this.diangucStep = 0;
@@ -197,6 +198,10 @@ class NpcBot {
     if (config.totalBattles !== undefined) this.totalBattles = config.totalBattles;
     if (config.cooldownMs !== undefined) this.cooldownMs = config.cooldownMs;
     if (config.buttonDelayMs !== undefined) this.buttonDelayMs = config.buttonDelayMs;
+    if (config.skillClickDelayMs !== undefined) {
+      const ms = Number(config.skillClickDelayMs);
+      if (Number.isFinite(ms)) this.skillClickDelayMs = Math.min(10000, Math.max(100, Math.round(ms)));
+    }
     if (config.autoClimb !== undefined) this.autoClimb = config.autoClimb;
     if (config.targetMaxNpc !== undefined) this.targetMaxNpc = config.targetMaxNpc;
     if (config.tuLuyen !== undefined) this.tuLuyen = config.tuLuyen;
@@ -217,7 +222,6 @@ class NpcBot {
     if (config.diangucSkillNames !== undefined) this.diangucSkillNames = config.diangucSkillNames;
     if (config.diangucDelayMs !== undefined) this.diangucDelayMs = config.diangucDelayMs;
     if (config.diangucChoiceDelayMs !== undefined) this.diangucChoiceDelayMs = config.diangucChoiceDelayMs;
-    if (config.diangucSkillDelayMs !== undefined) this.diangucSkillDelayMs = config.diangucSkillDelayMs;
     if (config.diangucWinDelayMs !== undefined) this.diangucWinDelayMs = config.diangucWinDelayMs;
     if (config.bicanhSkillOrder !== undefined) {
       this.bicanhSkillOrder = this.normalizeSkillOrder(config.bicanhSkillOrder);
@@ -1505,7 +1509,7 @@ class NpcBot {
         this.log(`⏳ Cooldown — chờ ${cd}ms`);
         await this.delay(cd);
       } else {
-        await this.delay(this.rand(1500, 2000));
+        await this.delay(this.skillClickDelayMs);
       }
 
       if (noSkillCount >= 15) {
@@ -2044,7 +2048,7 @@ class NpcBot {
         const clickedSkill = await this.clickNextDiangucSkill();
         if (clickedSkill) this.log(`⚔️ Địa Ngục click skill: ${clickedSkill}`);
         else this.log(`⚠️ Battle không tìm thấy skill trong message Địa Ngục: ${state.buttonText || '(trống)'}`);
-        await this.delay(this.diangucSkillDelayMs);
+        await this.delay(this.skillClickDelayMs);
         continue;
       }
       await this.delay(this.diangucDelayMs);
@@ -2546,7 +2550,7 @@ class NpcBot {
         noSkillSince = Date.now();
       }
 
-      await this.luanhoiClickWait(2000);
+      await this.delay(this.skillClickDelayMs);
     }
 
     return { ended: false };
@@ -2970,7 +2974,7 @@ class NpcBot {
         this.log(`⏳ Cooldown — chờ ${cd}ms`);
         await this.delay(cd);
       } else {
-        await this.delay(this.rand(800, 1500));
+        await this.delay(this.skillClickDelayMs);
       }
     }
 
