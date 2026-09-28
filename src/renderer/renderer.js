@@ -63,18 +63,19 @@ const ALL_SKILLS = [
   { stt: 15, name: 'Hồi Phục', cat: 'Chống Xỏ Lá' },
   { stt: 16, name: 'Hộ Thuẫn', cat: 'Chống Xỏ Lá' },
   { stt: 17, name: 'Hỏa Giáp', cat: 'Chống Xỏ Lá' },
+  { stt: 18, name: 'Chống Xỏ Lá', cat: 'Chống Xỏ Lá' },
   // Luyện Khí
-  { stt: 18, name: 'Thái Cực Dưỡng Sinh', cat: 'Luyện Khí' },
-  { stt: 19, name: 'Kiếm Khí Xung Thiên', cat: 'Luyện Khì' },
-  { stt: 20, name: 'Kim Cương Phục Ma', cat: 'Luyện Khí' },
+  { stt: 19, name: 'Thái Cực Dưỡng Sinh', cat: 'Luyện Khí' },
+  { stt: 20, name: 'Kiếm Khí Xung Thiên', cat: 'Luyện Khì' },
+  { stt: 21, name: 'Kim Cương Phục Ma', cat: 'Luyện Khí' },
   // Trúc Cơ
-  { stt: 21, name: 'Hỗn Nguyên Hộ Thể', cat: 'Trúc Cơ' },
-  { stt: 22, name: 'Vạn Kiếm Quy Tông', cat: 'Trúc Cơ' },
-  { stt: 23, name: 'Phong Ấn Thất Mạch', cat: 'Trúc Cơ' },
+  { stt: 22, name: 'Hỗn Nguyên Hộ Thể', cat: 'Trúc Cơ' },
+  { stt: 23, name: 'Vạn Kiếm Quy Tông', cat: 'Trúc Cơ' },
+  { stt: 24, name: 'Phong Ấn Thất Mạch', cat: 'Trúc Cơ' },
   // Kết Đan
-  { stt: 24, name: 'Cửu Chuyển Hồi Xuân', cat: 'Kết Đan' },
-  { stt: 25, name: 'Kim Đan Phá Sát', cat: 'Kết Đan' },
-  { stt: 26, name: 'Tam Muội Chân Hỏa', cat: 'Kết Đan' },
+  { stt: 25, name: 'Cửu Chuyển Hồi Xuân', cat: 'Kết Đan' },
+  { stt: 26, name: 'Kim Đan Phá Sát', cat: 'Kết Đan' },
+  { stt: 27, name: 'Tam Muội Chân Hỏa', cat: 'Kết Đan' },
 ];
 
 // === MODE ===
