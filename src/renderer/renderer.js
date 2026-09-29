@@ -120,23 +120,23 @@ function getSkillClickDelayMs() {
 }
 
 function getNpcConfig() {
-   const configuredOrder = localStorage.getItem('bicanhSkillOrder') || '';
-   const comboArray = normalizeSkillOrder(configuredOrder);
-   return {
-     mode: 'npc',
-     username: (document.getElementById('username').value || '').trim(),
-     npcNumber: parseInt(document.getElementById('npc-number').value) || 1,
-     totalBattles: parseInt(document.getElementById('total-battles').value) || 5,
-     cooldownMs: (parseInt(document.getElementById('cooldown-seconds').value) || 120) * 1000,
-     autoClimb: document.getElementById('auto-climb').checked,
-     targetMaxNpc: parseInt(document.getElementById('target-max-npc').value) || 60,
-     tuLuyen: document.getElementById('tu-luyen').checked,
-     tuLuyenStartCmd: '!tuluyen',
-     tuLuyenEndCmd: '!ketthuc',
-     bicanhSkillOrder: comboArray.length > 0 ? comboArray : [],
-     skillClickDelayMs: getSkillClickDelayMs(),
-   };
- }
+  const configuredOrder = localStorage.getItem('bicanhSkillOrder') || '';
+  const comboArray = normalizeSkillOrder(configuredOrder);
+  return {
+    mode: 'npc',
+    username: (document.getElementById('username').value || '').trim(),
+    npcNumber: parseInt(document.getElementById('npc-number').value) || 1,
+    totalBattles: parseInt(document.getElementById('total-battles').value) || 5,
+    cooldownMs: (parseInt(document.getElementById('cooldown-seconds').value) || 120) * 1000,
+    autoClimb: document.getElementById('auto-climb').checked,
+    targetMaxNpc: parseInt(document.getElementById('target-max-npc').value) || 60,
+    tuLuyen: document.getElementById('tu-luyen').checked,
+    tuLuyenStartCmd: '!tuluyen',
+    tuLuyenEndCmd: '!ketthuc',
+    bicanhSkillOrder: comboArray.length > 0 ? comboArray : [],
+    skillClickDelayMs: getSkillClickDelayMs(),
+  };
+}
 
 function getLuanHoiConfig() {
   const configuredOrder = localStorage.getItem('bicanhSkillOrder') || '';
@@ -263,10 +263,59 @@ function buildSkillGrid() {
   }
 }
 
+const SKILL_COMBO_PRESETS = [
+  { id: 'tutiendmg', label: 'Tu Tiên DMG', order: [26, 23, 20] },
+  { id: 'normaldmg', label: 'Normal DMG', order: [12, 4, 1] },
+  { id: 'normalall', label: 'Normal ALL', order: [17, 12, 4, 1] },
+  { id: 'mixed', label: 'Hỗ Hợp', order: [22, 26, 23, 20, 12, 4, 1] },
+  { id: 'custom', label: '✏️ Tự nhập', order: [] },
+];
+
+function skillNameByStt(stt) {
+  const skill = ALL_SKILLS[stt - 1];
+  return skill ? skill.name : `#${stt}`;
+}
+
+function skillOrderToNames(order) {
+  return order.map(skillNameByStt);
+}
+
+function buildSkillPresetOptions() {
+  const select = document.getElementById('skill-combo-preset');
+  if (!select) return;
+  select.innerHTML = '';
+  for (const preset of SKILL_COMBO_PRESETS) {
+    const option = document.createElement('option');
+    option.value = preset.id;
+    option.textContent = preset.order.length
+      ? `${preset.label} — ${skillOrderToNames(preset.order).join(' / ')}`
+      : preset.label;
+    select.appendChild(option);
+  }
+}
+
+function applySkillPreset(presetId) {
+  const preset = SKILL_COMBO_PRESETS.find(item => item.id === presetId);
+  const input = document.getElementById('skill-order-input');
+  if (!preset || !input || !preset.order.length) return;
+  input.value = preset.order.join(',');
+}
+
+function syncSkillPresetFromInput() {
+  const select = document.getElementById('skill-combo-preset');
+  const input = document.getElementById('skill-order-input');
+  if (!select || !input) return;
+  const current = normalizeSkillOrder(input.value).join(',');
+  const matched = SKILL_COMBO_PRESETS.find(preset => preset.order.length && preset.order.join(',') === current);
+  select.value = matched ? matched.id : 'custom';
+}
+
 function loadSkillOrder() {
+  buildSkillPresetOptions();
   const saved = localStorage.getItem('bicanhSkillOrder');
   const input = document.getElementById('skill-order-input');
-  if (saved && input) input.value = saved;
+  if (input) input.value = saved || '';
+  syncSkillPresetFromInput();
   const delayInput = document.getElementById('skill-click-delay');
   if (delayInput) delayInput.value = getSkillClickDelayMs();
 }
@@ -301,7 +350,8 @@ function saveSkillOrder() {
   const order = raw.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n) && n >= 1 && n <= ALL_SKILLS.length);
   if (order.length === 0) { status.textContent = '⚠️ Không có STT hợp lệ'; status.style.color = '#e94560'; return; }
   localStorage.setItem('bicanhSkillOrder', raw);
-  status.textContent = `✅ Delay: ${delayMs}ms — ${order.join(' → ')} (${order.length} skill)`;
+  const preset = SKILL_COMBO_PRESETS.find(item => item.order.length && normalizeSkillOrder(raw).join(',') === item.order.join(','));
+  status.textContent = `✅ Delay: ${delayMs}ms — ${preset ? preset.label : 'Tự nhập'}: ${skillOrderToNames(order).join(' → ')}`;
   status.style.color = '#4ecca3';
   toggleSkillModal();
 }
@@ -310,9 +360,11 @@ function resetSkillOrder() {
   localStorage.removeItem('bicanhSkillOrder');
   localStorage.removeItem(SKILL_CLICK_DELAY_KEY);
   const input = document.getElementById('skill-order-input');
+  const select = document.getElementById('skill-combo-preset');
   const delayInput = document.getElementById('skill-click-delay');
   const status = document.getElementById('skill-order-status');
   if (input) input.value = '';
+  if (select) select.value = 'custom';
   if (delayInput) delayInput.value = SKILL_CLICK_DELAY_DEFAULT;
   if (status) { status.textContent = `🔄 Đã reset về mặc định (delay ${SKILL_CLICK_DELAY_DEFAULT}ms)`; status.style.color = '#4ecca3'; }
 }
@@ -341,12 +393,12 @@ async function updateStats() {
     const battleCount = status.battleCount || 0;
     const totalBattles = status.totalBattles || 0;
 
-     // Top row stats - Target shows battle progress
-     if (status.mode === 'dianguc') {
-       document.getElementById('stat-total').textContent = `Tầng ${status.diangucFloor || 0}, bước ${status.diangucStep || 0}`;
-     } else if (status.mode === 'bicanh') {
-       document.getElementById('stat-total').textContent = `⚔️ Đang spam skill...`;
-     } else if (status.mode === 'luanhoi') {
+    // Top row stats - Target shows battle progress
+    if (status.mode === 'dianguc') {
+      document.getElementById('stat-total').textContent = `Tầng ${status.diangucFloor || 0}, bước ${status.diangucStep || 0}`;
+    } else if (status.mode === 'bicanh') {
+      document.getElementById('stat-total').textContent = `⚔️ Đang spam skill...`;
+    } else if (status.mode === 'luanhoi') {
       const cur = status.lastLuanhoiTarget != null ? status.lastLuanhoiTarget : 0;
       const tgt = status.luanhoiTarget || 0;
       document.getElementById('stat-total').textContent = `Tầng ${cur}/${tgt}`;
