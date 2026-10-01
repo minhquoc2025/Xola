@@ -1511,6 +1511,7 @@ class NpcBot {
         this.log('⚠️ Không tìm thấy skill sau 5 lần — gửi lại !npc để bắt đầu lại battle...');
         noSkillCount = 0;
         this._bicanhSkillIdx = 0;
+        await this.sendChat(this.tuLuyenEndCmd);
         await this.sendNpcCommand();
         await this.delay(4000);
       }
