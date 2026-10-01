@@ -176,6 +176,53 @@ class NpcBot {
     await this.delay(Math.max(minMs, this.buttonDelayMs || 0));
   }
 
+  // Game gửi tin nhắn ephemeral RIÊNG (DOM node mới, không nằm trong card battle), ví dụ
+  // "⏳ Vạn Kiếm Quy Tông đang hồi! Còn 1 turn." + footer "Chỉ bạn mới có thể thấy điều này • Bỏ qua tin nhắn".
+  // Vì node này có chứa chữ "⏳ / đang hồi" và có button nên các detector cooldown/battle
+  // dễ tưởng nhầm là message game -> gắn nhãn data-bot-ephemeral để các detector khác bỏ qua,
+  // rồi click link "Bỏ qua tin nhắn" để không dồn card che mất nút skill.
+  async dismissEphemeralMessages() {
+    const markerNeedles = ['chi ban moi', 'thay dieu nay'].map(text => this.normalizeMatchText(text));
+    const dismissNeedle = this.normalizeMatchText('Bỏ qua tin nhắn');
+    const clicked = await this.exec(`(() => {
+      const markerNeedles = ${JSON.stringify(markerNeedles)};
+      const dismissNeedle = ${JSON.stringify(dismissNeedle)};
+      const nd = value => String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\u0111/g, 'd').replace(/\u0110/g, 'd')
+        .replace(/\u01A1/g, 'o').replace(/\u01A0/g, 'o')
+        .replace(/\u01B0/g, 'u').replace(/\u01AF/g, 'u')
+        .toLowerCase().replace(/\s+/g, ' ').trim();
+
+      // Node ephemeral có thể là [role="article"] hoặc thẻ bọc mang class "ephemeral".
+      const nodes = Array.from(document.querySelectorAll('[role="article"], [class*="ephemeral"]'));
+      const recent = nodes.slice(-40).reverse();
+      let clicked = null;
+      for (const node of recent) {
+        const text = nd(node.textContent);
+        if (!markerNeedles.some(needle => text.includes(needle))) continue;
+        node.setAttribute('data-bot-ephemeral', 'true');
+        if (clicked) continue;
+        if (node.getAttribute('data-bot-ephemeral-dismissed') === 'true') continue;
+        const links = Array.from(node.querySelectorAll('a, button, [role="button"]'));
+        for (const link of links) {
+          const raw = (link.textContent || '').trim();
+          if (!raw || !nd(raw).includes(dismissNeedle)) continue;
+          node.setAttribute('data-bot-ephemeral-dismissed', 'true');
+          link.disabled = false;
+          link.click();
+          clicked = raw;
+          break;
+        }
+      }
+      return clicked;
+    })()`);
+
+    if (clicked) this.log(`🧹 Đã dismiss tin nhắn ephemeral: "${clicked}"`);
+    return clicked;
+  }
+
   handleLock(lockInfo) {
     this.log(`🔒 NPC ${this.npcNumber} bị khóa! → Chuyển NPC ${lockInfo.requiredNpc}, cần thắng ${lockInfo.winsLeft} lần.`);
     this.npcNumber = lockInfo.requiredNpc;
@@ -943,6 +990,7 @@ class NpcBot {
       const username = ${JSON.stringify(username)};
       const msgs = document.querySelectorAll('[role="article"]');
       for (const msg of msgs) {
+        if (msg.getAttribute('data-bot-ephemeral') === 'true') continue;
         if (msg.getAttribute('data-bot-seen') === 'true') continue;
         const rawText = msg.textContent || '';
         const text = rawText.toLowerCase();
@@ -999,6 +1047,7 @@ class NpcBot {
       const msgs = document.querySelectorAll('[role="article"]');
       const recent = Array.from(msgs).slice(-30);
       for (const msg of recent.reverse()) {
+        if (msg.getAttribute('data-bot-ephemeral') === 'true') continue;
         if (username && !matchesUserMessage(msg.textContent)) continue;
         const rawText = msg.textContent || '';
         const text = rawText.toLowerCase();
@@ -1234,6 +1283,7 @@ class NpcBot {
       const msgs = document.querySelectorAll('[role="article"]');
       const recent = Array.from(msgs).slice(-30);
       for (const msg of recent.reverse()) {
+        if (msg.getAttribute('data-bot-ephemeral') === 'true') continue;
         if (msg.getAttribute('data-bot-seen') === 'true') continue;
         if (username && !matchesUserMessage(msg.textContent)) continue;
 
@@ -1270,6 +1320,9 @@ class NpcBot {
        const msgs = document.querySelectorAll('[role="article"]');
        const recent = Array.from(msgs).slice(-30).reverse();
        for (const msg of recent) {
+         // Tin nhắn ephemeral (Xỏ Lá Ba Que) có chữ "⏳ / đang hồi" nhưng không phải
+         // cooldown của game -> bỏ qua.
+         if (msg.getAttribute('data-bot-ephemeral') === 'true') continue;
          const text = msg.textContent || '';
          if (text.includes('⏳') || /đang hồi|đợi lượt/i.test(text)) {
            const match = text.match(/(\d+)\s*(?:turn|s|giây|phút)/i);
@@ -1298,6 +1351,7 @@ class NpcBot {
       const msgs = document.querySelectorAll('[role="article"]');
       const recent = Array.from(msgs).slice(-30);
       for (const msg of recent.reverse()) {
+        if (msg.getAttribute('data-bot-ephemeral') === 'true') continue;
         if (msg.getAttribute('data-bot-seen') === 'true') continue;
         if (username && !matchesUserMessage(msg.textContent)) continue;
 
@@ -1521,6 +1575,7 @@ class NpcBot {
   }
 
   async clickNextNpcSkill() {
+    await this.dismissEphemeralMessages();
     if (!this.bicanhSkillOrder || this.bicanhSkillOrder.length === 0) return null;
     const stt = this.bicanhSkillOrder[this._bicanhSkillIdx % this.bicanhSkillOrder.length];
     const skillName = this.luanhoiSkillNames[stt - 1];
@@ -2271,6 +2326,7 @@ class NpcBot {
   // — thay vì 5-6 round-trip riêng biệt như trước, giảm trễ dội mỗi lượt đánh.
   async luanhoiBattleTick() {
     await this.markLuanhoiMessages();
+    await this.dismissEphemeralMessages();
     const username = this.username || '';
     const names = this.luanhoiSkillNames;
     const startIdx = this.luanhoiSkillIdx % names.length;
@@ -2436,6 +2492,9 @@ class NpcBot {
           return ['hồi chiêu', 'cooldown', 'đợi lượt', 'đang hồi', 'npc', 'battle', 'fight', 'đánh'].some(keyword => normalizedText.includes(keyword));
         };
         for (const msg of recent30) {
+          // Tin nhắn ephemeral (Xỏ Lá Ba Que) cũng chứa "đang hồi" nhưng không phải
+          // message cooldown của game -> bỏ qua để không kết luận nhầm là hết lượt.
+          if (msg.getAttribute('data-bot-ephemeral') === 'true') continue;
           if (msg.getAttribute('data-bot-seen') === 'true') continue;
           if (username && !matchesUserMessage(msg.textContent)) continue;
           if (msg.id) {
@@ -2555,6 +2614,7 @@ class NpcBot {
   // Tìm skill luân hồi theo TÊN (bỏ qua nút buff Phàm/Linh/Huyền/Thiên và skill mặc định), click luân phiên
   async clickNextLuanhoiSkill() {
     await this.markLuanhoiMessages();
+    await this.dismissEphemeralMessages();
     const username = this.username || '';
     const names = this.luanhoiSkillNames;
     const tierWords = ['pham', 'linh', 'huyen', 'thien'];
@@ -2686,6 +2746,7 @@ class NpcBot {
     const names = this.luanhoiSkillNames;
     const startIndex = this.diangucSkillIdx % names.length;
     const rotatedNames = names.map((_, index) => names[(startIndex + index) % names.length]);
+    await this.dismissEphemeralMessages();
     const clicked = await this.exec(`(() => {
       const removeVN = value => (value || '').normalize('NFD')
         .replace(/[\\u0300-\\u036f]/g, '')
@@ -3020,6 +3081,7 @@ class NpcBot {
 
   // Click skill bicanh theo tên
   async clickNextBicanhSkill(skillName) {
+    await this.dismissEphemeralMessages();
     const username = this.username || '';
     const nameNoD = skillName.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .replace(/\u0111/g, 'd').replace(/\u0110/g, 'd')
