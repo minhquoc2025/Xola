@@ -1334,6 +1334,30 @@ class NpcBot {
      })()`);
   }
 
+  async checkNoResponse() {
+    const username = this.username || '';
+    const usernameNorm = String(username || '').normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').toLowerCase();
+    const usernameFirst = username.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').split(' ')[0].toLowerCase();
+    return await this.exec(`(() => {
+      const usernameNorm = ${JSON.stringify(usernameNorm)};
+      const usernameFirst = ${JSON.stringify(usernameFirst)};
+      const msgs = document.querySelectorAll('[role="article"]');
+      const recent = Array.from(msgs).slice(-40).reverse();
+      for (const msg of recent) {
+        if (msg.getAttribute('data-bot-ephemeral') === 'true') continue;
+        const rawText = msg.textContent || '';
+        const norm = rawText.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').toLowerCase();
+        // Chỉ xét tin nhắn battle của CHÍNH MÌNH (chứa username), dòng "không phản hồi kịp thời" nằm dưới nút skill.
+        if (usernameNorm && !norm.includes(usernameNorm) && !(usernameFirst && norm.includes(usernameFirst))) continue;
+        if (norm.includes('khong phan hoi kip thoi')) return true;
+      }
+      return false;
+    })()`);
+  }
+
   async checkAlreadyFighting() {
     const username = this.username || '';
     return await this.exec(`(() => {
@@ -1536,6 +1560,7 @@ class NpcBot {
     }
 
     let noSkillCount = 0;
+    let noResponseCount = 0;
     while (this.isRunning && this.runId === runId) {
       const battleEndResult = await this.checkBattleEnd();
       if (battleEndResult && battleEndResult.ended) {
@@ -1553,6 +1578,13 @@ class NpcBot {
         this.log(`⚠️ Không tìm thấy skill trong combo. Đợi... (${noSkillCount})`);
       }
 
+      if (await this.checkNoResponse()) {
+        noResponseCount++;
+        this.log(`⚠️ "Không phản hồi kịp thời" liên tiếp (${noResponseCount}/10)`);
+      } else {
+        noResponseCount = 0;
+      }
+
       const cd = await this.checkBicanhCooldown();
       if (cd > 0) {
         this.log(`⏳ Cooldown — chờ ${cd}ms`);
@@ -1566,6 +1598,16 @@ class NpcBot {
         noSkillCount = 0;
         this._bicanhSkillIdx = 0;
         await this.delay(300000);
+        await this.sendChat(this.tuLuyenEndCmd);
+        await this.sendNpcCommand();
+        await this.delay(4000);
+      }
+
+      if (noResponseCount >= 10) {
+        this.log('⚠️ "Không phản hồi kịp thời" 10 lần liên tiếp — reset trận (!ketthuc => !npc)...');
+        noResponseCount = 0;
+        noSkillCount = 0;
+        this._bicanhSkillIdx = 0;
         await this.sendChat(this.tuLuyenEndCmd);
         await this.sendNpcCommand();
         await this.delay(4000);
