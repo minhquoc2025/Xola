@@ -1081,7 +1081,7 @@ class NpcBot {
 
         // Advance: message buff tầng mới > tầng đã click
         if (hasBuff && !hasWin && !hasLoss && knownTier > 0) {
-          const tm = rawText.match(/(?:tầng|tầng luân hồi|tier)\s*([0-9]{1,3})/i);
+          const tm = rawText.match(/(?:t[a\u1ea7]ng(?:\\s+lu[a\u00e2]n\\s+h[o\u1ed3]i)?|tier)\\s*[:.\u2013-]?\\s*([0-9]{1,3})/i);
           if (tm && parseInt(tm[1]) > knownTier) {
             return { ended: true, result: 'advance', rewardText: rawText };
           }
@@ -1162,7 +1162,7 @@ class NpcBot {
       for (const msg of recent) {
         if (username && !matchesUserMessage(msg.textContent)) continue;
         const rawText = msg.textContent || '';
-        const tm = rawText.match(/(?:tầng|tầng luân hồi|tier)\s*([0-9]{1,3})/i);
+        const tm = rawText.match(/(?:t[a\u1ea7]ng(?:\\s+lu[a\u00e2]n\\s+h[o\u1ed3]i)?|tier)\\s*[:.\u2013-]?\\s*([0-9]{1,3})/i);
         const newTier = tm ? parseInt(tm[1]) : null;
         const btns = msg.querySelectorAll('button, [role="button"]');
         let hasBuff = false;
@@ -2235,6 +2235,14 @@ class NpcBot {
       if (leftoverCont) {
         this.log(`↪️ Phát hiện & bấm nút "Tiếp tục leo tháp" còn sót lại: ${leftoverCont}`);
         await this.luanhoiClickWait(1200);
+        // Có nút "Tiếp tục leo tháp" sót = vòng trước bot đã đọc sai tầng và bỏ qua
+        // bước này. Quét lại message battle để chốt tầng đúng, tránh lệch tích luỹ.
+        const fixedTier = await this.readLuanhoiTier();
+        if (fixedTier > 0 && fixedTier !== this.lastLuanhoiTarget) {
+          this.log(`🔧 [Sửa tầng] Sau khi bấm "Tiếp tục leo tháp": tầng = ${fixedTier} (trước đó ghi nhận ${this.lastLuanhoiTarget ?? 'chưa rõ'}).`);
+        }
+        this.lastLuanhoiTarget = fixedTier > 0 ? fixedTier : this.lastLuanhoiTarget;
+        if (fixedTier > 0) this.luanhoiCurrentTier = fixedTier;
         continue;
       }
 
@@ -2455,14 +2463,15 @@ class NpcBot {
         }
         if (!bestBtn) continue;
         let msgTier = 0;
-        const tm = rawText.match(/(?:tầng|tầng luân hồi|tier)\s*([0-9]{1,3})/i);
+        const tm = rawText.match(/(?:t[a\u1ea7]ng(?:\\s+lu[a\u00e2]n\\s+h[o\u1ed3]i)?|tier)\\s*[:.\u2013-]?\\s*([0-9]{1,3})/i);
         if (tm && tm[1]) msgTier = parseInt(tm[1]);
         const clickedTier = window.luanhoiBuffTierClicked || 0;
         if (msgTier > 0 && msgTier <= clickedTier) continue;
         bestBtn.disabled = false;
         bestBtn.click();
-        window.luanhoiBuffTierClicked = Math.max(window.luanhoiBuffTierClicked || 0, msgTier > 0 ? msgTier : (window.luanhoiBuffTierClicked || 0) + 1);
-        return { type: 'buff', text: bestText, tier: msgTier };
+        // msgTier là tầng SẮP VÀO → chốt thẳng. Không đoán "+1" ở đây.
+        // chốt tầng thật từ chính message vừa bị game sửa.
+return { type: 'buff', text: bestText, tier: msgTier };
       }
 
       // ---- 2) ADVANCE (tầng mới xuất hiện qua card buff, chưa được click ở bước 1) ----
@@ -2471,7 +2480,7 @@ class NpcBot {
         for (const msg of recent40) {
           const rawText = msg.textContent || '';
           if (msg.getAttribute('data-luanhoi-owned') !== 'true') continue;
-          const tm = rawText.match(/(?:tầng|tầng luân hồi|tier)\s*([0-9]{1,3})/i);
+          const tm = rawText.match(/(?:t[a\u1ea7]ng(?:\\s+lu[a\u00e2]n\\s+h[o\u1ed3]i)?|tier)\\s*[:.\u2013-]?\\s*([0-9]{1,3})/i);
           const newTier = tm ? parseInt(tm[1]) : null;
           const btns = msg.querySelectorAll('button, [role="button"]');
           let hasBuff = false;
@@ -2510,7 +2519,7 @@ class NpcBot {
           if (!isLuanhoi) continue;
 
           if (hasBuff && !hasWin && !hasLoss && knownTier > 0) {
-            const tm2 = rawText.match(/(?:tầng|tầng luân hồi|tier)\s*([0-9]{1,3})/i);
+            const tm2 = rawText.match(/(?:t[a\u1ea7]ng(?:\\s+lu[a\u00e2]n\\s+h[o\u1ed3]i)?|tier)\\s*[:.\u2013-]?\\s*([0-9]{1,3})/i);
             if (tm2 && parseInt(tm2[1]) > knownTier) {
               return { type: 'advance', rewardText: rawText };
             }
@@ -2652,6 +2661,7 @@ class NpcBot {
     // Trong khi chờ trận xong, cứ vài vòng gọi click skill (nếu game cần click). Không force-advance
     // vội: chỉ thoát khi checkLuanhoiBattleEnd xác nhận trận đã kết thúc (buff tầng mới / win / loss).
     let noSkillSince = null;
+    let noSkillLoggedAt = 0;
 
     while (this.isRunning && this.runId === runId) {
       if (Date.now() - battleStartTime > maxBattleDurationMs) {
@@ -2662,7 +2672,18 @@ class NpcBot {
       const tick = await this.luanhoiBattleTick();
 
       if (tick && tick.type === 'buff') {
-        this.log(`⚡ Đã chọn buff giữa trận/sang tầng: "${tick.text}"`);
+        // msgTier là tầng SẮP VÀO (card buff ghi "Tầng N" = tầng N sắp đánh), nên
+        // msgTier > 0 → chốt thẳng, KHÔNG cần đoán "+1" và không cần chờ game sửa
+        // message (game giữ nguyên "Tầng N" suốt trận, chỉ đổi khi thắng xong).
+        if (tick.tier > 0) {
+          await this.exec(`window.luanhoiBuffTierClicked = ${tick.tier}; true;`);
+          this.log(`⚡ Đã chọn buff giữa trận/sang tầng: "${tick.text}" (vào tầng ${tick.tier}).`);
+        } else {
+          // Không đọc được tầng từ card → KHÔNG đoán. Giữ nguyên giá trị, nhánh
+          // readLuanhoiTier() ngay sau đó sẽ chốt tầng thật từ message battle.
+          this.logDebug(`buff không có "Tầng N" trong message — bỏ qua, không đoán (+1).`);
+          this.log(`⚡ Đã chọn buff giữa trận/sang tầng: "${tick.text}" (tầng không đọc được).`);
+        }
         return { ended: true, result: 'advance' };
       }
 
@@ -2686,8 +2707,14 @@ class NpcBot {
         noSkillSince = null;
       } else if (noSkillSince === null) {
         noSkillSince = Date.now();
-      } else if (Date.now() - noSkillSince > 30000) {
-        noSkillSince = Date.now();
+      } else {
+        // Không tìm thấy gì để bấm — không log gì cả sẽ trông như bot treo.
+        // Cứ 10s báo 1 lần kèm số lượt chờ, để thấy ngay bot đang kẹt ở đâu.
+        const waited = Date.now() - noSkillSince;
+        if (waited - noSkillLoggedAt >= 10000) {
+          noSkillLoggedAt = waited;
+          this.log(`⏳ Không thấy nút skill/buff nào để bấm — đang chờ game (${Math.round(waited / 1000)}s, tick=${tick ? tick.type : 'null'}).`);
+        }
       }
 
       await this.delay(this.skillClickDelayMs);
@@ -2884,20 +2911,64 @@ class NpcBot {
     return val;
   }
 
+  // Đọc tầng hiện tại. Ưu tiên message BATTLE (đang đánh / vừa kết thúc — có nút skill
+  // hoặc nút "Tiếp Tục Leo Tháp") vì đây mới là nguồn tầng đáng tin.
+  // BỎ QUA cụm "Sau Tầng N" — đó là thẻ đã qua bước tiếp tục leo tháp, đọc vào
+  // sẽ báo tầng kế (51) trong khi người chơi vẫn đang ở tầng boss vừa hạ (50).
   async readLuanhoiTier() {
     await this.markLuanhoiMessages();
     const username = this.username || '';
+    const skillKeys = this.luanhoiSkillNames.map(n => this.normalizeMatchText(n).replace(/[^a-z0-9]/g, ''));
     const val = await this.exec(`(() => {
        const username = ${JSON.stringify(username)};
+       const skillKeys = ${JSON.stringify(skillKeys)};
+       const tierNames = ['pham', 'linh', 'huyen', 'thien'];
+       const contKeys = ['tieptucleothap', 'tieptuc'];
        const msgs = document.querySelectorAll('[role="article"]');
        const recent = Array.from(msgs).slice(-40).reverse();
-       for (const msg of recent) {
-         if (msg.getAttribute('data-luanhoi-owned') !== 'true') continue;
-         const text = msg.textContent;
-         const m = text.match(/(?:tầng|tầng luân hồi|tier)\s*([0-9]{1,3})/i);
-         if (m && m[1]) {
+
+       const strip = s => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+         .replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').replace(/\u01A1/g, 'o').replace(/\u01A0/g, 'o')
+         .replace(/\u01B0/g, 'u').replace(/\u01AF/g, 'u').toLowerCase();
+       const alnum = s => strip(s).replace(/[^a-z0-9]/g, '');
+
+       // "Tầng N" đầu tiên KHÔNG nằm sau chữ "Sau" trong message.
+       const tierIn = text => {
+         const RE = /(?:t[a\u1ea7]ng(?:\\s+lu[a\u00e2]n\\s+h[o\u1ed3]i)?|tier)\\s*[:.\u2013-]?\\s*([0-9]{1,3})/gi;
+         let m;
+         while ((m = RE.exec(text))) {
+           const before = text.slice(Math.max(0, m.index - 6), m.index);
+           if (/\\bsau\\s*$/i.test(before)) continue;
            return parseInt(m[1]);
          }
+         return 0;
+       };
+
+       const isBattleMsg = msg => {
+         for (const b of msg.querySelectorAll('button, [role="button"]')) {
+           const raw = (b.textContent || '').trim();
+           if (!raw || /[@|!]/.test(raw)) continue;
+           const clean = alnum(raw.replace(/:[a-z_0-9]+:/g, ''));
+           if (!clean) continue;
+           if (tierNames.includes(clean)) continue;
+           if (skillKeys.some(s => s && clean.includes(s))) return true;
+           if (contKeys.some(k => clean.includes(k))) return true;
+         }
+         return false;
+       };
+
+       // Pass 1: message battle mới nhất có nhắc "Tầng N".
+       for (const msg of recent) {
+         if (msg.getAttribute('data-luanhoi-owned') !== 'true') continue;
+         if (!isBattleMsg(msg)) continue;
+         const t = tierIn(msg.textContent || '');
+         if (t > 0) return t;
+       }
+       // Pass 2: không nhận diện được message battle → quét tổng quát như cũ (vẫn bỏ "Sau Tầng").
+       for (const msg of recent) {
+         if (msg.getAttribute('data-luanhoi-owned') !== 'true') continue;
+         const t = tierIn(msg.textContent || '');
+         if (t > 0) return t;
        }
        // Fallback: dùng tầng đã click buff gần nhất
        const w = window.luanhoiBuffTierClicked || 0;
@@ -3057,7 +3128,7 @@ class NpcBot {
 
         // Parse tầng từ message (match + /i)
         let msgTier = 0;
-        const tm = rawText.match(/(?:tầng|tầng luân hồi|tier)\s*([0-9]{1,3})/i);
+        const tm = rawText.match(/(?:t[a\u1ea7]ng(?:\\s+lu[a\u00e2]n\\s+h[o\u1ed3]i)?|tier)\\s*[:.\u2013-]?\\s*([0-9]{1,3})/i);
         if (tm && tm[1]) msgTier = parseInt(tm[1]);
 
         // Nếu đã click buff cho tầng này rồi → bỏ qua
@@ -3066,14 +3137,24 @@ class NpcBot {
 
         bestBtn.disabled = false;
         bestBtn.click();
-        window.luanhoiBuffTierClicked = Math.max(window.luanhoiBuffTierClicked || 0, msgTier > 0 ? msgTier : (window.luanhoiBuffTierClicked || 0) + 1);
-        return { text: bestText, tier: msgTier };
+        // msgTier là tầng SẮP VÀO → chốt thẳng. Không đoán "+1" ở đây.
+        // sau khi đọc được "Tầng N" thật trong chính message này.
+return { text: bestText, tier: msgTier };
       }
       return null;
     })()`);
 
     if (clicked) {
-      this.log(`🎯 Chọn buff: "${clicked.text}" (ưu tiên, tầng ${clicked.tier || '?'}).`);
+      // msgTier là tầng SẮP VÀO → msgTier > 0 là giá trị CHÍNH XÁC, chốt thẳng.
+      // msgTier = 0 (card không ghi "Tầng N") → KHÔNG đoán "+1", để readLuanhoiTier()
+      // chốt tầng thật từ message battle ở bước kế.
+      if (clicked.tier > 0) {
+        await this.exec(`window.luanhoiBuffTierClicked = ${clicked.tier}; true;`);
+        this.log(`🎯 Chọn buff: "${clicked.text}" (ưu tiên, vào tầng ${clicked.tier}).`);
+      } else {
+        this.logDebug(`buff không có "Tầng N" trong message — bỏ qua, không đoán (+1).`);
+        this.log(`🎯 Chọn buff: "${clicked.text}" (ưu tiên, card không ghi số tầng).`);
+      }
       return clicked.text;
     }
     return false;
