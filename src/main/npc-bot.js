@@ -91,6 +91,8 @@ class NpcBot {
     };
     this.luanhoiAutoRestart = true;
     this.luanhoiRestartDelaySec = 5;
+    // Log debug: bật qua env XOLA_DEBUG=1 hoặc bot.debug = true
+    this.debug = process.env.XOLA_DEBUG === '1';
   }
 
   ts() {
@@ -101,6 +103,14 @@ class NpcBot {
 
   log(...args) {
     const msg = `[${this.ts()}] [Bot ${this.idx}] ${args.join(' ')}`;
+    console.log(msg);
+  }
+
+  // Chỉ in khi this.debug = true — dùng cho log chẩn đoán/verbose lặp nhiều lần
+  // mà không làm nhiễu log chính.
+  logDebug(...args) {
+    if (!this.debug) return;
+    const msg = `[${this.ts()}] [Bot ${this.idx}] [DEBUG] ${args.join(' ')}`;
     console.log(msg);
   }
 
@@ -1171,7 +1181,7 @@ class NpcBot {
       return null;
     })()`);
   }
-
+  //#region Auto Farm NPC
   async checkLockedMessage() {
     const username = this.username || '';
     return await this.exec(`(() => {
@@ -1335,24 +1345,28 @@ class NpcBot {
   }
 
   async checkNoResponse() {
-    const username = this.username || '';
-    const usernameNorm = String(username || '').normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').toLowerCase();
-    const usernameFirst = username.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-      .replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').split(' ')[0].toLowerCase();
+    const skillNames = (this.luanhoiSkillNames || []).filter(Boolean);
     return await this.exec(`(() => {
-      const usernameNorm = ${JSON.stringify(usernameNorm)};
-      const usernameFirst = ${JSON.stringify(usernameFirst)};
+      const skills = ${JSON.stringify(skillNames)};
+      const nd = value => String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/\u0111/g, 'd').replace(/\u0110/g, 'd')
+        .replace(/\u01a1/g, 'o').replace(/\u01a0/g, 'o')
+        .replace(/\u01b0/g, 'u').replace(/\u01af/g, 'u')
+        .toLowerCase().replace(/\s+/g, ' ').trim();
+      const normalizedSkills = skills.map(nd).filter(Boolean);
       const msgs = document.querySelectorAll('[role="article"]');
       const recent = Array.from(msgs).slice(-40).reverse();
       for (const msg of recent) {
         if (msg.getAttribute('data-bot-ephemeral') === 'true') continue;
-        const rawText = msg.textContent || '';
-        const norm = rawText.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').toLowerCase();
-        // Chỉ xét tin nhắn battle của CHÍNH MÌNH (chứa username), dòng "không phản hồi kịp thời" nằm dưới nút skill.
-        if (usernameNorm && !norm.includes(usernameNorm) && !(usernameFirst && norm.includes(usernameFirst))) continue;
-        if (norm.includes('khong phan hoi kip thoi')) return true;
+        const text = nd(msg.textContent);
+        // Dòng "Khánh Linh đã không phản hồi kịp thời" nằm ngay dưới nút skill trong tin nhắn battle.
+        if (!text.includes('khong phan hoi kip thoi')) continue;
+        // Chỉ tính là battle khi tin nhắn có nút skill.
+        const buttonText = Array.from(msg.querySelectorAll('button[role="button"], [role="button"]'))
+          .map(button => nd(button.textContent)).join(' | ');
+        if (normalizedSkills.some(name => buttonText.includes(name))) return true;
       }
       return false;
     })()`);
@@ -1594,10 +1608,10 @@ class NpcBot {
       }
 
       if (noSkillCount >= 15) {
-        this.log('⚠️ Không tìm thấy skill sau 15 lần — chờ 5p rồi gửi lại !npc để bắt đầu lại battle...');
+        this.log('⚠️ Không tìm thấy skill sau 15 lần — chờ 2p rồi gửi lại !npc để bắt đầu lại battle...');
         noSkillCount = 0;
         this._bicanhSkillIdx = 0;
-        await this.delay(300000);
+        await this.delay(120000);
         await this.sendChat(this.tuLuyenEndCmd);
         await this.sendNpcCommand();
         await this.delay(4000);
@@ -1608,6 +1622,7 @@ class NpcBot {
         noResponseCount = 0;
         noSkillCount = 0;
         this._bicanhSkillIdx = 0;
+        await this.delay(120000);
         await this.sendChat(this.tuLuyenEndCmd);
         await this.sendNpcCommand();
         await this.delay(4000);
@@ -1683,7 +1698,8 @@ class NpcBot {
       return null;
     })()`);
   }
-
+  //#endregion
+  //#region Địa Ngục
   loadDiangucData() {
     this.diangucData = {};
     if (!fs.existsSync(DIANGUC_DATA_FILE)) return;
@@ -2150,9 +2166,9 @@ class NpcBot {
     this.saveDiangucData();
     return this.isRunning ? 'ERROR' : 'STOP';
   }
-
+  //#endregion
   // ================= LUÂN HỒI MODE =================
-
+  //#region Luân Hồi
   async luanhoiLoop(runId) {
     if (!this.isRunning || this.runId !== runId) return;
 
@@ -2196,26 +2212,47 @@ class NpcBot {
     }
   }
 
-  async luanhoiFightLoop(runId) {
+  async luanhoiFightLoop(runId, opts = {}) {
     if (!this.isRunning || this.runId !== runId) return;
 
     this.log('\n=== ⚔️ Chiến đấu luân hồi ===');
+
+    // opts.autoAdvanced = true khi vừa chọn buff GIỮA TRẬN (tick type='buff') ở tầng
+    // THƯỜNG: buff tầng mới đã click xong, không có cửa boss. Lúc đó pre-battle loop
+    // (quét cửa + quét buff + delay) làm mất ~1-2s vô ích — luanhoiBattleTick() tự xử lý
+    // mọi nhánh (buff / advance / end / cooldown / skill) nên vào thẳng luanhoiBattle.
+    let autoAdvanced = opts.autoAdvanced === true;
 
     // PRE-BATTLE: game tự di chuyển tới tầng kế và hiện màn chọn cửa (boss 10/20/30) + buff.
     // Đợi tới khi thấy buff (hoặc cửa) xuất hiện rồi chọn. Chỉ click khi nút hiện.
     const preTimeout = Date.now() + 15000; // tối đa 15s chờ chọn buff
     let entered = false;
+    let enteredFast = false;
     while (this.isRunning && this.runId === runId && Date.now() < preTimeout) {
-      const leftoverCont = await this.clickContinueOrStop('continue');
+      // Quét nút "Tiếp tục leo tháp" còn sót từ lần trước (bot bị kill/restart giữa chừng).
+      // Ở tầng thường game tự sang tầng → không có nút là bình thường → chỉ logDebug.
+      const leftoverCont = await this.clickContinueOrStop('continue', true);
       if (leftoverCont) {
         this.log(`↪️ Phát hiện & bấm nút "Tiếp tục leo tháp" còn sót lại: ${leftoverCont}`);
         await this.luanhoiClickWait(1200);
         continue;
       }
+
+      // Fast-path: buff tầng mới đã chọn xong, chỉ cần chờ game vào trận.
+      // Nếu nhánh này hỏng (buff chưa kịp hiện) thì rơi về luồng đầy đủ bên dưới.
+      if (autoAdvanced) {
+        autoAdvanced = false;
+        await this.delay(this.rand(600, 1000));
+        entered = true;
+        enteredFast = true;
+        break;
+      }
+
       if (await this.clickDoor('up')) {
         this.log('🚪 Đã chọn cửa hướng lên (boss mốc).');
         await this.luanhoiClickWait(1200);
       }
+      await this.delay(1200);
       const b = await this.clickBuffByPriority();
       if (b) {
         this.log(`⚡ Đã chọn buff: "${b}"`);
@@ -2357,10 +2394,15 @@ class NpcBot {
       this.log(`🔄 Tầng thường ${currentTier} — game tự sang tầng kế, chờ chọn buff tiếp...`);
     }
 
-    await this.delay(this.rand(2500, 3500));
+    // Chỉ chờ dài khi vừa hạ boss / đạt target (game cần thời gian cập nhật message kết quả).
+    // Sang tầng thường (advance) thì game tự chuyển tầng kế + tự đánh → chờ ngắn là đủ.
+    await this.delay(isAdvance ? this.rand(500, 1000) : this.rand(2500, 3500));
 
     if (this.isRunning && this.runId === runId) {
-      this.luanhoiFightLoop(runId);
+      // Tầng thường sau advance: buff đã chọn xong, không có cửa boss → fast-path.
+      this.luanhoiFightLoop(runId, {
+        autoAdvanced: !!isAdvance && currentTier > 0 && currentTier % 10 !== 0,
+      });
     }
   }
 
@@ -2878,7 +2920,9 @@ class NpcBot {
   }
 
   // Click nút "Tiếp tục" hoặc "Dừng nhận thưởng"
-  async clickContinueOrStop(which) {
+  // quiet=true → chỉ log ra logDebug (dùng cho lần quét "nút sót" ở mọi tầng,
+  // nơi không có nút là chuyện bình thường, không phải lỗi).
+  async clickContinueOrStop(which, quiet = false) {
     await this.markLuanhoiMessages();
     const username = this.username || '';
     const contKeywords = ['tiếp tục leo tháp', 'tiep tuc leo thap', 'tiếp tục leo', 'tiep tuc leo', 'tiếp tục', 'tiep tuc', 'leo tháp', 'leo thap', 'tiếp', 'tiep'];
@@ -2934,8 +2978,9 @@ class NpcBot {
      })()`);
 
     if (result && typeof result === 'string' && result.startsWith('NOTFOUND:')) {
-      this.log(`⚠️ [Debug] Không tìm thấy nút "${which}". 5 message gần nhất + các nút của nó:`);
-      this.log('   ' + result.slice('NOTFOUND:'.length));
+      const write = quiet ? this.logDebug.bind(this) : this.log.bind(this);
+      write(`⚠️ [Debug] Không tìm thấy nút "${which}". 5 message gần nhất + các nút của nó:`);
+      write('   ' + result.slice('NOTFOUND:'.length));
       return null;
     }
     return result;
@@ -3033,8 +3078,9 @@ class NpcBot {
     }
     return false;
   }
-
+  //#endregion
   // === BICANH MODE ===
+  //#region Bí cảnh
   // Gửi !bicanh, click nút "Leo Tầng N", rồi spam skill theo danh sách cho đến khi stop
   async bicanhLoop(runId) {
     if (!this.isRunning || this.runId !== runId) return;
@@ -3091,7 +3137,8 @@ class NpcBot {
         if (attempt > 1) this.log(`👉 Tìm thấy nút sau ${attempt} lần thử.`);
         return clicked;
       }
-      await this.delay(this.rand(1500, 2500));
+    // Fast-path (đã chọn buff giữa trận) không cần chờ game vẽ lại UI → delay ngắn.
+    await this.delay(enteredFast ? this.rand(400, 800) : this.rand(1500, 2500));
       attempt++;
     }
     return null;

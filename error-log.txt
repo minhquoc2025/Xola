@@ -1,0 +1,163 @@
+[Bicanh] ▶ Started
+[13:55:11] [Bot 0] Bot started
+[13:55:11] [Bot 0] === BICANH MODE: Spam技能 theo thứ tự ===
+[13:55:11] [Bot 0] 
+=== ⚔️ BICANH MODE ===
+[13:55:11] [Bot 0] Gửi lệnh !bicanh...
+[13:55:11] [Bot 0] Typing: !bicanh
+[13:55:13] [Bot 0] Sent: !bicanh
+[BOT] ⏹ Stopped
+[13:55:14] [Bot 0] Bot stopped
+[13:55:14] [Bot 0] 
+=== 📊 THỐNG KÊ ===
+[13:55:14] [Bot 0] ⚔️ Tổng trận: 0
+[13:55:14] [Bot 0] ✅ Thắng: 0
+[13:55:14] [Bot 0] ❌ Thua: 0
+[13:55:14] [Bot 0] 💰 Coins: +0🪙
+[13:55:14] [Bot 0] ✨ EXP: +0XP
+[13:55:14] [Bot 0] ====================
+
+[13:55:16] [Bot 0] ⚠️ Không thấy nút Leo Tầng/Tiếp tục sau khi chờ. Thử lại...
+[13:55:16] [Bot 0] 
+--- Waiting 8s before next battle ---
+[Luân Hồi] ▶ Started
+[13:55:29] [Bot 0] Bot started
+[13:55:29] [Bot 0] === LUÂN HỒI MODE: Target tầng 90 ===
+[13:55:29] [Bot 0] 
+=== 🌀 LUÂN HỒI: !luanhoi ===
+[13:55:29] [Bot 0] Typing: !luanhoi
+[13:55:31] [Bot 0] Sent: !luanhoi
+[13:55:34] [Bot 0] 🔗 Đã neo vào message game trực tiếp mới nhất có reply !luanhoi của bạn.
+[13:55:34] [Bot 0] ---- [DEBUG UI] 6 message gần nhất ----
+[13:55:34] [Bot 0]   [msg0] txt=Quất Bất Lực — 13:55lúc 13:55 Thứ Sáu, 2 tháng 10, 2026!bicanh:rofl:Nhấn để tương tác:joy:Nhấn để tương tác:heart:Nhấn để tương tácThêm Biểu CảmChỉnh sửaChuyển tiếpNhững Mục Khác || BUTTONS:btn0={Quất Bất Lực|cls=username_c19a55 usernameColorOnName_c19a|dis=0} ; btn1={|cls=hoverBarButton_f84418 button_f7ecac|dis=0} ; btn2={|cls=hoverBarButton_f84418 button_f7ecac|dis=0} ; btn3={|cls=hoverBarButton_f84418 button_f7ecac|dis=0} ; btn4={|cls=hoverBarButton_f84418 button_f7ecac|dis=0} ; btn5={|cls=hoverBarButton_f84418 button_f7ecac|dis=0} ; btn6={|cls=hoverBarButton_f84418 button_f7ecac|dis=0} ; btn7={|cls=hoverBarButton_f84418 button_f7ecac|dis=0}
+[13:55:34] [Bot 0]   [msg1] txt=@Quất Bất Lực!bicanhXỏ lá ba queAPP — 13:55lúc 13:55 Thứ Sáu, 2 tháng 10, 2026 Bạn đang tham gia Tu Luyện! Hãy hoàn thành trước khi tham gia hoạt động khác. || BUTTONS:btn0={|cls=repliedMessageClickableSpine_c19a55|dis=0} ; btn1={@Quất Bất Lực|cls=username_c19a55 usernameColorOnName_c19a|dis=0} ; btn2={!bicanh|cls=repliedTextPreview_c19a55 clickable_c19a|dis=0} ; btn3={Xỏ lá ba que|cls=username_c19a55 usernameColorOnName_c19a|dis=0} ; btn4={|cls=emojiContainer__75abc emojiContainerClic|dis=0} ; btn5={|cls=emojiContainer__75abc emojiContainerClic|dis=0}
+[13:55:34] [Bot 0]   [msg2] txt=Quất Bất Lực — 13:55lúc 13:55 Thứ Sáu, 2 tháng 10, 2026!ketthuc || BUTTONS:btn0={Quất Bất Lực|cls=username_c19a55 usernameColorOnName_c19a|dis=0}
+[13:55:34] [Bot 0]   [msg3] txt=@Quất Bất Lực!ketthucXỏ lá ba queAPP — 13:55lúc 13:55 Thứ Sáu, 2 tháng 10, 2026 Tu Tiên — Quất Bất Lực Kết thúc tu luyện sau 1p42s Nhận 45.8K tu vi! (Đan Dược Tẩy Tủy Đan (x2.0 Tốc Độ Tu Vi) ×3.2) Kết Đan bậc 7Tu Vi: 49.6M/57.0M ▰▰▰▰▰▰▰▰▰▱ 87% Chưa tu luyện Tốc độ: 1.6M tu vi/giờ (bậc 7 • Đan Dược ×3.2) Gõ !tulyen để bắt đầu ngồi thiền Bonus+93% tất cả chỉ số Passive +15% drop rate, +10% gem drop  || BUTTONS:btn0={|cls=repliedMessageClickableSpine_c19a55|dis=0} ; btn1={@Quất Bất Lực|cls=username_c19a55 usernameColorOnName_c19a|dis=0} ; btn2={!ketthuc|cls=repliedTextPreview_c19a55 clickable_c19a|dis=0} ; btn3={Xỏ lá ba que|cls=username_c19a55 usernameColorOnName_c19a|dis=0} ; btn4={|cls=emojiContainer__75abc emojiContainerClic|dis=0} ; btn5={|cls=emojiContainer__75abc emojiContainerClic
+[13:55:34] [Bot 0]   [msg4] txt=Quất Bất Lực — 13:55lúc 13:55 Thứ Sáu, 2 tháng 10, 2026!luanhoi || BUTTONS:btn0={Quất Bất Lực|cls=username_c19a55 usernameColorOnName_c19a|dis=0}
+[13:55:34] [Bot 0]   [msg5] txt=@Quất Bất Lực!luanhoiXỏ lá ba queAPP — 13:55lúc 13:55 Thứ Sáu, 2 tháng 10, 2026 Luân Hồi Tháp — Tầng 1Quất Bất Lực — Chọn 1 cổng! 5949405/5949405 (100%) ▰▰▰▰▰▰▰▰▰▰ ATK: 545677-564727 DEF: 176012 Buffs: 0/15🟢 Phàm | 🔵 Linh | 🟣 Huyền | 🟡 Thiên — Càng hiếm buff càng mạnh!🔵 Linh,🟢 Phàm,🟢 Phàm,🟢 Phàm,, || BUTTONS:btn0={|cls=repliedMessageClickableSpine_c19a55|dis=0} ; btn1={@Quất Bất Lực|cls=username_c19a55 usernameColorOnName_c19a|dis=0} ; btn2={!luanhoi|cls=repliedTextPreview_c19a55 clickable_c19a|dis=0} ; btn3={Xỏ lá ba que|cls=username_c19a55 usernameColorOnName_c19a|dis=0} ; btn4={|cls=emojiContainer__75abc emojiContainerClic|dis=0} ; btn5={|cls=emojiContainer__75abc emojiContainerClic|dis=0} ; btn6={|cls=emojiContainer__75abc emojiContainerClic|dis=0} ; btn7={|cls=emojiContain
+[13:55:34] [Bot 0] ---------------------------------------
+[13:55:34] [Bot 0] 
+--- Waiting 8s before next battle ---
+[13:55:34] [Bot 0] Cooldown: 8s remaining...
+[13:55:37] [Bot 0] Cooldown: 5s remaining...
+[13:55:38] [Bot 0] Cooldown: 4s remaining...
+[13:55:39] [Bot 0] Cooldown: 3s remaining...
+[13:55:40] [Bot 0] Cooldown: 2s remaining...
+[13:55:41] [Bot 0] Cooldown: 1s remaining...
+[13:55:42] [Bot 0] Cooldown finished! Starting next battle...
+
+[13:55:42] [Bot 0] 
+=== ⚔️ Chiến đấu luân hồi ===
+[13:55:42] [Bot 0] ⚠️ [Debug] Không tìm thấy nút "continue". 5 message gần nhất + các nút của nó:
+[13:55:42] [Bot 0]    [@Quất Bất Lực!luanhoiXỏ lá ba queAPP — 13:55lúc 13] btns=(@Quất Bất Lực | !luanhoi | Xỏ lá ba que | 🔵 Linh | 🟢 Phàm | 🟢 Phàm | 🟢 Phàm) >>> [Quất Bất Lực — 13:55lúc 13:55 Thứ Sáu, 2 tháng 10,] btns=(Quất Bất Lực) >>> [@Quất Bất Lực!ketthucXỏ lá ba queAPP — 13:55lúc 13] btns=(@Quất Bất Lực | !ketthuc | Xỏ lá ba que | Bắt Đầu Tu Luyện | Bảng Cảnh Giới) >>> [Quất Bất Lực — 13:55lúc 13:55 Thứ Sáu, 2 tháng 10,] btns=(Quất Bất Lực) >>> [@Quất Bất Lực!bicanhXỏ lá ba queAPP — 13:55lúc 13:] btns=(@Quất Bất Lực | !bicanh | Xỏ lá ba que)
+[13:55:43] [Bot 0] 🎯 Chọn buff: "🔵 Linh" (ưu tiên, tầng ?).
+[13:55:43] [Bot 0] ⚡ Đã chọn buff: "🔵 Linh"
+[13:55:46] [Bot 0] 🗼 Tầng hiện tại: 1
+[13:55:48] [Bot 0] 🌀 Click skill luân hồi: "Kim Đan Phá Sát"
+[13:55:50] [Bot 0] 🌀 Click skill luân hồi: "Vạn Kiếm Quy Tông"
+[13:55:51] [Bot 0] ⚡ Đã chọn buff giữa trận/sang tầng: "🟢 Phàm"
+[13:55:51] [Bot 0] ⏩ THẮNG TẦNG / SANG TẦNG KẾ!
+[13:55:54] [Bot 0] 🗼 Tầng hiện tại: 2
+[13:55:54] [Bot 0] 🔄 Tầng thường 2 — game tự sang tầng kế, chờ chọn buff tiếp...
+[13:55:58] [Bot 0] 
+=== ⚔️ Chiến đấu luân hồi ===
+[13:55:58] [Bot 0] ⚠️ [Debug] Không tìm thấy nút "continue". 5 message gần nhất + các nút của nó:
+[13:55:58] [Bot 0]    [@Quất Bất Lực!luanhoiXỏ lá ba queAPP — 13:55lúc 13] btns=(@Quất Bất Lực | !luanhoi | Xỏ lá ba que | Chiến đấu | Kiếm Cơ Bản | 🗡️ Phá Giáp | 🌊 Băng Phong | 🔥 Hỏa Giáp | Vạn Kiếm Quy Tông | Kim Đan Phá Sát | Hỗn Nguyên Hộ Thể | Kiếm Khí Xung Thiên) >>> [Quất Bất Lực — 13:55lúc 13:55 Thứ Sáu, 2 tháng 10,] btns=(Quất Bất Lực) >>> [@Quất Bất Lực!ketthucXỏ lá ba queAPP — 13:55lúc 13] btns=(@Quất Bất Lực | !ketthuc | Xỏ lá ba que | Bắt Đầu Tu Luyện | Bảng Cảnh Giới) >>> [Quất Bất Lực — 13:55lúc 13:55 Thứ Sáu, 2 tháng 10,] btns=(Quất Bất Lực) >>> [@Quất Bất Lực!bicanhXỏ lá ba queAPP — 13:55lúc 13:] btns=(@Quất Bất Lực | !bicanh | Xỏ lá ba que)
+[13:55:59] [Bot 0] 🗼 Tầng hiện tại: 2
+[13:56:01] [Bot 0] 🌀 Click skill luân hồi: "Kiếm Khí Xung Thiên"
+[13:56:02] [Bot 0] ⚡ Đã chọn buff giữa trận/sang tầng: "🟢 Phàm"
+[13:56:02] [Bot 0] ⏩ THẮNG TẦNG / SANG TẦNG KẾ!
+[13:56:05] [Bot 0] 🗼 Tầng hiện tại: 3
+[13:56:05] [Bot 0] 🔄 Tầng thường 3 — game tự sang tầng kế, chờ chọn buff tiếp...
+[13:56:07] [Bot 0] 
+=== ⚔️ Chiến đấu luân hồi ===
+[13:56:07] [Bot 0] ⚠️ [Debug] Không tìm thấy nút "continue". 5 message gần nhất + các nút của nó:
+[13:56:07] [Bot 0]    [@Quất Bất Lực!luanhoiXỏ lá ba queAPP — 13:55lúc 13] btns=(@Quất Bất Lực | !luanhoi | Xỏ lá ba que | Chiến đấu | Kiếm Cơ Bản | 🗡️ Phá Giáp | 🌊 Băng Phong | 🔥 Hỏa Giáp | Vạn Kiếm Quy Tông | Kim Đan Phá Sát | Hỗn Nguyên Hộ Thể | Kiếm Khí Xung Thiên) >>> [Quất Bất Lực — 13:55lúc 13:55 Thứ Sáu, 2 tháng 10,] btns=(Quất Bất Lực) >>> [@Quất Bất Lực!ketthucXỏ lá ba queAPP — 13:55lúc 13] btns=(@Quất Bất Lực | !ketthuc | Xỏ lá ba que | Bắt Đầu Tu Luyện | Bảng Cảnh Giới) >>> [Quất Bất Lực — 13:55lúc 13:55 Thứ Sáu, 2 tháng 10,] btns=(Quất Bất Lực) >>> [@Quất Bất Lực!bicanhXỏ lá ba queAPP — 13:55lúc 13:] btns=(@Quất Bất Lực | !bicanh | Xỏ lá ba que)
+[13:56:09] [Bot 0] 🗼 Tầng hiện tại: 3
+[13:56:11] [Bot 0] 🌀 Click skill luân hồi: "Kim Đan Phá Sát"
+[13:56:12] [Bot 0] ⚡ Đã chọn buff giữa trận/sang tầng: "🔵 Linh"
+[13:56:12] [Bot 0] ⏩ THẮNG TẦNG / SANG TẦNG KẾ!
+[13:56:15] [Bot 0] 🗼 Tầng hiện tại: 4
+[13:56:15] [Bot 0] 🔄 Tầng thường 4 — game tự sang tầng kế, chờ chọn buff tiếp...
+[13:56:18] [Bot 0] 
+=== ⚔️ Chiến đấu luân hồi ===
+[13:56:18] [Bot 0] ⚠️ [Debug] Không tìm thấy nút "continue". 5 message gần nhất + các nút của nó:
+[13:56:18] [Bot 0]    [@Quất Bất Lực!luanhoiXỏ lá ba queAPP — 13:55lúc 13] btns=(@Quất Bất Lực | !luanhoi | Xỏ lá ba que | Chiến đấu | Kiếm Cơ Bản | 🗡️ Phá Giáp | 🌊 Băng Phong | 🔥 Hỏa Giáp | Vạn Kiếm Quy Tông | Kim Đan Phá Sát | Hỗn Nguyên Hộ Thể | Kiếm Khí Xung Thiên) >>> [Quất Bất Lực — 13:55lúc 13:55 Thứ Sáu, 2 tháng 10,] btns=(Quất Bất Lực) >>> [@Quất Bất Lực!ketthucXỏ lá ba queAPP — 13:55lúc 13] btns=(@Quất Bất Lực | !ketthuc | Xỏ lá ba que | Bắt Đầu Tu Luyện | Bảng Cảnh Giới) >>> [Quất Bất Lực — 13:55lúc 13:55 Thứ Sáu, 2 tháng 10,] btns=(Quất Bất Lực) >>> [@Quất Bất Lực!bicanhXỏ lá ba queAPP — 13:55lúc 13:] btns=(@Quất Bất Lực | !bicanh | Xỏ lá ba que)
+[13:56:19] [Bot 0] 🗼 Tầng hiện tại: 4
+[13:56:21] [Bot 0] 🌀 Click skill luân hồi: "Vạn Kiếm Quy Tông"
+[13:56:22] [Bot 0] ⚡ Đã chọn buff giữa trận/sang tầng: "🟢 Phàm"
+[13:56:22] [Bot 0] ⏩ THẮNG TẦNG / SANG TẦNG KẾ!
+[13:56:25] [Bot 0] 🗼 Tầng hiện tại: 5
+[13:56:25] [Bot 0] 🔄 Tầng thường 5 — game tự sang tầng kế, chờ chọn buff tiếp...
+[13:56:28] [Bot 0] 
+=== ⚔️ Chiến đấu luân hồi ===
+[13:56:28] [Bot 0] ⚠️ [Debug] Không tìm thấy nút "continue". 5 message gần nhất + các nút của nó:
+[13:56:28] [Bot 0]    [@Quất Bất Lực!luanhoiXỏ lá ba queAPP — 13:55lúc 13] btns=(@Quất Bất Lực | !luanhoi | Xỏ lá ba que | Chiến đấu | Kiếm Cơ Bản | 🗡️ Phá Giáp | 🌊 Băng Phong | 🔥 Hỏa Giáp | Vạn Kiếm Quy Tông | Kim Đan Phá Sát | Hỗn Nguyên Hộ Thể | Kiếm Khí Xung Thiên) >>> [Quất Bất Lực — 13:55lúc 13:55 Thứ Sáu, 2 tháng 10,] btns=(Quất Bất Lực) >>> [@Quất Bất Lực!ketthucXỏ lá ba queAPP — 13:55lúc 13] btns=(@Quất Bất Lực | !ketthuc | Xỏ lá ba que | Bắt Đầu Tu Luyện | Bảng Cảnh Giới) >>> [Quất Bất Lực — 13:55lúc 13:55 Thứ Sáu, 2 tháng 10,] btns=(Quất Bất Lực) >>> [@Quất Bất Lực!bicanhXỏ lá ba queAPP — 13:55lúc 13:] btns=(@Quất Bất Lực | !bicanh | Xỏ lá ba que)
+[13:56:29] [Bot 0] 🗼 Tầng hiện tại: 5
+[13:56:32] [Bot 0] 🌀 Click skill luân hồi: "Kiếm Khí Xung Thiên"
+[13:56:33] [Bot 0] ⚡ Đã chọn buff giữa trận/sang tầng: "🔵 Linh"
+[13:56:33] [Bot 0] ⏩ THẮNG TẦNG / SANG TẦNG KẾ!
+[13:56:36] [Bot 0] 🗼 Tầng hiện tại: 6
+[13:56:36] [Bot 0] 🔄 Tầng thường 6 — game tự sang tầng kế, chờ chọn buff tiếp...
+[13:56:40] [Bot 0] 
+=== ⚔️ Chiến đấu luân hồi ===
+[13:56:40] [Bot 0] ⚠️ [Debug] Không tìm thấy nút "continue". 5 message gần nhất + các nút của nó:
+[13:56:40] [Bot 0]    [@Quất Bất Lực!luanhoiXỏ lá ba queAPP — 13:55lúc 13] btns=(@Quất Bất Lực | !luanhoi | Xỏ lá ba que | Chiến đấu | Kiếm Cơ Bản | 🗡️ Phá Giáp | 🌊 Băng Phong | 🔥 Hỏa Giáp | Vạn Kiếm Quy Tông | Kim Đan Phá Sát | Hỗn Nguyên Hộ Thể | Kiếm Khí Xung Thiên) >>> [Quất Bất Lực — 13:55lúc 13:55 Thứ Sáu, 2 tháng 10,] btns=(Quất Bất Lực) >>> [@Quất Bất Lực!ketthucXỏ lá ba queAPP — 13:55lúc 13] btns=(@Quất Bất Lực | !ketthuc | Xỏ lá ba que | Bắt Đầu Tu Luyện | Bảng Cảnh Giới) >>> [Quất Bất Lực — 13:55lúc 13:55 Thứ Sáu, 2 tháng 10,] btns=(Quất Bất Lực) >>> [@Quất Bất Lực!bicanhXỏ lá ba queAPP — 13:55lúc 13:] btns=(@Quất Bất Lực | !bicanh | Xỏ lá ba que)
+[13:56:41] [Bot 0] 🗼 Tầng hiện tại: 6
+[13:56:43] [Bot 0] 🌀 Click skill luân hồi: "Kim Đan Phá Sát"
+[13:56:44] [Bot 0] ⚡ Đã chọn buff giữa trận/sang tầng: "🔵 Linh"
+[13:56:44] [Bot 0] ⏩ THẮNG TẦNG / SANG TẦNG KẾ!
+[13:56:48] [Bot 0] 🗼 Tầng hiện tại: 7
+[13:56:48] [Bot 0] 🔄 Tầng thường 7 — game tự sang tầng kế, chờ chọn buff tiếp...
+[13:56:51] [Bot 0] 
+=== ⚔️ Chiến đấu luân hồi ===
+[13:56:51] [Bot 0] ⚠️ [Debug] Không tìm thấy nút "continue". 5 message gần nhất + các nút của nó:
+[13:56:51] [Bot 0]    [@Quất Bất Lực!luanhoiXỏ lá ba queAPP — 13:55lúc 13] btns=(@Quất Bất Lực | !luanhoi | Xỏ lá ba que | Chiến đấu | Kiếm Cơ Bản | 🗡️ Phá Giáp | 🌊 Băng Phong | 🔥 Hỏa Giáp | Vạn Kiếm Quy Tông | Kim Đan Phá Sát | Hỗn Nguyên Hộ Thể | Kiếm Khí Xung Thiên) >>> [Quất Bất Lực — 13:55lúc 13:55 Thứ Sáu, 2 tháng 10,] btns=(Quất Bất Lực) >>> [@Quất Bất Lực!ketthucXỏ lá ba queAPP — 13:55lúc 13] btns=(@Quất Bất Lực | !ketthuc | Xỏ lá ba que | Bắt Đầu Tu Luyện | Bảng Cảnh Giới) >>> [Quất Bất Lực — 13:55lúc 13:55 Thứ Sáu, 2 tháng 10,] btns=(Quất Bất Lực) >>> [@Quất Bất Lực!bicanhXỏ lá ba queAPP — 13:55lúc 13:] btns=(@Quất Bất Lực | !bicanh | Xỏ lá ba que)
+[13:56:52] [Bot 0] 🗼 Tầng hiện tại: 7
+[13:56:54] [Bot 0] 🌀 Click skill luân hồi: "Vạn Kiếm Quy Tông"
+[13:56:56] [Bot 0] ⚡ Đã chọn buff giữa trận/sang tầng: "🔵 Linh"
+[13:56:56] [Bot 0] ⏩ THẮNG TẦNG / SANG TẦNG KẾ!
+[13:56:59] [Bot 0] 🗼 Tầng hiện tại: 8
+[13:56:59] [Bot 0] 🔄 Tầng thường 8 — game tự sang tầng kế, chờ chọn buff tiếp...
+[13:57:02] [Bot 0] 
+=== ⚔️ Chiến đấu luân hồi ===
+[13:57:02] [Bot 0] ⚠️ [Debug] Không tìm thấy nút "continue". 5 message gần nhất + các nút của nó:
+[13:57:02] [Bot 0]    [@Quất Bất Lực!luanhoiXỏ lá ba queAPP — 13:55lúc 13] btns=(@Quất Bất Lực | !luanhoi | Xỏ lá ba que | Chiến đấu | Kiếm Cơ Bản | 🗡️ Phá Giáp | 🌊 Băng Phong | 🔥 Hỏa Giáp | Vạn Kiếm Quy Tông | Kim Đan Phá Sát | Hỗn Nguyên Hộ Thể | Kiếm Khí Xung Thiên) >>> [Quất Bất Lực — 13:55lúc 13:55 Thứ Sáu, 2 tháng 10,] btns=(Quất Bất Lực) >>> [@Quất Bất Lực!ketthucXỏ lá ba queAPP — 13:55lúc 13] btns=(@Quất Bất Lực | !ketthuc | Xỏ lá ba que | Bắt Đầu Tu Luyện | Bảng Cảnh Giới) >>> [Quất Bất Lực — 13:55lúc 13:55 Thứ Sáu, 2 tháng 10,] btns=(Quất Bất Lực) >>> [@Quất Bất Lực!bicanhXỏ lá ba queAPP — 13:55lúc 13:] btns=(@Quất Bất Lực | !bicanh | Xỏ lá ba que)
+[13:57:03] [Bot 0] 🗼 Tầng hiện tại: 8
+[13:57:05] [Bot 0] 🌀 Click skill luân hồi: "Kiếm Khí Xung Thiên"
+[13:57:06] [Bot 0] ⚡ Đã chọn buff giữa trận/sang tầng: "🔵 Linh"
+[13:57:06] [Bot 0] ⏩ THẮNG TẦNG / SANG TẦNG KẾ!
+[13:57:10] [Bot 0] 🗼 Tầng hiện tại: 9
+[13:57:10] [Bot 0] 🔄 Tầng thường 9 — game tự sang tầng kế, chờ chọn buff tiếp...
+[13:57:12] [Bot 0] 
+=== ⚔️ Chiến đấu luân hồi ===
+[13:57:12] [Bot 0] ⚠️ [Debug] Không tìm thấy nút "continue". 5 message gần nhất + các nút của nó:
+[13:57:12] [Bot 0]    [@Quất Bất Lực!luanhoiXỏ lá ba queAPP — 13:55lúc 13] btns=(@Quất Bất Lực | !luanhoi | Xỏ lá ba que | Chiến đấu | Kiếm Cơ Bản | 🗡️ Phá Giáp | 🌊 Băng Phong | 🔥 Hỏa Giáp | Vạn Kiếm Quy Tông | Kim Đan Phá Sát | Hỗn Nguyên Hộ Thể | Kiếm Khí Xung Thiên) >>> [Quất Bất Lực — 13:55lúc 13:55 Thứ Sáu, 2 tháng 10,] btns=(Quất Bất Lực) >>> [@Quất Bất Lực!ketthucXỏ lá ba queAPP — 13:55lúc 13] btns=(@Quất Bất Lực | !ketthuc | Xỏ lá ba que | Bắt Đầu Tu Luyện | Bảng Cảnh Giới) >>> [Quất Bất Lực — 13:55lúc 13:55 Thứ Sáu, 2 tháng 10,] btns=(Quất Bất Lực) >>> [@Quất Bất Lực!bicanhXỏ lá ba queAPP — 13:55lúc 13:] btns=(@Quất Bất Lực | !bicanh | Xỏ lá ba que)
+[13:57:14] [Bot 0] 🗼 Tầng hiện tại: 9
+[13:57:16] [Bot 0] 🌀 Click skill luân hồi: "Kim Đan Phá Sát"
+[13:57:17] [Bot 0] ⚡ Đã chọn buff giữa trận/sang tầng: "🟡 Thiên"
+[13:57:17] [Bot 0] ⏩ THẮNG TẦNG / SANG TẦNG KẾ!
+[13:57:20] [Bot 0] 🗼 Tầng hiện tại: 10
+[13:57:20] [Bot 0] ⚔️ Vừa sang tầng 10 (mốc BOSS) — chưa đánh boss này, tiếp tục chiến đấu...
+[13:57:23] [Bot 0] 
+=== ⚔️ Chiến đấu luân hồi ===
+[13:57:23] [Bot 0] ⚠️ [Debug] Không tìm thấy nút "continue". 5 message gần nhất + các nút của nó:
+[13:57:23] [Bot 0]    [@Quất Bất Lực!luanhoiXỏ lá ba queAPP — 13:55lúc 13] btns=(@Quất Bất Lực | !luanhoi | Xỏ lá ba que | Chiến đấu | Rút Lui (10% thưởng) | Kiếm Cơ Bản | 🗡️ Phá Giáp | 🌊 Băng Phong | 🔥 Hỏa Giáp | Vạn Kiếm Quy Tông | Kim Đan Phá Sát | Hỗn Nguyên Hộ Thể | Kiếm Khí Xung Thiên) >>> [Quất Bất Lực — 13:55lúc 13:55 Thứ Sáu, 2 tháng 10,] btns=(Quất Bất Lực) >>> [@Quất Bất Lực!ketthucXỏ lá ba queAPP — 13:55lúc 13] btns=(@Quất Bất Lực | !ketthuc | Xỏ lá ba que | Bắt Đầu Tu Luyện | Bảng Cảnh Giới) >>> [Quất Bất Lực — 13:55lúc 13:55 Thứ Sáu, 2 tháng 10,] btns=(Quất Bất Lực) >>> [@Quất Bất Lực!bicanhXỏ lá ba queAPP — 13:55lúc 13:] btns=(@Quất Bất Lực | !bicanh | Xỏ lá ba que)
+[13:57:24] [Bot 0] 🗼 Tầng hiện tại: 10
+[13:57:26] [Bot 0] 🌀 Click skill luân hồi: "Vạn Kiếm Quy Tông"
+[13:57:28] [Bot 0] >>> BATTLE END: ✅ THẮNG <<<
+[13:57:28] [Bot 0] ✅ THẮNG BOSS!
+[13:57:31] [Bot 0] 🗼 Tầng hiện tại: 10
+[13:57:31] [Bot 0] 🔄 Thắng BOSS tầng 10 — cần bấm "Tiếp tục leo tháp" để đi tiếp.
+[13:57:31] [Bot 0] ✅ Đã click nút tiếp tục (continue-clicked: Tiếp Tục Leo Tháp).
+[13:57:34] [Bot 0] 
+=== ⚔️ Chiến đấu luân hồi ===
+[13:57:34] [Bot 0] ⚠️ [Debug] Không tìm thấy nút "continue". 5 message gần nhất + các nút của nó:
+[13:57:34] [Bot 0]    [@Quất Bất Lực!luanhoiXỏ lá ba queAPP — 13:55lúc 13] btns=(@Quất Bất Lực | !luanhoi | Xỏ lá ba que | ⬆️ | ⬇️ | ⬅️ | ➡️ | Rút Lui (10% thưởng)) >>> [Quất Bất Lực — 13:55lúc 13:55 Thứ Sáu, 2 tháng 10,] btns=(Quất Bất Lực) >>> [@Quất Bất Lực!ketthucXỏ lá ba queAPP — 13:55lúc 13] btns=(@Quất Bất Lực | !ketthuc | Xỏ lá ba que | Bắt Đầu Tu Luyện | Bảng Cảnh Giới) >>> [Quất Bất Lực — 13:55lúc 13:55 Thứ Sáu, 2 tháng 10,] btns=(Quất Bất Lực) >>> [@Quất Bất Lực!bicanhXỏ lá ba queAPP — 13:55lúc 13:] btns=(@Quất Bất Lực | !bicanh | Xỏ lá ba que)
+[13:57:34] [Bot 0] 🚪 Đã chọn cửa hướng lên (boss mốc).
+[13:57:38] [Bot 0] 🎯 Chọn buff: "🟢 Phàm" (ưu tiên, tầng ?).
+[13:57:38] [Bot 0] ⚡ Đã chọn buff: "🟢 Phàm"
+[13:57:41] [Bot 0] 🗼 Tầng hiện tại: 11
+[13:57:44] [Bot 0] 🌀 Click skill luân hồi: "Kiếm Khí Xung Thiên"
+[13:57:45] [Bot 0] ⚡ Đã chọn buff giữa trận/sang tầng: "🟢 Phàm"
+[13:57:45] [Bot 0] ⏩ THẮNG TẦNG / SANG TẦNG KẾ!
