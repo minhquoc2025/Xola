@@ -68,6 +68,7 @@ class NpcBot {
     this.diangucCmd = '!dianguc';
     this.diangucDelayMs = 2000;
     this.diangucChoiceDelayMs = 2000;
+    this.diangucBuffWaitMs = 10000;
     this.diangucWinDelayMs = 3500;
     this.diangucFloor = 0;
     this.diangucStep = 0;
@@ -77,6 +78,8 @@ class NpcBot {
     this.diangucLastScanSignature = '';
     this.diangucLastBuffKey = '';
     this.diangucLastBuffClickAt = 0;
+    this.diangucBuffWaitKey = '';
+    this.diangucBuffWaitStartedAt = 0;
     this.diangucData = {};
     this.diangucLastSaved = 0;
     this.stats = {
@@ -274,6 +277,10 @@ class NpcBot {
     if (config.diangucCmd !== undefined) this.diangucCmd = config.diangucCmd;
     if (config.diangucDelayMs !== undefined) this.diangucDelayMs = config.diangucDelayMs;
     if (config.diangucChoiceDelayMs !== undefined) this.diangucChoiceDelayMs = config.diangucChoiceDelayMs;
+    if (config.diangucBuffWaitMs !== undefined) {
+      const ms = Number(config.diangucBuffWaitMs);
+      if (Number.isFinite(ms)) this.diangucBuffWaitMs = Math.min(120000, Math.max(0, Math.round(ms)));
+    }
     if (config.diangucWinDelayMs !== undefined) this.diangucWinDelayMs = config.diangucWinDelayMs;
     if (config.bicanhSkillOrder !== undefined) {
       this.bicanhSkillOrder = this.normalizeSkillOrder(config.bicanhSkillOrder);
@@ -2049,6 +2056,10 @@ class NpcBot {
 
       const lower = state.text.toLowerCase();
       const isActiveChoice = ['DIRECTION', 'BUFF', 'MYSTERY'].includes(state.phase);
+      if (state.phase !== 'BUFF') {
+        this.diangucBuffWaitKey = '';
+        this.diangucBuffWaitStartedAt = 0;
+      }
       const isConfirmedDeath = !state.metadataOnly && (
         /đã chết!?[\s\S]*đã ngã xuống[\s\S]*reset về tầng địa ngục/i.test(lower)
         || /death[\s\S]*reset về tầng địa ngục/i.test(lower)
@@ -2110,9 +2121,24 @@ class NpcBot {
           // và GIỮ NGUYÊN bước để không làm hỏng dữ liệu hướng của bước đó.
           this.diangucLastBuffKey = '';
           this.diangucLastBuffClickAt = 0;
+          this.diangucBuffWaitKey = '';
+          this.diangucBuffWaitStartedAt = 0;
           this.log(`⏰ Hụt buff (không phản hồi kịp thời), click lại ở bước ${this.diangucStep || '?'} (giữ nguyên bước).`);
         }
         const buffKey = state.id || state.buttonText || '';
+        if (!state.missedResponse && this.diangucBuffWaitMs > 0) {
+          const waitKey = `${state.targetKey || buffKey}|${state.buttonText || ''}`;
+          if (waitKey !== this.diangucBuffWaitKey) {
+            this.diangucBuffWaitKey = waitKey;
+            this.diangucBuffWaitStartedAt = Date.now();
+            this.log(`⏳ Chờ ${Math.ceil(this.diangucBuffWaitMs / 1000)}s để bạn tự chọn buff...`);
+          }
+          const remainingMs = this.diangucBuffWaitMs - (Date.now() - this.diangucBuffWaitStartedAt);
+          if (remainingMs > 0) {
+            await this.delay(Math.min(500, remainingMs));
+            continue;
+          }
+        }
         if (!state.missedResponse && buffKey && buffKey === this.diangucLastBuffKey
           && Date.now() - this.diangucLastBuffClickAt < 5000) {
           await this.delay(this.diangucChoiceDelayMs);

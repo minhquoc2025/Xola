@@ -33,6 +33,15 @@ for (const pattern of forbiddenPatterns) {
 const { NpcBot } = require(path.join(__dirname, '..', 'src', 'main', 'npc-bot.js'));
 const bot = new NpcBot({ executeJavaScript() {} }, 1);
 
+if (bot.diangucBuffWaitMs !== 10000) {
+  throw new Error('Địa Ngục buff wait should default to 10 seconds');
+}
+
+bot.updateConfig({ diangucBuffWaitMs: 0 });
+if (bot.diangucBuffWaitMs !== 0) {
+  throw new Error('Địa Ngục buff wait should allow immediate automatic selection');
+}
+
 if (bot.isOwnedGameMessage('Nam: Hiep, xem trận battle NPC này của tôi', 'Hiep', ['npc', 'battle', 'fight', 'đánh'])) {
   throw new Error('Bot incorrectly treated a mention as the current user battle message');
 }

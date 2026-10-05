@@ -190,6 +190,7 @@ function getDiangucConfig() {
     luanhoiSkillNames: resolvedSkills,
     diangucDelayMs: 2000,
     diangucChoiceDelayMs: 2000,
+    diangucBuffWaitMs: Math.min(120, Math.max(0, Number(document.getElementById('dianguc-wait-buff').value) || 0)) * 1000,
     skillClickDelayMs: getSkillClickDelayMs(),
   };
 }
