@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const vm = require('vm');
 
 const rendererPath = path.join(__dirname, '..', 'src', 'renderer', 'renderer.js');
 const mainPath = path.join(__dirname, '..', 'src', 'main', 'npc-bot.js');
@@ -70,3 +71,42 @@ if (!Array.isArray(bot.bicanhSkillOrder) || JSON.stringify(bot.bicanhSkillOrder)
 console.log('Skill list check passed');
 console.log('NPC message matching guard passed');
 console.log('Combo skill normalization guard passed');
+
+async function testNoResponseDeduplication() {
+  const timeoutMessage = {
+    id: 'battle-message-123',
+    textContent: 'Khánh Linh đã không phản hồi kịp thời',
+    getAttribute: () => null,
+    querySelectorAll: () => [{ textContent: 'Kiếm Khí Xung Thiên' }],
+  };
+  const noResponseBot = new NpcBot({
+    executeJavaScript: script => vm.runInNewContext(script, {
+      document: { querySelectorAll: () => [timeoutMessage] },
+    }),
+  }, 1);
+  const logs = [];
+  let battleChecks = 0;
+  noResponseBot.isRunning = true;
+  noResponseBot.runId = 1;
+  noResponseBot.bicanhSkillOrder = [1];
+  noResponseBot.log = (...args) => logs.push(args.join(' '));
+  noResponseBot.delay = async () => {};
+  noResponseBot.checkBattleEnd = async () => {
+    battleChecks++;
+    return battleChecks === 4 ? { ended: true, result: 'win' } : null;
+  };
+  noResponseBot.clickNextNpcSkill = async () => 'Kiếm Khí Xung Thiên';
+  noResponseBot.checkBicanhCooldown = async () => 0;
+
+  const result = await noResponseBot.clickButtonsUntilEnd(false, 1);
+  const warnings = logs.filter(line => line.includes('"Không phản hồi kịp thời" liên tiếp'));
+  if (result.type !== 'ended' || warnings.length !== 1) {
+    throw new Error('A persistent timeout message was counted more than once');
+  }
+  console.log('NPC timeout message deduplication passed');
+}
+
+testNoResponseDeduplication().catch(error => {
+  console.error(error);
+  process.exitCode = 1;
+});

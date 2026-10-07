@@ -1373,7 +1373,7 @@ class NpcBot {
         // Chỉ tính là battle khi tin nhắn có nút skill.
         const buttonText = Array.from(msg.querySelectorAll('button[role="button"], [role="button"]'))
           .map(button => nd(button.textContent)).join(' | ');
-        if (normalizedSkills.some(name => buttonText.includes(name))) return true;
+        if (normalizedSkills.some(name => buttonText.includes(name))) return msg.id || text;
       }
       return false;
     })()`);
@@ -1582,6 +1582,7 @@ class NpcBot {
 
     let noSkillCount = 0;
     let noResponseCount = 0;
+    let lastNoResponseKey = null;
     while (this.isRunning && this.runId === runId) {
       const battleEndResult = await this.checkBattleEnd();
       if (battleEndResult && battleEndResult.ended) {
@@ -1599,11 +1600,16 @@ class NpcBot {
         this.log(`⚠️ Không tìm thấy skill trong combo. Đợi... (${noSkillCount})`);
       }
 
-      if (await this.checkNoResponse()) {
-        noResponseCount++;
-        this.log(`⚠️ "Không phản hồi kịp thời" liên tiếp (${noResponseCount}/10)`);
+      const noResponseKey = await this.checkNoResponse();
+      if (noResponseKey) {
+        if (noResponseKey !== lastNoResponseKey) {
+          noResponseCount++;
+          lastNoResponseKey = noResponseKey;
+          this.log(`⚠️ "Không phản hồi kịp thời" liên tiếp (${noResponseCount}/10)`);
+        }
       } else {
         noResponseCount = 0;
+        lastNoResponseKey = null;
       }
 
       const cd = await this.checkBicanhCooldown();
