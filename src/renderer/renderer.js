@@ -76,6 +76,10 @@ const ALL_SKILLS = [
   { stt: 25, name: 'Cửu Chuyển Hồi Xuân', cat: 'Kết Đan' },
   { stt: 26, name: 'Kim Đan Phá Sát', cat: 'Kết Đan' },
   { stt: 27, name: 'Tam Muội Chân Hỏa', cat: 'Kết Đan' },
+  // Nguyên Anh
+  { stt: 28, name: 'Bất Diệt Kim Thân', cat: 'Nguyên Anh' },
+  { stt: 29, name: 'Hư Không Đại Na Di', cat: 'Nguyên Anh' },
+  { stt: 30, name: 'Nguyên Anh Xuất Khiếu', cat: 'Nguyên Anh' },
 ];
 
 // === MODE ===

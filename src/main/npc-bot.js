@@ -55,7 +55,7 @@ class NpcBot {
     this.luanhoi = false;
     this.luanhoiTarget = 10;
     this.luanhoiCmd = '!luanhoi';
-    this.luanhoiSkillNames = ['Kiếm Cơ Bản', 'Liên Hoàn Kích', 'Trọng Kích', 'Phá Giáp', 'Xuyên Tâm', 'Liệt Hỏa Trảm', 'Hấp Huyết', 'Kịch Độc', 'Lôi Kích', 'Tuyệt Sát', 'Thần Uy', 'Băng Phong', 'Phòng Ngự', 'Phản Kích', 'Hồi Phục', 'Hộ Thuẫn', 'Hỏa Giáp', 'Chống Xỏ Lá', 'Thái Cực Dưỡng Sinh', 'Kiếm Khí Xung Thiên', 'Kim Cương Phục Ma', 'Hỗn Nguyên Hộ Thể', 'Vạn Kiếm Quy Tông', 'Phong Ấn Thất Mạch', 'Cửu Chuyển Hồi Xuân', 'Kim Đan Phá Sát', 'Tam Muội Chân Hỏa'];
+    this.luanhoiSkillNames = ['Kiếm Cơ Bản', 'Liên Hoàn Kích', 'Trọng Kích', 'Phá Giáp', 'Xuyên Tâm', 'Liệt Hỏa Trảm', 'Hấp Huyết', 'Kịch Độc', 'Lôi Kích', 'Tuyệt Sát', 'Thần Uy', 'Băng Phong', 'Phòng Ngự', 'Phản Kích', 'Hồi Phục', 'Hộ Thuẫn', 'Hỏa Giáp', 'Chống Xỏ Lá', 'Thái Cực Dưỡng Sinh', 'Kiếm Khí Xung Thiên', 'Kim Cương Phục Ma', 'Hỗn Nguyên Hộ Thể', 'Vạn Kiếm Quy Tông', 'Phong Ấn Thất Mạch', 'Cửu Chuyển Hồi Xuân', 'Kim Đan Phá Sát', 'Tam Muội Chân Hỏa', 'Bất Diệt Kim Thân', 'Hư Không Đại Na Di', 'Nguyên Anh Xuất Khiếu'];
     this.luanhoiSkillIdx = 0;
     this.luanhoiCurrentTier = 0;
     this.luanhoiBuffInit = false;
