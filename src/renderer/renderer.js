@@ -92,10 +92,14 @@ function setMode(mode) {
   document.getElementById('tab-luanhoi').classList.toggle('active', mode === 'luanhoi');
   document.getElementById('tab-bicanh').classList.toggle('active', mode === 'bicanh');
   document.getElementById('tab-dianguc').classList.toggle('active', mode === 'dianguc');
+  const tabUpgrade = document.getElementById('tab-upgrade');
+  if (tabUpgrade) tabUpgrade.classList.toggle('active', mode === 'upgrade');
   document.getElementById('config-npc').classList.toggle('active', mode === 'npc');
   document.getElementById('config-luanhoi').classList.toggle('active', mode === 'luanhoi');
   document.getElementById('config-bicanh').classList.toggle('active', mode === 'bicanh');
   document.getElementById('config-dianguc').classList.toggle('active', mode === 'dianguc');
+  const configUpgrade = document.getElementById('config-upgrade');
+  if (configUpgrade) configUpgrade.classList.toggle('active', mode === 'upgrade');
   updateBotButton();
 }
 
@@ -169,6 +173,27 @@ function getBicanhConfig() {
   };
 }
 
+const UPGRADE_CMDS = {
+  hp: '/upgrade hp',
+  atk: '/upgrade atk',
+  def: '/upgrade def',
+};
+
+function getUpgradeConfig() {
+  const typeEl = document.getElementById('upgrade-type');
+  const type = typeEl ? typeEl.value : 'hp';
+  const delayEl = document.getElementById('upgrade-delay');
+  const delaySec = delayEl ? (parseFloat(delayEl.value) || 2) : 2;
+  const usernameEl = document.getElementById('username-upgrade');
+  return {
+    mode: 'upgrade',
+    username: ((usernameEl && usernameEl.value) || 'Quất Bất Lực').trim(),
+    upgradeType: Object.prototype.hasOwnProperty.call(UPGRADE_CMDS, type) ? type : 'hp',
+    upgradeCmd: UPGRADE_CMDS[type] || UPGRADE_CMDS.hp,
+    upgradeDelayMs: Math.min(60000, Math.max(500, Math.round(delaySec * 1000))),
+  };
+}
+
 function resolveSkillNames(value) {
   const raw = Array.isArray(value) ? value : String(value || '').split(',');
   return raw.map(item => {
@@ -202,6 +227,7 @@ function getDiangucConfig() {
 function getActiveConfig() {
   if (currentMode === 'dianguc') return getDiangucConfig();
   if (currentMode === 'bicanh') return getBicanhConfig();
+  if (currentMode === 'upgrade') return getUpgradeConfig();
   return currentMode === 'luanhoi' ? getLuanHoiConfig() : getNpcConfig();
 }
 
@@ -216,16 +242,14 @@ async function toggleBot() {
     await window.api.botUpdateConfig(0, config);
     window.api.botStart(0);
     isNpcRunning = true;
-    const label = config.mode === 'luanhoi' ? 'Luân Hồi' : (config.mode === 'bicanh' ? 'Bicanh' : (config.mode === 'dianguc' ? 'Địa Ngục' : 'NPC'));
+    const label = config.mode === 'luanhoi' ? 'Luân Hồi' : (config.mode === 'bicanh' ? 'Bicanh' : (config.mode === 'dianguc' ? 'Địa Ngục' : (config.mode === 'upgrade' ? 'Upgrade' : 'NPC')));
     appendLog(`[${label}] ▶ Started`);
   }
   updateBotButton();
 }
 
 function updateBotButton() {
-  const isLH = currentMode === 'luanhoi';
-  const isBC = currentMode === 'bicanh';
-  const btns = [document.getElementById('btn-npc-toggle'), document.getElementById('btn-luanhoi-toggle'), document.getElementById('btn-bicanh-toggle'), document.getElementById('btn-dianguc-toggle')];
+  const btns = [document.getElementById('btn-npc-toggle'), document.getElementById('btn-luanhoi-toggle'), document.getElementById('btn-bicanh-toggle'), document.getElementById('btn-dianguc-toggle'), document.getElementById('btn-upgrade-toggle')];
   for (const btn of btns) {
     if (!btn) continue;
     if (isNpcRunning) {
@@ -403,6 +427,8 @@ async function updateStats() {
       document.getElementById('stat-total').textContent = `Tầng ${status.diangucFloor || 0}, bước ${status.diangucStep || 0}`;
     } else if (status.mode === 'bicanh') {
       document.getElementById('stat-total').textContent = `⚔️ Đang spam skill...`;
+    } else if (status.mode === 'upgrade') {
+      document.getElementById('stat-total').textContent = `⬆️ Đang auto upgrade (${status.upgradeCmd || ''}) x${status.upgradeCount || 0}...`;
     } else if (status.mode === 'luanhoi') {
       const cur = status.lastLuanhoiTarget != null ? status.lastLuanhoiTarget : 0;
       const tgt = status.luanhoiTarget || 0;

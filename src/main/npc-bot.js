@@ -38,6 +38,9 @@ class NpcBot {
     this.npcNumber = 1;
     this.cooldownMs = 120000;
     this.defeatCooldownSec = 300;
+    // Giới hạn mỗi trận NPC: hết giờ thì !ketthuc + !npc để bắt đầu lại,
+    // fix case game không phản hồi nhưng vẫn cho click skill (vòng lặp vô tận).
+    this.battleTimeoutMs = 15 * 60 * 1000;
     this.buttonDelayMs = 2000;
     // Delay giữa 2 lần click skill — dùng chung cho NPC / Luân Hồi / Bí Cảnh / Địa Ngục
     this.skillClickDelayMs = 1000;
@@ -64,6 +67,10 @@ class NpcBot {
     this.bicanhCmd = '!bicanh';
     this.bicanhSkillOrder = [];
     this._bicanhSkillIdx = 0;
+    this.upgradeCmd = '/upgrade hp';
+    this.upgradeType = 'hp';
+    this.upgradeDelayMs = 2000;
+    this.upgradeCount = 0;
     this.dianguc = false;
     this.diangucCmd = '!dianguc';
     this.diangucDelayMs = 2000;
@@ -286,6 +293,16 @@ class NpcBot {
       this.bicanhSkillOrder = this.normalizeSkillOrder(config.bicanhSkillOrder);
       this._bicanhSkillIdx = 0;
     }
+    if (config.upgradeCmd !== undefined) this.upgradeCmd = String(config.upgradeCmd || '/upgrade hp');
+    if (config.upgradeType !== undefined) this.upgradeType = String(config.upgradeType || 'hp');
+    if (config.upgradeDelayMs !== undefined) {
+      const ms = Number(config.upgradeDelayMs);
+      if (Number.isFinite(ms)) this.upgradeDelayMs = Math.min(60000, Math.max(500, Math.round(ms)));
+    }
+    if (config.battleTimeoutMs !== undefined) {
+      const ms = Number(config.battleTimeoutMs);
+      if (Number.isFinite(ms)) this.battleTimeoutMs = Math.min(60 * 60 * 1000, Math.max(60000, Math.round(ms)));
+    }
   }
 
   async start() {
@@ -318,6 +335,12 @@ class NpcBot {
     if (this.mode === 'bicanh') {
       this.log(`=== BICANH MODE: Spam技能 theo thứ tự ===`);
       this.bicanhLoop(this.runId);
+      return;
+    }
+    if (this.mode === 'upgrade') {
+      this.log(`=== UPGRADE MODE: ${this.upgradeCmd} mỗi ${this.upgradeDelayMs}ms (không giới hạn) ===`);
+      this.upgradeCount = 0;
+      this.upgradeLoop(this.runId);
       return;
     }
     if (this.mode === 'dianguc') {
@@ -484,10 +507,29 @@ class NpcBot {
     this.log('====================\n');
   }
 
+  async upgradeLoop(runId) {
+    if (!this.isRunning || this.runId !== runId) return;
+    this.log('\n=== ⬆️ UPGRADE MODE ===');
+    while (this.isRunning && this.runId === runId) {
+      try {
+        await this.sendSlashChat(this.upgradeCmd);
+        this.upgradeCount++;
+        if (this.upgradeCount % 10 === 0) this.log(`⬆️ Đã gửi ${this.upgradeCount}x: ${this.upgradeCmd}`);
+      } catch (e) {
+        this.log('⚠️ Gửi lệnh upgrade lỗi:', e.message);
+      }
+      await this.delay(this.upgradeDelayMs);
+    }
+    this.log(`⏹ UPGRADE MODE đã dừng sau ${this.upgradeCount} lần gửi.`);
+  }
+
   getStatus() {
     return {
       isRunning: this.isRunning,
       mode: this.mode,
+      upgradeCmd: this.upgradeCmd,
+      upgradeType: this.upgradeType,
+      upgradeCount: this.upgradeCount,
       battleCount: this.battleCount,
       luanhoiTarget: this.luanhoiTarget,
       lastLuanhoiTarget: this.lastLuanhoiTarget,
@@ -795,6 +837,77 @@ class NpcBot {
     })()`);
 
     this.log(`Sent: ${cmd}`);
+    return true;
+  }
+
+  // Enter đáng tin (trusted) qua webContents — Discord chỉ nhận slash command
+  // khi phím Enter là trusted, còn dispatchEvent合成 (untrusted) thường bị bỏ qua.
+  async pressEnterTrusted() {
+    try {
+      if (this.wc && typeof this.wc.sendInputEvent === 'function') {
+        this.wc.sendInputEvent({ type: 'keyDown', keyCode: 'Enter', code: 'Enter', key: 'Enter' });
+        await this.delay(60);
+        this.wc.sendInputEvent({ type: 'char', textCode: '\r', code: 'Enter', key: 'Enter' });
+        await this.delay(40);
+        this.wc.sendInputEvent({ type: 'keyUp', keyCode: 'Enter', code: 'Enter', key: 'Enter' });
+        return true;
+      }
+    } catch (e) {
+      this.log('⚠️ trusted Enter lỗi, fallback dispatchEvent:', e.message);
+    }
+    await this.exec(`(() => {
+      const el = document.querySelector('[role="textbox"]');
+      if (!el) return;
+      el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+      el.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+      el.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));
+    })()`);
+    return false;
+  }
+
+  // Click option "/upgrade" trong popup autocomplete của Discord.
+  // Gõ "/xxx" mà không click chọn thì Discord chỉ gửi text thường, game bot slash sẽ không nhận.
+  async clickSlashAutocomplete(needle = 'upgrade') {
+    return await this.exec(`(() => {
+      const needle = ${JSON.stringify(needle)}.toLowerCase();
+      const norm = s => String(s || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase();
+      // Popup autocomplete của Discord thường chứa role="option"/"listbox" hoặc class autocomplete
+      const candidates = Array.from(document.querySelectorAll('[role="option"], [role="menuitem"], [class*="autocomplete"], [class*="commandName"], li'));
+      for (const el of candidates.slice(-30)) {
+        const t = norm(el.textContent);
+        if (!t || !t.includes(needle)) continue;
+        const rect = el.getBoundingClientRect ? el.getBoundingClientRect() : null;
+        if (rect && (rect.width === 0 || rect.height === 0)) continue;
+        try {
+          el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+          el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+          el.click();
+        } catch (e) {}
+        return (el.textContent || '').trim().substring(0, 80);
+      }
+      return null;
+    })()`);
+  }
+
+  // Gửi slash command: gõ text -> chờ popup -> click chọn lệnh -> Enter x2 (chọn + gửi)
+  async sendSlashChat(cmd) {
+    // Tận dụng sendChat để focus + gõ từng ký tự (giữ nguyên logic cũ cho ổn định)
+    await this.sendChat(cmd);
+    // sendChat đã Enter 1 lần (dạng untrusted) — với slash cần thêm bước chọn + gửi lại
+    await this.delay(900);
+    const picked = await this.clickSlashAutocomplete('upgrade');
+    if (picked) this.log(`👉 Đã chọn slash option: "${picked}"`);
+    await this.delay(500);
+    await this.pressEnterTrusted();
+    await this.delay(600);
+    // Enter lần 2 để SEND interaction (lần 1 chỉ confirm option)
+    await this.pressEnterTrusted();
+    await this.delay(400);
+    const stillThere = await this.exec(`document.querySelector('[role="textbox"]')?.textContent?.length || 0`);
+    if (Number(stillThere) > 0) {
+      this.log(`⚠️ Textbox còn ${stillThere} ký tự sau SEND — có thể chưa chọn đúng option slash, thử Enter thêm...`);
+      await this.pressEnterTrusted();
+    }
     return true;
   }
 
@@ -1583,11 +1696,30 @@ class NpcBot {
     let noSkillCount = 0;
     let noResponseCount = 0;
     let lastNoResponseKey = null;
+    let battleStartAt = Date.now();
+    const battleTimeoutMin = Math.round(this.battleTimeoutMs / 60000);
     while (this.isRunning && this.runId === runId) {
       const battleEndResult = await this.checkBattleEnd();
       if (battleEndResult && battleEndResult.ended) {
         this.log(`>>> BATTLE ENDED: ${battleEndResult.result === 'win' ? '✅ THẮNG' : '❌ THUA'} <<<`);
         return { type: 'ended', result: battleEndResult.result, rewardText: battleEndResult.rewardText };
+      }
+
+      // Hết 15 phút/trận mà game vẫn cho click skill bình thường nhưng không trả kết quả
+      // → vòng lặp vô tận. Tự !ketthuc + !npc để bắt đầu lại trận mới.
+      if (Date.now() - battleStartAt >= this.battleTimeoutMs) {
+        const spentMin = ((Date.now() - battleStartAt) / 60000).toFixed(1);
+        this.log(`⏱️ Hết ${battleTimeoutMin} phút/trận (đã đánh ${spentMin}ph) mà chưa có kết quả — reset trận (!ketthuc => !npc)...`);
+        noResponseCount = 0;
+        noSkillCount = 0;
+        lastNoResponseKey = null;
+        this._bicanhSkillIdx = 0;
+        await this.sendChat(this.tuLuyenEndCmd);
+        await this.delay(1000);
+        await this.sendNpcCommand();
+        await this.delay(4000);
+        battleStartAt = Date.now();
+        continue;
       }
 
       const clicked = await this.clickNextNpcSkill();
@@ -1628,6 +1760,7 @@ class NpcBot {
         await this.sendChat(this.tuLuyenEndCmd);
         await this.sendNpcCommand();
         await this.delay(4000);
+        battleStartAt = Date.now();
       }
 
       if (noResponseCount >= 10) {
@@ -1639,6 +1772,7 @@ class NpcBot {
         await this.sendChat(this.tuLuyenEndCmd);
         await this.sendNpcCommand();
         await this.delay(4000);
+        battleStartAt = Date.now();
       }
     }
 
