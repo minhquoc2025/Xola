@@ -840,20 +840,18 @@ class NpcBot {
     return true;
   }
 
-  // Enter đáng tin (trusted) qua webContents — Discord chỉ nhận slash command
-  // khi phím Enter là trusted, còn dispatchEvent合成 (untrusted) thường bị bỏ qua.
+  // Enter đáng tin (trusted) qua webContents — Electron chỉ nhận { type, keyCode },
+  // thừa field (code/key/textCode) sẽ ném "Invalid event object".
   async pressEnterTrusted() {
     try {
       if (this.wc && typeof this.wc.sendInputEvent === 'function') {
-        this.wc.sendInputEvent({ type: 'keyDown', keyCode: 'Enter', code: 'Enter', key: 'Enter' });
+        this.wc.sendInputEvent({ type: 'keyDown', keyCode: 'Enter' });
         await this.delay(60);
-        this.wc.sendInputEvent({ type: 'char', textCode: '\r', code: 'Enter', key: 'Enter' });
-        await this.delay(40);
-        this.wc.sendInputEvent({ type: 'keyUp', keyCode: 'Enter', code: 'Enter', key: 'Enter' });
+        this.wc.sendInputEvent({ type: 'keyUp', keyCode: 'Enter' });
         return true;
       }
     } catch (e) {
-      this.log('⚠️ trusted Enter lỗi, fallback dispatchEvent:', e.message);
+      this.logDebug('trusted Enter lỗi, fallback dispatchEvent:', e.message);
     }
     await this.exec(`(() => {
       const el = document.querySelector('[role="textbox"]');
@@ -866,16 +864,28 @@ class NpcBot {
   }
 
   // Click option "/upgrade" trong popup autocomplete của Discord.
-  // Gõ "/xxx" mà không click chọn thì Discord chỉ gửi text thường, game bot slash sẽ không nhận.
+  // Chỉ tìm trong popup autocomplete (ngoài [role="article"]), tránh click nhầm
+  // tin nhắn lịch sử có chữ "upgrade" (vd "Minh Quốc đã sử dụng upgrade...").
   async clickSlashAutocomplete(needle = 'upgrade') {
     return await this.exec(`(() => {
       const needle = ${JSON.stringify(needle)}.toLowerCase();
       const norm = s => String(s || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase();
-      // Popup autocomplete của Discord thường chứa role="option"/"listbox" hoặc class autocomplete
-      const candidates = Array.from(document.querySelectorAll('[role="option"], [role="menuitem"], [class*="autocomplete"], [class*="commandName"], li'));
-      for (const el of candidates.slice(-30)) {
+      // Popup autocomplete nằm ngoài danh sách tin nhắn [role="article"]
+      const popups = Array.from(document.querySelectorAll('[role="listbox"], [class*="autocomplete"]'));
+      const inPopup = [];
+      for (const popup of popups) {
+        if (popup.closest && popup.closest('[role="article"]')) continue;
+        for (const opt of popup.querySelectorAll('[role="option"], [role="menuitem"], [class*="commandName"]')) {
+          if (opt.closest && opt.closest('[role="article"]')) continue;
+          inPopup.push(opt);
+        }
+      }
+      if (inPopup.length === 0) return null;
+      for (const el of inPopup) {
         const t = norm(el.textContent);
+        // Tên lệnh slash: bắt đầu bằng /upgrade hoặc đúng "upgrade", loại "đã sử dụng upgrade..."
         if (!t || !t.includes(needle)) continue;
+        if (t.includes('da su dung') || t.includes('app') && t.length > 40) continue;
         const rect = el.getBoundingClientRect ? el.getBoundingClientRect() : null;
         if (rect && (rect.width === 0 || rect.height === 0)) continue;
         try {
@@ -889,23 +899,25 @@ class NpcBot {
     })()`);
   }
 
-  // Gửi slash command: gõ text -> chờ popup -> click chọn lệnh -> Enter x2 (chọn + gửi)
+  // Gửi slash command: gõ text + Enter như thường; nếu textbox đã trống (gửi OK)
+  // thì thôi, chỉ click popup autocomplete + Enter bổ sung khi text còn kẹt lại.
   async sendSlashChat(cmd) {
-    // Tận dụng sendChat để focus + gõ từng ký tự (giữ nguyên logic cũ cho ổn định)
     await this.sendChat(cmd);
-    // sendChat đã Enter 1 lần (dạng untrusted) — với slash cần thêm bước chọn + gửi lại
     await this.delay(900);
+    const remaining = Number(await this.exec(`document.querySelector('[role="textbox"]')?.textContent?.length || 0`)) || 0;
+    if (remaining === 0) return true; // gửi thành công ngay từ Enter đầu — không làm gì thêm
     const picked = await this.clickSlashAutocomplete('upgrade');
     if (picked) this.log(`👉 Đã chọn slash option: "${picked}"`);
+    else this.logDebug('Không thấy popup autocomplete slash (bỏ qua click chọn).');
     await this.delay(500);
     await this.pressEnterTrusted();
     await this.delay(600);
     // Enter lần 2 để SEND interaction (lần 1 chỉ confirm option)
     await this.pressEnterTrusted();
     await this.delay(400);
-    const stillThere = await this.exec(`document.querySelector('[role="textbox"]')?.textContent?.length || 0`);
-    if (Number(stillThere) > 0) {
-      this.log(`⚠️ Textbox còn ${stillThere} ký tự sau SEND — có thể chưa chọn đúng option slash, thử Enter thêm...`);
+    const stillThere = Number(await this.exec(`document.querySelector('[role="textbox"]')?.textContent?.length || 0`)) || 0;
+    if (stillThere > 1) {
+      this.log(`⚠️ Textbox còn ${stillThere} ký tự sau SEND — slash có thể chưa đi, thử Enter thêm...`);
       await this.pressEnterTrusted();
     }
     return true;
