@@ -414,23 +414,45 @@ class NpcBot {
     let lastCoins = 0;
     let lastExp = 0;
 
-    // Summary là dòng TỔNG ở cuối ("💰 +532 🪙 ✨ +235 XP" hoặc "+572 +253 XP").
+    // Parse số phần thưởng: hỗ trợ "2,916" (=2916), "14.0K"/"14K" (=14000),
+    // "1.2M"/"1,2M" (=1200000), "3B" (=3000000000). Không hậu tố → bỏ dấu ., (ngăn cách nghìn).
+    const parseRewardNumber = (raw) => {
+      if (raw == null) return 0;
+      let s = String(raw).trim().toUpperCase().replace(/\s/g, '');
+      if (!s) return 0;
+      let mult = 1;
+      const suffix = s.slice(-1);
+      if (suffix === 'K' || suffix === 'M' || suffix === 'B') {
+        mult = suffix === 'K' ? 1000 : suffix === 'M' ? 1000000 : 1000000000;
+        s = s.slice(0, -1);
+      }
+      if (mult > 1) {
+        // Có hậu tố K/M/B → phần số là thập phân: "14.0" / "14,0" đều = 14.0
+        const num = parseFloat(s.replace(/,/g, '.'));
+        return Number.isFinite(num) ? Math.round(num * mult) : 0;
+      }
+      const num = parseInt(s.replace(/[.,]/g, ''), 10);
+      return Number.isFinite(num) ? num : 0;
+    };
+
+    // Summary là dòng TỔNG ở cuối ("💰 +532 🪙 ✨ +235 XP", "💰 +2,916 🪙 ✨ +14.0K XP" hoặc "+572 +253 XP").
     // Bỏ qua các dòng breakdown có tên phía trước ("💰 Quất Bất Lực: +350🪙 +159XP") — chứa ':' trước số.
     // Lấy dòng hợp lệ CUỐI CÙNG vì tổng luôn nằm dưới các dòng cộng dồn từng nguồn.
+    const NUM = '[\\d.,]+\\s*[KMBkmb]?';
     for (const line of allLines) {
       const trimmed = line.trim();
       if (!trimmed) continue;
 
-      let summaryMatch = trimmed.match(/^\+([\d.,]+)\s+\+\s*([\d.,]+)\s*XP/i);
+      let summaryMatch = trimmed.match(new RegExp(`^\\+(${NUM})\\s+\\+\\s*(${NUM})\\s*XP`, 'i'));
       if (!summaryMatch) {
-        const m = trimmed.match(/^([^:+]*)\+([\d.,]+)\s*🪙[^+]*\+\s*([\d.,]+)\s*XP/i);
+        const m = trimmed.match(new RegExp(`^([^:+]*)\\+(${NUM})\\s*🪙[^+]*\\+\\s*(${NUM})\\s*XP`, 'i'));
         if (m && !m[1].includes(':')) {
           summaryMatch = [trimmed, m[2], m[3]];
         }
       }
       if (summaryMatch) {
-        lastCoins = parseInt(String(summaryMatch[1]).replace(/[.,]/g, ''));
-        lastExp = parseInt(String(summaryMatch[2]).replace(/[.,]/g, ''));
+        lastCoins = parseRewardNumber(summaryMatch[1]);
+        lastExp = parseRewardNumber(summaryMatch[2]);
         foundSummary = true;
       }
     }
