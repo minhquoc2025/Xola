@@ -71,6 +71,8 @@ class NpcBot {
     this.upgradeType = 'hp';
     this.upgradeDelayMs = 2000;
     this.upgradeCount = 0;
+    this.spamCount = 10;
+    this.spamType = 'hp';
     this.dianguc = false;
     this.diangucCmd = '!dianguc';
     this.diangucDelayMs = 2000;
@@ -297,8 +299,13 @@ class NpcBot {
     if (config.upgradeType !== undefined) this.upgradeType = String(config.upgradeType || 'hp');
     if (config.upgradeDelayMs !== undefined) {
       const ms = Number(config.upgradeDelayMs);
-      if (Number.isFinite(ms)) this.upgradeDelayMs = Math.min(60000, Math.max(500, Math.round(ms)));
+      if (Number.isFinite(ms)) this.upgradeDelayMs = Math.min(60000, Math.max(100, Math.round(ms)));
     }
+    if (config.spamCount !== undefined) {
+      const c = Number(config.spamCount);
+      if (Number.isFinite(c)) this.spamCount = Math.min(9999, Math.max(1, Math.round(c)));
+    }
+    if (config.spamType !== undefined) this.spamType = String(config.spamType || '');
     if (config.battleTimeoutMs !== undefined) {
       const ms = Number(config.battleTimeoutMs);
       if (Number.isFinite(ms)) this.battleTimeoutMs = Math.min(60 * 60 * 1000, Math.max(60000, Math.round(ms)));
@@ -338,7 +345,7 @@ class NpcBot {
       return;
     }
     if (this.mode === 'upgrade') {
-      this.log(`=== UPGRADE MODE: ${this.upgradeCmd} mỗi ${this.upgradeDelayMs}ms (không giới hạn) ===`);
+      this.log(`=== SPAM MODE: ${this.upgradeCmd} mỗi ${this.upgradeDelayMs}ms | gửi ${this.spamCount} lần ===`);
       this.upgradeCount = 0;
       this.upgradeLoop(this.runId);
       return;
@@ -531,18 +538,29 @@ class NpcBot {
 
   async upgradeLoop(runId) {
     if (!this.isRunning || this.runId !== runId) return;
-    this.log('\n=== ⬆️ UPGRADE MODE ===');
+    this.log('\n=== 💀 SPAM MODE ===');
+    const maxCount = this.spamCount || 10;
     while (this.isRunning && this.runId === runId) {
+      if (this.upgradeCount >= maxCount) break;
       try {
-        await this.sendSlashChat(this.upgradeCmd);
+        if (this.spamType === 'waifu_roll') {
+          await this.sendSlashChat('/waifu roll 10');
+        } else {
+          await this.sendSlashChat(this.upgradeCmd);
+        }
         this.upgradeCount++;
-        if (this.upgradeCount % 10 === 0) this.log(`⬆️ Đã gửi ${this.upgradeCount}x: ${this.upgradeCmd}`);
+        if (this.upgradeCount % 10 === 0 || this.upgradeCount === maxCount) {
+          this.log(`💀 Đã gửi ${this.upgradeCount}x: ${this.spamType === 'waifu_roll' ? 'waifu roll count: 10' : this.upgradeCmd}`);
+        }
       } catch (e) {
-        this.log('⚠️ Gửi lệnh upgrade lỗi:', e.message);
+        this.log('⚠️ Gửi lệnh spam lỗi:', e.message);
       }
+      if (this.upgradeCount >= maxCount) break;
       await this.delay(this.upgradeDelayMs);
     }
-    this.log(`⏹ UPGRADE MODE đã dừng sau ${this.upgradeCount} lần gửi.`);
+    this.log(`⏹ SPAM MODE đã dừng sau ${this.upgradeCount} lần gửi.`);
+    this.isRunning = false;
+    this.runId = null;
   }
 
   getStatus() {
@@ -552,6 +570,8 @@ class NpcBot {
       upgradeCmd: this.upgradeCmd,
       upgradeType: this.upgradeType,
       upgradeCount: this.upgradeCount,
+      spamCount: this.spamCount,
+      spamType: this.spamType,
       battleCount: this.battleCount,
       luanhoiTarget: this.luanhoiTarget,
       lastLuanhoiTarget: this.lastLuanhoiTarget,
@@ -885,19 +905,18 @@ class NpcBot {
     return false;
   }
 
-  // Click option "/upgrade" trong popup autocomplete của Discord.
-  // Chỉ tìm trong popup autocomplete (ngoài [role="article"]), tránh click nhầm
-  // tin nhắn lịch sử có chữ "upgrade" (vd "Minh Quốc đã sử dụng upgrade...").
-  async clickSlashAutocomplete(needle = 'upgrade') {
+  // Click option trong popup autocomplete của Discord.
+  async clickSlashAutocomplete(needle = 'upgrade', key = '') {
     return await this.exec(`(() => {
       const needle = ${JSON.stringify(needle)}.toLowerCase();
+      const key = ${JSON.stringify(String(key || '')).toLowerCase()};
       const norm = s => String(s || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLowerCase();
       // Popup autocomplete nằm ngoài danh sách tin nhắn [role="article"]
       const popups = Array.from(document.querySelectorAll('[role="listbox"], [class*="autocomplete"]'));
       const inPopup = [];
       for (const popup of popups) {
         if (popup.closest && popup.closest('[role="article"]')) continue;
-        for (const opt of popup.querySelectorAll('[role="option"], [role="menuitem"], [class*="commandName"]')) {
+        for (const opt of popup.querySelectorAll('[role="option"], [role="menuitem"], [class*="commandName"], [class*="autocompleteOption"]')) {
           if (opt.closest && opt.closest('[role="article"]')) continue;
           inPopup.push(opt);
         }
@@ -905,9 +924,11 @@ class NpcBot {
       if (inPopup.length === 0) return null;
       for (const el of inPopup) {
         const t = norm(el.textContent);
-        // Tên lệnh slash: bắt đầu bằng /upgrade hoặc đúng "upgrade", loại "đã sử dụng upgrade..."
         if (!t || !t.includes(needle)) continue;
-        if (t.includes('da su dung') || t.includes('app') && t.length > 40) continue;
+        if (t.includes('da su dung')) continue;
+        if (key) {
+          if (!t.includes(key)) continue;
+        }
         const rect = el.getBoundingClientRect ? el.getBoundingClientRect() : null;
         if (rect && (rect.width === 0 || rect.height === 0)) continue;
         try {
@@ -915,33 +936,147 @@ class NpcBot {
           el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
           el.click();
         } catch (e) {}
-        return (el.textContent || '').trim().substring(0, 80);
+        return (el.textContent || '').trim().substring(0, 120);
       }
       return null;
     })()`);
   }
 
-  // Gửi slash command: gõ text + Enter như thường; nếu textbox đã trống (gửi OK)
-  // thì thôi, chỉ click popup autocomplete + Enter bổ sung khi text còn kẹt lại.
+  // Gửi slash command: gõ "/upgrade" hoặc command, Enter 1 -> chọn đúng option theo key -> Enter 2-3 để gửi
   async sendSlashChat(cmd) {
+    let key = '';
+    if (cmd === '/upgrade atk') key = 'atk';
+    if (cmd === '/upgrade hp') key = 'hp';
+    if (cmd === '/upgrade def') key = 'def';
+    if (cmd === '/roll_x10') key = 'roll';
+    if (cmd === '/waifu roll 10') key = 'waifu';
+
+    if (cmd && cmd.startsWith('/upgrade')) {
+      // Luồng đúng: "/upgrade" -> enter -> nhập atk/hp/def -> enter -> enter
+      // Gõ /upgrade KHÔNG Enter
+      const cmdPrefix = '/upgrade';
+      await this.exec(`document.querySelector('[role="textbox"]')?.click()`);
+      await this.delay(this.rand(200, 400));
+      const len0 = await this.exec(`document.querySelector('[role="textbox"]')?.textContent?.length || 0`);
+      for (let i = 0; i < len0; i++) {
+        await this.exec(`(() => {
+          const el = document.querySelector('[role="textbox"]');
+          if (!el) return;
+          el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', code: 'Backspace', keyCode: 8, which: 8, bubbles: true }));
+          el.dispatchEvent(new InputEvent('beforeinput', { inputType: 'deleteContentBackward', bubbles: true, cancelable: true }));
+          el.dispatchEvent(new InputEvent('input', { inputType: 'deleteContentBackward', bubbles: true, cancelable: true }));
+          el.dispatchEvent(new KeyboardEvent('keyup', { key: 'Backspace', code: 'Backspace', keyCode: 8, which: 8, bubbles: true }));
+        })()`);
+        await this.delay(this.rand(20, 40));
+      }
+      for (let i = 0; i < cmdPrefix.length; i++) {
+        const ch = cmdPrefix[i];
+        await this.exec(`(() => {
+          const el = document.querySelector('[role="textbox"]');
+          if (!el) return;
+          el.dispatchEvent(new InputEvent('beforeinput', { inputType: 'insertText', data: ${JSON.stringify(ch)}, bubbles: true, cancelable: true }));
+          el.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: ${JSON.stringify(ch)}, bubbles: true, cancelable: true }));
+        })()`);
+        await this.delay(this.rand(40, 80));
+      }
+      await this.delay(300);
+      // Enter 1
+      await this.pressEnterTrusted();
+      await this.delay(600);
+      // Nhập key atk/hp/def
+      if (key) {
+        for (let i = 0; i < key.length; i++) {
+          const ch = key[i];
+          await this.exec(`(() => {
+            const el = document.querySelector('[role="textbox"]');
+            if (!el) return;
+            el.dispatchEvent(new InputEvent('beforeinput', { inputType: 'insertText', data: ${JSON.stringify(ch)}, bubbles: true, cancelable: true }));
+            el.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: ${JSON.stringify(ch)}, bubbles: true, cancelable: true }));
+          })()`);
+          await this.delay(30);
+        }
+        await this.delay(250);
+        // Enter 2 - chọn option
+        await this.pressEnterTrusted();
+        await this.delay(400);
+      }
+      // Enter 3 - gửi
+      await this.pressEnterTrusted();
+      await this.delay(400);
+      const stillThere = Number(await this.exec(`document.querySelector('[role="textbox"]')?.textContent?.length || 0`)) || 0;
+      if (stillThere > 1) {
+        await this.pressEnterTrusted();
+      }
+      return true;
+    } else if (cmd === '/roll_x10') {
+      const cmdPrefix = '/roll_x10';
+      await this.exec(`document.querySelector('[role="textbox"]')?.click()`);
+      await this.delay(this.rand(200, 400));
+      const len0 = await this.exec(`document.querySelector('[role="textbox"]')?.textContent?.length || 0`);
+      for (let i = 0; i < len0; i++) {
+        await this.exec(`(() => {
+          const el = document.querySelector('[role="textbox"]');
+          if (!el) return;
+          el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', code: 'Backspace', keyCode: 8, which: 8, bubbles: true }));
+          el.dispatchEvent(new InputEvent('beforeinput', { inputType: 'deleteContentBackward', bubbles: true, cancelable: true }));
+          el.dispatchEvent(new InputEvent('input', { inputType: 'deleteContentBackward', bubbles: true, cancelable: true }));
+          el.dispatchEvent(new KeyboardEvent('keyup', { key: 'Backspace', code: 'Backspace', keyCode: 8, which: 8, bubbles: true }));
+        })()`);
+        await this.delay(this.rand(20, 40));
+      }
+      for (let i = 0; i < cmdPrefix.length; i++) {
+        const ch = cmdPrefix[i];
+        await this.exec(`(() => {
+          const el = document.querySelector('[role="textbox"]');
+          if (!el) return;
+          el.dispatchEvent(new InputEvent('beforeinput', { inputType: 'insertText', data: ${JSON.stringify(ch)}, bubbles: true, cancelable: true }));
+          el.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: ${JSON.stringify(ch)}, bubbles: true, cancelable: true }));
+        })()`);
+        await this.delay(this.rand(40, 80));
+      }
+      await this.delay(300);
+      await this.pressEnterTrusted();
+      await this.delay(500);
+      const stillThere = Number(await this.exec(`document.querySelector('[role="textbox"]')?.textContent?.length || 0`)) || 0;
+      if (stillThere > 1) await this.pressEnterTrusted();
+      return true;
+    } else if (cmd === '/waifu roll 10') {
+      const cmdPrefix = '/waifu roll 10';
+      await this.exec(`document.querySelector('[role="textbox"]')?.click()`);
+      await this.delay(this.rand(200, 400));
+      const len0 = await this.exec(`document.querySelector('[role="textbox"]')?.textContent?.length || 0`);
+      for (let i = 0; i < len0; i++) {
+        await this.exec(`(() => {
+          const el = document.querySelector('[role="textbox"]');
+          if (!el) return;
+          el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', code: 'Backspace', keyCode: 8, which: 8, bubbles: true }));
+          el.dispatchEvent(new InputEvent('beforeinput', { inputType: 'deleteContentBackward', bubbles: true, cancelable: true }));
+          el.dispatchEvent(new InputEvent('input', { inputType: 'deleteContentBackward', bubbles: true, cancelable: true }));
+          el.dispatchEvent(new KeyboardEvent('keyup', { key: 'Backspace', code: 'Backspace', keyCode: 8, which: 8, bubbles: true }));
+        })()`);
+        await this.delay(this.rand(20, 40));
+      }
+      for (let i = 0; i < cmdPrefix.length; i++) {
+        const ch = cmdPrefix[i];
+        await this.exec(`(() => {
+          const el = document.querySelector('[role="textbox"]');
+          if (!el) return;
+          el.dispatchEvent(new InputEvent('beforeinput', { inputType: 'insertText', data: ${JSON.stringify(ch)}, bubbles: true, cancelable: true }));
+          el.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: ${JSON.stringify(ch)}, bubbles: true, cancelable: true }));
+        })()`);
+        await this.delay(this.rand(40, 80));
+      }
+      await this.delay(300);
+      await this.pressEnterTrusted();
+      await this.delay(400);
+      const stillThere = Number(await this.exec(`document.querySelector('[role="textbox"]')?.textContent?.length || 0`)) || 0;
+      if (stillThere > 1) await this.pressEnterTrusted();
+      return true;
+    }
+
     await this.sendChat(cmd);
-    await this.delay(900);
-    const remaining = Number(await this.exec(`document.querySelector('[role="textbox"]')?.textContent?.length || 0`)) || 0;
-    if (remaining === 0) return true; // gửi thành công ngay từ Enter đầu — không làm gì thêm
-    const picked = await this.clickSlashAutocomplete('upgrade');
-    if (picked) this.log(`👉 Đã chọn slash option: "${picked}"`);
-    else this.logDebug('Không thấy popup autocomplete slash (bỏ qua click chọn).');
     await this.delay(500);
     await this.pressEnterTrusted();
-    await this.delay(600);
-    // Enter lần 2 để SEND interaction (lần 1 chỉ confirm option)
-    await this.pressEnterTrusted();
-    await this.delay(400);
-    const stillThere = Number(await this.exec(`document.querySelector('[role="textbox"]')?.textContent?.length || 0`)) || 0;
-    if (stillThere > 1) {
-      this.log(`⚠️ Textbox còn ${stillThere} ký tự sau SEND — slash có thể chưa đi, thử Enter thêm...`);
-      await this.pressEnterTrusted();
-    }
     return true;
   }
 

@@ -93,13 +93,13 @@ function setMode(mode) {
   document.getElementById('tab-bicanh').classList.toggle('active', mode === 'bicanh');
   document.getElementById('tab-dianguc').classList.toggle('active', mode === 'dianguc');
   const tabUpgrade = document.getElementById('tab-upgrade');
-  if (tabUpgrade) tabUpgrade.classList.toggle('active', mode === 'upgrade');
+  if (tabUpgrade) tabUpgrade.classList.toggle('active', mode === 'spam');
   document.getElementById('config-npc').classList.toggle('active', mode === 'npc');
   document.getElementById('config-luanhoi').classList.toggle('active', mode === 'luanhoi');
   document.getElementById('config-bicanh').classList.toggle('active', mode === 'bicanh');
   document.getElementById('config-dianguc').classList.toggle('active', mode === 'dianguc');
   const configUpgrade = document.getElementById('config-upgrade');
-  if (configUpgrade) configUpgrade.classList.toggle('active', mode === 'upgrade');
+  if (configUpgrade) configUpgrade.classList.toggle('active', mode === 'spam');
   updateBotButton();
 }
 
@@ -173,10 +173,12 @@ function getBicanhConfig() {
   };
 }
 
-const UPGRADE_CMDS = {
+  const SPAM_CMDS = {
   hp: '/upgrade hp',
   atk: '/upgrade atk',
   def: '/upgrade def',
+  roll_x10: '/roll_x10',
+  waifu_roll: '/waifu roll count: 10',
 };
 
 function getUpgradeConfig() {
@@ -184,13 +186,18 @@ function getUpgradeConfig() {
   const type = typeEl ? typeEl.value : 'hp';
   const delayEl = document.getElementById('upgrade-delay');
   const delaySec = delayEl ? (parseFloat(delayEl.value) || 2) : 2;
+  const countEl = document.getElementById('spam-count');
+  const countVal = countEl ? (parseInt(countEl.value) || 10) : 10;
   const usernameEl = document.getElementById('username-upgrade');
+  const cmd = SPAM_CMDS[type] || SPAM_CMDS.hp;
   return {
     mode: 'upgrade',
     username: ((usernameEl && usernameEl.value) || 'Quất Bất Lực').trim(),
-    upgradeType: Object.prototype.hasOwnProperty.call(UPGRADE_CMDS, type) ? type : 'hp',
-    upgradeCmd: UPGRADE_CMDS[type] || UPGRADE_CMDS.hp,
-    upgradeDelayMs: Math.min(60000, Math.max(500, Math.round(delaySec * 1000))),
+    upgradeType: Object.prototype.hasOwnProperty.call(SPAM_CMDS, type) ? type : 'hp',
+    upgradeCmd: cmd,
+    upgradeDelayMs: Math.min(60000, Math.max(100, Math.round(delaySec * 1000))),
+    spamCount: Math.min(9999, Math.max(1, countVal)),
+    spamType: type,
   };
 }
 
@@ -227,7 +234,7 @@ function getDiangucConfig() {
 function getActiveConfig() {
   if (currentMode === 'dianguc') return getDiangucConfig();
   if (currentMode === 'bicanh') return getBicanhConfig();
-  if (currentMode === 'upgrade') return getUpgradeConfig();
+  if (currentMode === 'upgrade' || currentMode === 'spam') return getUpgradeConfig();
   return currentMode === 'luanhoi' ? getLuanHoiConfig() : getNpcConfig();
 }
 
@@ -242,7 +249,7 @@ async function toggleBot() {
     await window.api.botUpdateConfig(0, config);
     window.api.botStart(0);
     isNpcRunning = true;
-    const label = config.mode === 'luanhoi' ? 'Luân Hồi' : (config.mode === 'bicanh' ? 'Bicanh' : (config.mode === 'dianguc' ? 'Địa Ngục' : (config.mode === 'upgrade' ? 'Upgrade' : 'NPC')));
+    const label = config.mode === 'luanhoi' ? 'Luân Hồi' : (config.mode === 'bicanh' ? 'Bicanh' : (config.mode === 'dianguc' ? 'Địa Ngục' : (config.mode === 'upgrade' || config.mode === 'spam' ? 'Spam' : 'NPC')));
     appendLog(`[${label}] ▶ Started`);
   }
   updateBotButton();
@@ -428,7 +435,7 @@ async function updateStats() {
     } else if (status.mode === 'bicanh') {
       document.getElementById('stat-total').textContent = `⚔️ Đang spam skill...`;
     } else if (status.mode === 'upgrade') {
-      document.getElementById('stat-total').textContent = `⬆️ Đang auto upgrade (${status.upgradeCmd || ''}) x${status.upgradeCount || 0}...`;
+      document.getElementById('stat-total').textContent = `💀 Đang spam (${status.upgradeCmd || ''}) x${status.upgradeCount || 0}/${status.spamCount || ''}...`;
     } else if (status.mode === 'luanhoi') {
       const cur = status.lastLuanhoiTarget != null ? status.lastLuanhoiTarget : 0;
       const tgt = status.luanhoiTarget || 0;

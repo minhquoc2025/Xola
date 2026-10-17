@@ -448,7 +448,7 @@
         <button id="tab-dianguc"
           onclick="setMode('dianguc')">🔥 Địa Ngục</button>
         <button id="tab-upgrade"
-                onclick="setMode('upgrade')">⬆️ Upgrade</button>
+                onclick="setMode('spam')">💀 Spam</button>
         <button id="btn-config-modal" onclick="toggleSkillModal()" style="background:#2a2a4a;color:#eee;border:1px solid #3a3a5a;padding:5px 12px;border-radius:4px;cursor:pointer;font-size:11px;">⚙️</button>
       </div>
       <div id="skill-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:1000;justify-content:center;align-items:center;">
@@ -676,42 +676,53 @@
        </div>
 
         <!-- === UPGRADE CONFIG === -->
-       <div id="config-upgrade"
-            class="mode-config">
-         <div class="config-grid">
-           <div class="config-field full">
-             <button id="btn-upgrade-toggle"
-                     style="width: 100%;"
-                     class="btn-start"
-                     onclick="toggleBot()">▶ START</button>
-           </div>
-           <div class="config-field">
-             <label for="username-upgrade">Username</label>
-             <input id="username-upgrade"
-                    type="text"
-                    value="Quất Bất Lực"
-                    placeholder="Tên Discord">
-           </div>
-           <div class="config-field">
-             <label for="upgrade-delay">Delay (sec)</label>
-             <input id="upgrade-delay"
-                    type="number"
-                    value="2"
-                    min="1"
-                    max="60"
-                    step="0.5">
-           </div>
-           <div class="config-field full">
-             <label for="upgrade-type">Mẫu upgrade</label>
-             <select id="upgrade-type"
-                     style="width:100%;padding:3px 5px;background:#0a0a1a;border:1px solid #1a1a4e;border-radius:3px;color:#eee;font-size:11px;outline:none;">
-               <option value="hp">/upgrade hp — ❤ HP +10</option>
-               <option value="atk">/upgrade atk — ⚔ ATK +2~3</option>
-               <option value="def">/upgrade def — 🛡 DEF +2</option>
-             </select>
-           </div>
-         </div>
-       </div>
+        <!-- === SPAM CONFIG === -->
+        <div id="config-upgrade"
+             class="mode-config">
+          <div class="config-grid">
+            <div class="config-field full">
+              <button id="btn-upgrade-toggle"
+                      style="width: 100%;"
+                      class="btn-start"
+                      onclick="toggleBot()">▶ START</button>
+            </div>
+            <div class="config-field">
+              <label for="username-upgrade">Username</label>
+              <input id="username-upgrade"
+                     type="text"
+                     value="Quất Bất Lực"
+                     placeholder="Tên Discord">
+            </div>
+            <div class="config-field">
+              <label for="spam-count">Số lần gửi</label>
+              <input id="spam-count"
+                     type="number"
+                     value="10"
+                     min="1"
+                     max="9999">
+            </div>
+            <div class="config-field">
+              <label for="upgrade-delay">Delay (sec)</label>
+              <input id="upgrade-delay"
+                     type="number"
+                     value="2"
+                     min="0.1"
+                     max="60"
+                     step="0.1">
+            </div>
+            <div class="config-field full">
+              <label for="upgrade-type">Loại spam</label>
+              <select id="upgrade-type"
+                      style="width:100%;padding:3px 5px;background:#0a0a1a;border:1px solid #1a1a4e;border-radius:3px;color:#eee;font-size:11px;outline:none;">
+                <option value="hp">/upgrade hp — ❤ HP</option>
+                <option value="atk">/upgrade atk — ⚔ ATK</option>
+                <option value="def">/upgrade def — 🛡 DEF</option>
+                <option value="roll_x10">/roll_x10</option>
+                <option value="waifu_roll">/waifu roll 10</option>
+              </select>
+            </div>
+          </div>
+        </div>
      </div>
 
      <!-- Stats Panel (50%) -->
