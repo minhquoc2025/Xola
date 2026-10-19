@@ -3503,19 +3503,23 @@ return { text: bestText, tier: msgTier };
     if (!this.isRunning || this.runId !== runId) return;
 
     this.log('\n=== ⚔️ BICANH MODE ===');
+    this._bicanhMsgBaseline = await this.exec("(() => document.querySelectorAll('[role=\"article\"]').length)()");
     this.log('Gửi lệnh !bicanh...');
     await this.sendChat(this.bicanhCmd);
     await this.delay(this.rand(2000, 3000));
 
     // Click nút "Leo Tầng N" — game có thể trả lời chậm nên poll chờ tối đa 20s
     const floorClicked = await this.waitForBicanhButton(runId);
-    if (!floorClicked) {
+    if (floorClicked === 'battle') {
+      this.log('✅ Đã vào trận tầng 1 (không có nút Leo Tầng) — bắt đầu spam skill...');
+    } else if (!floorClicked) {
       this.log('⚠️ Không thấy nút Leo Tầng/Tiếp tục sau khi chờ. Thử lại...');
       await this.cooldownWait(8, runId);
       if (this.isRunning && this.runId === runId) this.bicanhLoop(runId);
       return;
+    } else {
+      this.log(`✅ Đã click "${floorClicked}" — bắt đầu spam skill...`);
     }
-    this.log(`✅ Đã click "${floorClicked}" — bắt đầu spam skill...`);
 
     // Spam skill theo danh sách, lặp lại cho đến khi user bấm stop
     this._bicanhSkillIdx = 0;
@@ -3555,8 +3559,14 @@ return { text: bestText, tier: msgTier };
         if (attempt > 1) this.log(`👉 Tìm thấy nút sau ${attempt} lần thử.`);
         return clicked;
       }
-    // Chờ game vẽ lại UI giữa các lần thử.
-    await this.delay(this.rand(1500, 2500));
+      // Tầng 1 đầu tuần: game không hiện nút "Leo Tầng" mà vào thẳng battle.
+      const battleReady = await this.isBicanhBattleReady();
+      if (battleReady) {
+        if (attempt > 1) this.log(`👉 Phát hiện battle tầng 1 sau ${attempt} lần thử.`);
+        return 'battle';
+      }
+      // Chờ game vẽ lại UI giữa các lần thử.
+      await this.delay(this.rand(1500, 2500));
       attempt++;
     }
     return null;
@@ -3583,11 +3593,40 @@ return { text: bestText, tier: msgTier };
            }
          }
        }
-       return null;
-     })()`);
-  }
+        return null;
+      })()`);
+   }
 
-  // Click skill bicanh theo tên
+   // Kiểm tra đã vào thẳng battle (tầng 1 đầu tuần) chưa có nút Leo Tầng
+   async isBicanhBattleReady() {
+     const skillNames = (this.luanhoiSkillNames || []).filter(Boolean);
+     const normalized = skillNames.map(name => String(name || '').normalize('NFD')
+       .replace(/[\u0300-\u036f]/g, '').replace(/\u0111/gi, 'd').replace(/\u01A1/gi, 'o').replace(/\u01B0/gi, 'u')
+       .toLowerCase().replace(/\s+/g, ' ').trim());
+     return await this.exec(`(() => {
+         const skillNames = ${JSON.stringify(normalized)};
+         const baseline = ${JSON.stringify(this._bicanhMsgBaseline || 0)};
+         const norm = value => String(value || '').normalize('NFD')
+           .replace(/[\\u0300-\\u036f]/g, '').replace(/\\u0111/gi, 'd').replace(/\\u01A1/gi, 'o').replace(/\\u01B0/gi, 'u')
+           .toLowerCase().replace(/\\s+/g, ' ').trim();
+         const msgs = document.querySelectorAll('[role="article"]');
+         const recent = Array.from(msgs).slice(baseline).reverse();
+        for (const msg of recent) {
+          if (msg.getAttribute && msg.getAttribute('data-bot-ephemeral') === 'true') continue;
+          const btns = msg.querySelectorAll('button, [role="button"]');
+          if (btns.length === 0) continue;
+          for (const btn of btns) {
+            if (btn.disabled) continue;
+            const clean = norm(btn.textContent);
+            if (!clean) continue;
+            if (skillNames.some(name => name && (clean === name || clean.includes(name)))) return true;
+          }
+        }
+        return false;
+      })()`);
+   }
+
+   // Click skill bicanh theo tên
   async clickNextBicanhSkill(skillName) {
     await this.dismissEphemeralMessages();
     const username = this.username || '';
