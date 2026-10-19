@@ -110,7 +110,7 @@ function normalizeSkillOrder(value) {
   const normalized = items
     .map(item => Number(String(item).trim()))
     .filter(item => Number.isInteger(item) && item >= 1 && item <= ALL_SKILLS.length);
-  return [...new Set(normalized)];
+  return normalized;
 }
 
 const SKILL_CLICK_DELAY_KEY = 'skillClickDelayMs';

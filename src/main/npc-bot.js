@@ -258,7 +258,7 @@ class NpcBot {
     const normalized = raw
       .map(item => Number(String(item).trim()))
       .filter(item => Number.isInteger(item) && item >= 1 && item <= this.luanhoiSkillNames.length);
-    return [...new Set(normalized)];
+    return normalized;
   }
 
   updateConfig(config) {
@@ -341,6 +341,7 @@ class NpcBot {
     }
     if (this.mode === 'bicanh') {
       this.log(`=== BICANH MODE: Spam技能 theo thứ tự ===`);
+      this._bicanhSkillIdx = 0;
       this.bicanhLoop(this.runId);
       return;
     }
@@ -3517,6 +3518,7 @@ return { text: bestText, tier: msgTier };
     this.log(`✅ Đã click "${floorClicked}" — bắt đầu spam skill...`);
 
     // Spam skill theo danh sách, lặp lại cho đến khi user bấm stop
+    this._bicanhSkillIdx = 0;
     while (this.isRunning && this.runId === runId) {
       let skillName;
       if (this.bicanhSkillOrder.length > 0) {
@@ -3553,8 +3555,8 @@ return { text: bestText, tier: msgTier };
         if (attempt > 1) this.log(`👉 Tìm thấy nút sau ${attempt} lần thử.`);
         return clicked;
       }
-    // Fast-path (đã chọn buff giữa trận) không cần chờ game vẽ lại UI → delay ngắn.
-    await this.delay(enteredFast ? this.rand(400, 800) : this.rand(1500, 2500));
+    // Chờ game vẽ lại UI giữa các lần thử.
+    await this.delay(this.rand(1500, 2500));
       attempt++;
     }
     return null;
