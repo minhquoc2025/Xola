@@ -1961,10 +1961,6 @@ class NpcBot {
       .replace(/\u0111/gi, 'd').replace(/\u01A1/gi, 'o').replace(/\u01B0/gi, 'u')
       .toLowerCase().replace(/[^a-z0-9]/g, '');
     const nameNoD = normalizeSkill(skillName);
-    const configuredNames = this.bicanhSkillOrder
-      .map(index => this.luanhoiSkillNames[index - 1])
-      .filter(Boolean)
-      .map(normalizeSkill);
     const username = this.username || '';
     const usernameNorm = String(username || '').normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
@@ -1976,7 +1972,6 @@ class NpcBot {
       const usernameNorm = ${JSON.stringify(usernameNorm)};
       const usernameFirst = ${JSON.stringify(usernameFirst)};
       const nameNoD = ${JSON.stringify(nameNoD)};
-      const configuredNames = ${JSON.stringify(configuredNames)};
       const normalizeSkill = value => String(value || '').normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
         .replace(/\u0111/gi, 'd').replace(/\u01A1/gi, 'o').replace(/\u01B0/gi, 'u')
@@ -2004,12 +1999,11 @@ class NpcBot {
         if (!available.length) continue;
 
         // Chỉ click nút skill thực sự, không chạm các nút HUD/setting như Trang Bị/Chỉ Số.
+        // Không fallback: nếu skill đích chưa sẵn sàng (cooldown/chưa render) thì trả null và đợi lượt sau.
         const target = available.find(item => item.clean.includes(nameNoD) || item.clean === nameNoD);
-        const fallback = available.find(item => configuredNames.includes(item.clean) || configuredNames.some(name => item.clean.includes(name)));
-        const chosen = target || fallback;
-        if (chosen) {
-          chosen.btn.click();
-          return chosen.raw;
+        if (target) {
+          target.btn.click();
+          return target.raw;
         }
       }
       return null;
