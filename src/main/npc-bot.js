@@ -44,6 +44,9 @@ class NpcBot {
     this.buttonDelayMs = 2000;
     // Delay giữa 2 lần click skill — dùng chung cho NPC / Luân Hồi / Bí Cảnh / Địa Ngục
     this.skillClickDelayMs = 1000;
+    // Thời gian chờ trước khi thử lại nếu không tìm thấy skill đích trong combo (cooldown/chưa render).
+    // Chờ chứ không nhảy cóc để giữ đúng quỹ đạo cooldown của game.
+    this.skillRetryWaitMs = 2000;
     this.autoClimb = false;
     this.targetMaxNpc = 60;
     this.climbWinsNeeded = 0;
@@ -269,6 +272,10 @@ class NpcBot {
     if (config.skillClickDelayMs !== undefined) {
       const ms = Number(config.skillClickDelayMs);
       if (Number.isFinite(ms)) this.skillClickDelayMs = Math.min(10000, Math.max(100, Math.round(ms)));
+    }
+    if (config.skillRetryWaitMs !== undefined) {
+      const ms = Number(config.skillRetryWaitMs);
+      if (Number.isFinite(ms)) this.skillRetryWaitMs = Math.min(10000, Math.max(100, Math.round(ms)));
     }
     if (config.autoClimb !== undefined) this.autoClimb = config.autoClimb;
     if (config.targetMaxNpc !== undefined) this.targetMaxNpc = config.targetMaxNpc;
@@ -3529,14 +3536,20 @@ return { text: bestText, tier: msgTier };
       const clicked = await this.clickNextBicanhSkill(skillName);
       if (clicked) {
         this.log(`🌀 Click skill bicanh: "${clicked}"`);
+        // Chỉ tăng index khi click đúng skill đích để giữ đúng quỹ đạo cooldown.
         this._bicanhSkillIdx++;
-      }
-      const cd = await this.checkBicanhCooldown();
-      if (cd > 0) {
-        this.log(`⏳ Cooldown — chờ ${cd}ms`);
-        await this.delay(cd);
+        const cd = await this.checkBicanhCooldown();
+        if (cd > 0) {
+          this.log(`⏳ Cooldown — chờ ${cd}ms`);
+          await this.delay(cd);
+        } else {
+          await this.delay(this.skillClickDelayMs);
+        }
       } else {
-        await this.delay(this.skillClickDelayMs);
+        // Không tìm thấy skill đích (đang hồi/chưa render) → KHÔNG nhảy cóc, chờ rồi thử lại
+        // cùng skill để không phá vỡ nhịp cooldown đã tính (vd 3:3:3).
+        this.log(`⚠️ Không tìm thấy skill "${skillName}" — đợi ${this.skillRetryWaitMs}ms rồi thử lại (giữ nguyên combo)...`);
+        await this.delay(this.skillRetryWaitMs);
       }
     }
 
