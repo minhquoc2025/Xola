@@ -106,7 +106,63 @@ async function testNoResponseDeduplication() {
   console.log('NPC timeout message deduplication passed');
 }
 
-testNoResponseDeduplication().catch(error => {
-  console.error(error);
-  process.exitCode = 1;
-});
+async function testSellAllAfterRollX10() {
+  const sent = [];
+  const bot = new NpcBot({ executeJavaScript: () => 0 }, 1);
+  bot.mode = 'upgrade';
+  bot.spamType = 'roll_x10';
+  bot.upgradeCmd = '/roll_x10';
+  bot.spamCount = 3;
+  bot.upgradeDelayMs = 100;
+  bot.isRunning = true;
+  bot.runId = 1;
+  bot.log = () => {};
+  bot.delay = async () => {};
+  bot.sendSlashChat = async cmd => { sent.push(cmd); };
+
+  await bot.upgradeLoop(1);
+
+  const expected = [
+    '/roll_x10',
+    '/roll_x10',
+    '/roll_x10',
+    '/sellall star:🔵 1 Sao',
+    '/sellall star:🟢 2 Sao',
+    '/sellall star:🟡 3 Sao',
+  ];
+  if (JSON.stringify(sent) !== JSON.stringify(expected)) {
+    throw new Error('Spam /roll_x10 phải dọn túi sau khi đạt target, thực tế: ' + JSON.stringify(sent));
+  }
+  console.log('Spam /roll_x10 sell-all cleanup passed');
+}
+
+async function testNoSellAllForOtherSpamTypes() {
+  const sent = [];
+  const bot = new NpcBot({ executeJavaScript: () => 0 }, 1);
+  bot.mode = 'upgrade';
+  bot.spamType = 'hp';
+  bot.upgradeCmd = '/upgrade hp';
+  bot.spamCount = 2;
+  bot.upgradeDelayMs = 100;
+  bot.isRunning = true;
+  bot.runId = 1;
+  bot.log = () => {};
+  bot.delay = async () => {};
+  bot.sendSlashChat = async cmd => { sent.push(cmd); };
+
+  await bot.upgradeLoop(1);
+
+  if (sent.some(cmd => cmd.startsWith('/sellall'))) {
+    throw new Error('Chỉ spam /roll_x10 mới được dọn túi, thực tế: ' + JSON.stringify(sent));
+  }
+  console.log('Non-roll_x10 spam does not sell items passed');
+}
+
+testNoResponseDeduplication()
+  .then(testSellAllAfterRollX10)
+  .then(testNoSellAllForOtherSpamTypes)
+  .catch(error => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+

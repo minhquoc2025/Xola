@@ -27,6 +27,13 @@ function diangucPatternRegex(pattern) {
 
 const DIANGUC_COMPILED_PATTERNS = DIANGUC_PRIORITY_PATTERNS.map(diangucPatternRegex);
 
+// Lệnh dọn túi chạy sau khi spam /roll_x10 hoàn thành target: bán sao 1-3 sao.
+const SELLALL_STAR_CMDS = [
+  '/sellall star:🔵 1 Sao',
+  '/sellall star:🟢 2 Sao',
+  '/sellall star:🟡 3 Sao',
+];
+
 class NpcBot {
   constructor(wc, idx) {
     this.wc = wc;
@@ -40,7 +47,7 @@ class NpcBot {
     this.defeatCooldownSec = 300;
     // Giới hạn mỗi trận NPC: hết giờ thì !ketthuc + !npc để bắt đầu lại,
     // fix case game không phản hồi nhưng vẫn cho click skill (vòng lặp vô tận).
-    this.battleTimeoutMs = 15 * 60 * 1000;
+    this.battleTimeoutMs = 5 * 60 * 1000;
     this.buttonDelayMs = 2000;
     // Delay giữa 2 lần click skill — dùng chung cho NPC / Luân Hồi / Bí Cảnh / Địa Ngục
     this.skillClickDelayMs = 1000;
@@ -566,9 +573,34 @@ class NpcBot {
       if (this.upgradeCount >= maxCount) break;
       await this.delay(this.upgradeDelayMs);
     }
+    const doneTarget = this.upgradeCount >= maxCount;
     this.log(`⏹ SPAM MODE đã dừng sau ${this.upgradeCount} lần gửi.`);
+    // Chỉ dọn túi khi người dùng chọn spam /roll_x10 và đã đạt target.
+    if (doneTarget && this.isRollX10Spam()) {
+      await this.sellAllStars();
+    }
     this.isRunning = false;
     this.runId = null;
+  }
+
+  // Người dùng có chọn spam /roll_x10 không (theo loại spam hoặc lệnh đã gửi).
+  isRollX10Spam() {
+    return this.spamType === 'roll_x10' || this.upgradeCmd === '/roll_x10';
+  }
+
+  // Dọn túi: bán hết sao 1-3 sao bằng /sellall.
+  async sellAllStars() {
+    this.log(`🧹 Dọn túi: gửi ${SELLALL_STAR_CMDS.length} lệnh /sellall...`);
+    for (const cmd of SELLALL_STAR_CMDS) {
+      try {
+        await this.sendSlashChat(cmd);
+        this.log(`🧹 Đã gửi: ${cmd}`);
+      } catch (e) {
+        this.log('⚠️ Dọn túi lỗi:', e.message);
+      }
+      await this.delay(Math.max(500, this.upgradeDelayMs));
+    }
+    this.log('🧹 Dọn túi xong.');
   }
 
   getStatus() {
@@ -1080,11 +1112,53 @@ class NpcBot {
       const stillThere = Number(await this.exec(`document.querySelector('[role="textbox"]')?.textContent?.length || 0`)) || 0;
       if (stillThere > 1) await this.pressEnterTrusted();
       return true;
+    } else if (cmd.startsWith('/sellall')) {
+      await this.typeSlashCommandText(cmd);
+      return true;
     }
 
     await this.sendChat(cmd);
     await this.delay(500);
     await this.pressEnterTrusted();
+    return true;
+  }
+
+  // Gõ slash command dạng text đầy đủ (vd: /sellall star:🔵 1 Sao) rồi Enter để gửi.
+  // Duyệt theo code point để không vỡ emoji (🔵 🟢 🟡 là ký tự 2 surrogate).
+  async typeSlashCommandText(cmd) {
+    await this.exec(`document.querySelector('[role="textbox"]')?.click()`);
+    await this.delay(this.rand(200, 400));
+    const len0 = Number(await this.exec(`document.querySelector('[role="textbox"]')?.textContent?.length || 0`)) || 0;
+    for (let i = 0; i < len0; i++) {
+      await this.exec(`(() => {
+        const el = document.querySelector('[role="textbox"]');
+        if (!el) return;
+        el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', code: 'Backspace', keyCode: 8, which: 8, bubbles: true }));
+        el.dispatchEvent(new InputEvent('beforeinput', { inputType: 'deleteContentBackward', bubbles: true, cancelable: true }));
+        el.dispatchEvent(new InputEvent('input', { inputType: 'deleteContentBackward', bubbles: true, cancelable: true }));
+        el.dispatchEvent(new KeyboardEvent('keyup', { key: 'Backspace', code: 'Backspace', keyCode: 8, bubbles: true }));
+      })()`);
+      await this.delay(this.rand(20, 40));
+    }
+    const chars = Array.from(cmd);
+    for (const ch of chars) {
+      await this.exec(`(() => {
+        const el = document.querySelector('[role="textbox"]');
+        if (!el) return;
+        el.dispatchEvent(new InputEvent('beforeinput', { inputType: 'insertText', data: ${JSON.stringify(ch)}, bubbles: true, cancelable: true }));
+        el.dispatchEvent(new InputEvent('input', { inputType: 'insertText', data: ${JSON.stringify(ch)}, bubbles: true, cancelable: true }));
+      })()`);
+      await this.delay(this.rand(40, 80));
+    }
+    await this.delay(300);
+    await this.pressEnterTrusted();
+    await this.delay(500);
+    const stillThere = Number(await this.exec(`document.querySelector('[role="textbox"]')?.textContent?.length || 0`)) || 0;
+    // Enter 1 có thể chỉ chọn option autocomplete, Enter 2 mới gửi message.
+    if (stillThere > 1) {
+      await this.pressEnterTrusted();
+      await this.delay(400);
+    }
     return true;
   }
 
