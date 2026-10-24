@@ -2599,7 +2599,7 @@ class NpcBot {
     // RESET trạng thái tầng mỗi run mới — không để giá trị cũ (từ run trước) làm sai logic
     // advance/click buff (window.luanhoiBuffTierClicked phải về 0 để tầng 1 được chọn lại).
     this.luanhoiCurrentTier = 0;
-    await this.exec('window.luanhoiBuffTierClicked = 0; true;');
+    await this.exec('window.luanhoiBuffTierClicked = 0; window.luanhoiBuffClickedAt = 0; true;');
 
     this.log(`\n=== 🌀 LUÂN HỒI: ${this.luanhoiCmd} ===`);
     await this.exec('window.luanhoiAnchorBeforeId = window.botMaxMsgId || "0"; window.luanhoiAnchorId = ""; true;');
@@ -2907,9 +2907,20 @@ class NpcBot {
           if (tm && tm[1]) msgTier = parseInt(tm[1]);
         }
         const clickedTier = window.luanhoiBuffTierClicked || 0;
-        if (msgTier > 0 && msgTier <= clickedTier) continue;
+        const lastClickedTime = window.luanhoiBuffClickedAt || 0;
+        const now = Date.now();
+
+        // 1. Bỏ qua tầng cũ hơn tầng đã click
+        if (msgTier > 0 && msgTier < clickedTier) continue;
+
+        // 2. Nếu cùng tầng đã click (hoặc không rõ tầng) nhưng chưa đủ 3.5s -> chờ game xử lý, không spam
+        if ((msgTier === 0 || msgTier === clickedTier) && lastClickedTime > 0 && (now - lastClickedTime < 3500)) continue;
+
         bestBtn.click();
-        return { type: 'buff', text: bestText, tier: msgTier };
+        const isRetry = (msgTier > 0 && msgTier === clickedTier) || (msgTier === 0 && lastClickedTime > 0);
+        window.luanhoiBuffTierClicked = Math.max(clickedTier, msgTier);
+        window.luanhoiBuffClickedAt = now;
+        return { type: isRetry ? 'buff-retry' : 'buff', text: bestText, tier: msgTier };
       }
 
       // ---- 2) ADVANCE (tầng mới xuất hiện qua card buff, chưa được click ở bước 1) ----
@@ -3127,15 +3138,23 @@ class NpcBot {
         // msgTier > 0 → chốt thẳng, KHÔNG cần đoán "+1" và không cần chờ game sửa
         // message (game giữ nguyên "Tầng N" suốt trận, chỉ đổi khi thắng xong).
         if (tick.tier > 0) {
-          await this.exec(`window.luanhoiBuffTierClicked = ${tick.tier}; true;`);
+          await this.exec(`window.luanhoiBuffTierClicked = ${tick.tier}; window.luanhoiBuffClickedAt = ${Date.now()}; true;`);
           this.log(`⚡ Đã chọn buff giữa trận/sang tầng: "${tick.text}" (vào tầng ${tick.tier}).`);
         } else {
           // Không đọc được tầng từ card → KHÔNG đoán. Giữ nguyên giá trị, nhánh
           // readLuanhoiTier() ngay sau đó sẽ chốt tầng thật từ message battle.
+          await this.exec(`window.luanhoiBuffClickedAt = ${Date.now()}; true;`);
           this.logDebug(`buff không có "Tầng N" trong message — bỏ qua, không đoán (+1).`);
           this.log(`⚡ Đã chọn buff giữa trận/sang tầng: "${tick.text}" (tầng không đọc được).`);
         }
         return { ended: true, result: 'advance' };
+      }
+
+      if (tick && tick.type === 'buff-retry') {
+        this.log(`⚡ Game chưa vào trận sau khi chọn buff tầng ${tick.tier || '?'} (lag tương tác) → Đã click lại: "${tick.text}". Chờ game phản hồi...`);
+        noSkillSince = null; // reset bộ đếm timeout
+        await this.delay(this.rand(1500, 2000));
+        continue;
       }
 
       if (tick && tick.type === 'advance') {
@@ -3594,12 +3613,22 @@ class NpcBot {
           if (tm && tm[1]) msgTier = parseInt(tm[1]);
         }
 
-        // Nếu đã click buff cho tầng này rồi → bỏ qua
+        // Nếu đã click buff cho tầng này rồi → kiểm tra thời gian để click lại nếu game lag
         const clickedTier = window.luanhoiBuffTierClicked || 0;
-        if (msgTier > 0 && msgTier <= clickedTier) continue;
+        const lastClickedTime = window.luanhoiBuffClickedAt || 0;
+        const now = Date.now();
+
+        // 1. Bỏ qua tầng cũ hơn tầng đã click
+        if (msgTier > 0 && msgTier < clickedTier) continue;
+
+        // 2. Nếu cùng tầng đã click (hoặc không rõ tầng) nhưng chưa đủ 3.5s -> chờ game xử lý, không spam
+        if ((msgTier === 0 || msgTier === clickedTier) && lastClickedTime > 0 && (now - lastClickedTime < 3500)) continue;
 
         bestBtn.click();
-        return { text: bestText, tier: msgTier };
+        const isRetry = (msgTier > 0 && msgTier === clickedTier) || (msgTier === 0 && lastClickedTime > 0);
+        window.luanhoiBuffTierClicked = Math.max(clickedTier, msgTier);
+        window.luanhoiBuffClickedAt = now;
+        return { text: bestText, tier: msgTier, isRetry };
       }
       return null;
     })()`);
@@ -3608,12 +3637,14 @@ class NpcBot {
       // msgTier là tầng SẮP VÀO → msgTier > 0 là giá trị CHÍNH XÁC, chốt thẳng.
       // msgTier = 0 (card không ghi "Tầng N") → KHÔNG đoán "+1", để readLuanhoiTier()
       // chốt tầng thật từ message battle ở bước kế.
+      const actionName = clicked.isRetry ? 'Chọn lại buff' : 'Chọn buff';
       if (clicked.tier > 0) {
-        await this.exec(`window.luanhoiBuffTierClicked = ${clicked.tier}; true;`);
-        this.log(`🎯 Chọn buff: "${clicked.text}" (ưu tiên, vào tầng ${clicked.tier}).`);
+        await this.exec(`window.luanhoiBuffTierClicked = ${clicked.tier}; window.luanhoiBuffClickedAt = ${Date.now()}; true;`);
+        this.log(`🎯 ${actionName}: "${clicked.text}" (ưu tiên, vào tầng ${clicked.tier}).`);
       } else {
+        await this.exec(`window.luanhoiBuffClickedAt = ${Date.now()}; true;`);
         this.logDebug(`buff không có "Tầng N" trong message — bỏ qua, không đoán (+1).`);
-        this.log(`🎯 Chọn buff: "${clicked.text}" (ưu tiên, card không ghi số tầng).`);
+        this.log(`🎯 ${actionName}: "${clicked.text}" (ưu tiên, card không ghi số tầng).`);
       }
       return clicked.text;
     }
