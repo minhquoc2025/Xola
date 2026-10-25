@@ -158,11 +158,33 @@ async function testNoSellAllForOtherSpamTypes() {
   console.log('Non-roll_x10 spam does not sell items passed');
 }
 
+async function testLuanhoiTowerFallIsLoss() {
+  const resultMessage = {
+    textContent: '💀 Ngã Xuống Luân Hồi Tháp! Nhận 10% thưởng tích lũy.',
+    getAttribute: name => name === 'data-luanhoi-owned' ? 'true' : null,
+    querySelectorAll: () => [],
+  };
+  const bot = new NpcBot({
+    executeJavaScript: script => vm.runInNewContext(script, {
+      document: { querySelectorAll: () => [resultMessage] },
+      window: { luanhoiBuffTierClicked: 190 },
+    }),
+  }, 1);
+  bot.markLuanhoiMessages = async () => {};
+  bot.dismissEphemeralMessages = async () => {};
+
+  const result = await bot.luanhoiBattleTick();
+  if (!result || result.type !== 'end' || result.result !== 'loss') {
+    throw new Error('Luân Hồi tower fall result was not recognized as a loss: ' + JSON.stringify(result));
+  }
+  console.log('Luân Hồi tower fall loss detection passed');
+}
+
 testNoResponseDeduplication()
   .then(testSellAllAfterRollX10)
   .then(testNoSellAllForOtherSpamTypes)
+  .then(testLuanhoiTowerFallIsLoss)
   .catch(error => {
     console.error(error);
     process.exitCode = 1;
   });
-

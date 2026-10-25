@@ -1434,7 +1434,7 @@ class NpcBot {
         const text = rawText.toLowerCase();
 
         const hasWin = /chiến thắng|thắng!/.test(text);
-        const hasLoss = /thất bại|bạn đã thua|thua!/.test(text);
+        const hasLoss = /thất bại|bạn đã thua|thua!|ngã xuống luân hồi tháp|nga xuong luan hoi thap/.test(text);
 
         const btns = msg.querySelectorAll('button, [role="button"]');
         const tNames = ['pham', 'linh', 'huyen', 'thien'];
@@ -1447,7 +1447,7 @@ class NpcBot {
         }
 
         const isLuanhoi = hasBuff ||
-          /luân hồi tháp|luanhoi thap|tháp luân hồi|thap luanhoi|thắng boss|kết thúc luân hồi|ket thuc luan hoi|tiếp tục leo tháp|tiep tuc leo thap|chọn 1 cổng|chon 1 cong|hạ gục boss|han guc boss|đánh bại boss|danh bai boss|chọn độ khó|chon do kho|kết thúc nhận|ket thuc nhan/i.test(rawText);
+          /luân hồi tháp|luanhoi thap|tháp luân hồi|thap luanhoi|ngã xuống luân hồi tháp|nga xuong luan hoi thap|thắng boss|kết thúc luân hồi|ket thuc luan hoi|tiếp tục leo tháp|tiep tuc leo thap|chọn 1 cổng|chon 1 cong|hạ gục boss|han guc boss|đánh bại boss|danh bai boss|chọn độ khó|chon do kho|kết thúc nhận|ket thuc nhan/i.test(rawText);
         if (!isLuanhoi) continue;
 
         // Advance: message buff tầng mới > tầng đã click
@@ -2675,7 +2675,6 @@ class NpcBot {
       // Nếu nhánh này hỏng (buff chưa kịp hiện) thì rơi về luồng đầy đủ bên dưới.
       if (autoAdvanced) {
         autoAdvanced = false;
-        await this.delay(this.rand(600, 1000));
         entered = true;
         enteredFast = true;
         break;
@@ -2728,7 +2727,12 @@ class NpcBot {
       return;
     }
 
-    await this.delay(this.rand(1500, 2500));
+    if (!enteredFast) {
+      await this.delay(this.rand(1500, 2500));
+    } else if (opts.advanceSelectedAt) {
+      const remaining = 2000 - (Date.now() - opts.advanceSelectedAt);
+      if (remaining > 0) await this.delay(remaining);
+    }
 
     const isAlreadyFighting = await this.checkAlreadyFighting();
     const battleResult = await this.luanhoiBattle(isAlreadyFighting, runId);
@@ -2745,6 +2749,7 @@ class NpcBot {
     // 'win' hoặc 'advance' (sang tầng) đều coi là thắng tầng đó
     const isWin = battleResult && battleResult.ended && battleResult.result === 'win';
     const isAdvance = battleResult && battleResult.ended && battleResult.result === 'advance';
+    const isLoss = battleResult && battleResult.ended && battleResult.result === 'loss';
 
     if (isWin) {
       this.stats.wins++;
@@ -2752,17 +2757,34 @@ class NpcBot {
     } else if (isAdvance) {
       this.stats.wins++;
       this.log('⏩ THẮNG TẦNG / SANG TẦNG KẾ!');
-    } else {
+    } else if (isLoss) {
       this.stats.losses++;
       this.log('❌ THUA BOSS!');
+    } else {
+      this.log('⚠️ Luân hồi: không xác định được kết quả trận.');
     }
 
-    // Đợi game cập nhật message kết quả
-    await this.delay(this.rand(2500, 3500));
+    if (isLoss) {
+      this.log(`🔁 Phát hiện thua — bắt đầu lại Luân Hồi (${this.luanhoiCmd}) sau ${this.luanhoiRestartDelaySec}s...`);
+      await this.cooldownWait(this.luanhoiRestartDelaySec, runId);
+      if (this.isRunning && this.runId === runId) {
+        this.luanhoiSkillIdx = 0;
+        this.lastLuanhoiTarget = null;
+        this.luanhoiLoop(runId);
+      }
+      return;
+    }
+
+    // Với tầng thường, tính thời gian chờ từ lúc click buff thay vì cộng nhiều delay
+    // sau khi game đã báo sang tầng.
+    if (!isAdvance) await this.delay(this.rand(2500, 3500));
 
     let currentTier = await this.readLuanhoiTier();
+    if (isAdvance && battleResult.tier > 0) currentTier = battleResult.tier;
     this.lastLuanhoiTarget = currentTier;
     if (currentTier > 0) this.luanhoiCurrentTier = currentTier;
+    const quickAdvance = isAdvance && currentTier > 0 && currentTier % 10 !== 0;
+    if (isAdvance && !quickAdvance) await this.delay(this.rand(2500, 3500));
 
     if (currentTier >= this.luanhoiTarget && isWin) {
       this.log(`✅ Đã đạt tầng mục tiêu ${this.luanhoiTarget} (hiện tại ${currentTier}). Chọn DỪNG nhận thưởng.`);
@@ -2839,12 +2861,15 @@ class NpcBot {
 
     // Chỉ chờ dài khi vừa hạ boss / đạt target (game cần thời gian cập nhật message kết quả).
     // Sang tầng thường (advance) thì game tự chuyển tầng kế + tự đánh → chờ ngắn là đủ.
-    await this.delay(isAdvance ? this.rand(500, 1000) : this.rand(2500, 3500));
+    if (!quickAdvance) {
+      await this.delay(isAdvance ? this.rand(500, 1000) : this.rand(2500, 3500));
+    }
 
     if (this.isRunning && this.runId === runId) {
       // Tầng thường sau advance: buff đã chọn xong, không có cửa boss → fast-path.
       this.luanhoiFightLoop(runId, {
-        autoAdvanced: !!isAdvance && currentTier > 0 && currentTier % 10 !== 0,
+        autoAdvanced: quickAdvance,
+        advanceSelectedAt: quickAdvance ? battleResult.selectedAt : null,
         afterBossWin: justWonBoss,
       });
     }
@@ -2960,7 +2985,7 @@ class NpcBot {
           if (msg.getAttribute('data-luanhoi-owned') !== 'true') continue;
           const text = rawText.toLowerCase();
           const hasWin = /chiến thắng|thắng!/.test(text);
-          const hasLoss = /thất bại|bạn đã thua|thua!/.test(text);
+          const hasLoss = /thất bại|bạn đã thua|thua!|ngã xuống luân hồi tháp|nga xuong luan hoi thap/.test(text);
           const btns = msg.querySelectorAll('button, [role="button"]');
           let hasBuff = false;
           for (const b of btns) {
@@ -2970,7 +2995,7 @@ class NpcBot {
             if (tierNames.includes(clean)) { hasBuff = true; break; }
           }
           const isLuanhoi = hasBuff ||
-            /luân hồi tháp|luanhoi thap|tháp luân hồi|thap luanhoi|thắng boss|kết thúc luân hồi|ket thuc luan hoi|tiếp tục leo tháp|tiep tuc leo thap|chọn 1 cổng|chon 1 cong|hạ gục boss|han guc boss|đánh bại boss|danh bai boss|chọn độ khó|chon do kho|kết thúc nhận|ket thuc nhan/i.test(rawText);
+            /luân hồi tháp|luanhoi thap|tháp luân hồi|thap luanhoi|ngã xuống luân hồi tháp|nga xuong luan hoi thap|thắng boss|kết thúc luân hồi|ket thuc luan hoi|tiếp tục leo tháp|tiep tuc leo thap|chọn 1 cổng|chon 1 cong|hạ gục boss|han guc boss|đánh bại boss|danh bai boss|chọn độ khó|chon do kho|kết thúc nhận|ket thuc nhan/i.test(rawText);
           if (!isLuanhoi) continue;
 
           if (hasBuff && !hasWin && !hasLoss && knownTier > 0) {
@@ -3134,6 +3159,7 @@ class NpcBot {
       const tick = await this.luanhoiBattleTick();
 
       if (tick && tick.type === 'buff') {
+        const selectedAt = Date.now();
         // msgTier là tầng SẮP VÀO (card buff ghi "Tầng N" = tầng N sắp đánh), nên
         // msgTier > 0 → chốt thẳng, KHÔNG cần đoán "+1" và không cần chờ game sửa
         // message (game giữ nguyên "Tầng N" suốt trận, chỉ đổi khi thắng xong).
@@ -3147,7 +3173,7 @@ class NpcBot {
           this.logDebug(`buff không có "Tầng N" trong message — bỏ qua, không đoán (+1).`);
           this.log(`⚡ Đã chọn buff giữa trận/sang tầng: "${tick.text}" (tầng không đọc được).`);
         }
-        return { ended: true, result: 'advance' };
+        return { ended: true, result: 'advance', selectedAt, tier: tick.tier };
       }
 
       if (tick && tick.type === 'buff-retry') {
