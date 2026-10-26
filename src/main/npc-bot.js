@@ -113,6 +113,8 @@ class NpcBot {
     };
     this.luanhoiAutoRestart = true;
     this.luanhoiRestartDelaySec = 5;
+    this.luanhoiTotalRuns = 0;  // 0 = kh\u00f4ng gi\u1edbi h\u1ea1n
+    this.luanhoiRunCount = 0;   // \u0111\u1ebfm s\u1ed1 l\u1ea7n v\u01b0\u1ee3t t\u1ea7ng trong phi\u00ean hi\u1ec7n t\u1ea1i
     // Log debug: bật qua env XOLA_DEBUG=1 hoặc bot.debug = true
     this.debug = process.env.XOLA_DEBUG === '1';
   }
@@ -296,6 +298,7 @@ class NpcBot {
     if (config.luanhoiTarget !== undefined) this.luanhoiTarget = config.luanhoiTarget;
     if (config.luanhoiCmd !== undefined) this.luanhoiCmd = config.luanhoiCmd;
     if (config.luanhoiSkillNames !== undefined) this.luanhoiSkillNames = config.luanhoiSkillNames;
+    if (config.luanhoiTotalRuns !== undefined) this.luanhoiTotalRuns = config.luanhoiTotalRuns;
     if (config.dianguc !== undefined) this.dianguc = config.dianguc;
     if (config.diangucCmd !== undefined) this.diangucCmd = config.diangucCmd;
     if (config.diangucDelayMs !== undefined) this.diangucDelayMs = config.diangucDelayMs;
@@ -340,6 +343,7 @@ class NpcBot {
     this.climbWinsDone = 0;
     this.processedLockIds = new Set();
     this.luanhoiSkillIdx = 0;
+    this.luanhoiRunCount = 0;
     this.lastLuanhoiTarget = null;
     this.diangucPending = null;
     this.diangucSkillIdx = 0;
@@ -615,6 +619,8 @@ class NpcBot {
       battleCount: this.battleCount,
       luanhoiTarget: this.luanhoiTarget,
       lastLuanhoiTarget: this.lastLuanhoiTarget,
+      luanhoiTotalRuns: this.luanhoiTotalRuns,
+      luanhoiRunCount: this.luanhoiRunCount,
       totalBattles: this.totalBattles,
       npcNumber: this.npcNumber,
       cooldownMs: this.cooldownMs,
@@ -1434,7 +1440,7 @@ class NpcBot {
         const text = rawText.toLowerCase();
 
         const hasWin = /chiến thắng|thắng!/.test(text);
-        const hasLoss = /thất bại|bạn đã thua|thua!|ngã xuống luân hồi tháp|nga xuong luan hoi thap/.test(text);
+        const hasLoss = /thất bại|bạn đã thua|thua!|ngã xuống luân hồi tháp|nga xuong luan hoi thap|kết thúc luân hồi|ket thuc luan hoi/.test(text);
 
         const btns = msg.querySelectorAll('button, [role="button"]');
         const tNames = ['pham', 'linh', 'huyen', 'thien'];
@@ -2382,7 +2388,7 @@ class NpcBot {
       this.saveDiangucData();
       if (result === 'TARGET') {
         this.log('✅ Đã gặp message đánh boss 41 hoặc tầng 51. Dừng Địa Ngục.');
-        this.stop();
+        await this.stop();
         return;
       }
       if (result === 'DEATH') {
@@ -2763,8 +2769,30 @@ class NpcBot {
     } else {
       this.log('⚠️ Luân hồi: không xác định được kết quả trận.');
     }
+    /*
+    }
 
-    if (isLoss) {
+
+
+
+
+
+
+      this.printStats();
+      this.stop();
+      return;
+    }
+
+    */ if (isLoss) {
+      this.luanhoiRunCount++;
+      const _totalRunsLimit = this.luanhoiTotalRuns || 0;
+      this.log(`🏁 Kết thúc lượt Luân Hồi (thua trận). Đã đi: ${this.luanhoiRunCount}${_totalRunsLimit > 0 ? ' / ' + _totalRunsLimit : ''} lần`);
+      if (_totalRunsLimit > 0 && this.luanhoiRunCount >= _totalRunsLimit) {
+        this.log(`🛑 Đã hoàn thành đủ ${_totalRunsLimit} lần đi. Dừng bot.`);
+        this.printStats();
+        await this.stop();
+        return;
+      }
       this.log(`🔁 Phát hiện thua — bắt đầu lại Luân Hồi (${this.luanhoiCmd}) sau ${this.luanhoiRestartDelaySec}s...`);
       await this.cooldownWait(this.luanhoiRestartDelaySec, runId);
       if (this.isRunning && this.runId === runId) {
@@ -2790,6 +2818,15 @@ class NpcBot {
       this.log(`✅ Đã đạt tầng mục tiêu ${this.luanhoiTarget} (hiện tại ${currentTier}). Chọn DỪNG nhận thưởng.`);
       const stopResult = await this.clickContinueOrStop('stop');
       this.log(`[DỪNG] clickContinueOrStop('stop') returned: ${stopResult}`);
+      this.luanhoiRunCount++;
+      const _totalRunsLimit = this.luanhoiTotalRuns || 0;
+      this.log(`🏁 Kết thúc lượt Luân Hồi (đạt Tầng Dừng). Đã đi: ${this.luanhoiRunCount}${_totalRunsLimit > 0 ? ' / ' + _totalRunsLimit : ''} lần`);
+      if (_totalRunsLimit > 0 && this.luanhoiRunCount >= _totalRunsLimit) {
+        this.log(`🛑 Đã hoàn thành đủ ${_totalRunsLimit} lần đi. Dừng bot.`);
+        this.printStats();
+        await this.stop();
+        return;
+      }
       this.printStats();
 
       // >>> NEW: tự động gửi lại lệnh !luanhoi để chạy vòng mới, giống cơ chế
@@ -2985,7 +3022,7 @@ class NpcBot {
           if (msg.getAttribute('data-luanhoi-owned') !== 'true') continue;
           const text = rawText.toLowerCase();
           const hasWin = /chiến thắng|thắng!/.test(text);
-          const hasLoss = /thất bại|bạn đã thua|thua!|ngã xuống luân hồi tháp|nga xuong luan hoi thap/.test(text);
+          const hasLoss = /thất bại|bạn đã thua|thua!|ngã xuống luân hồi tháp|nga xuong luan hoi thap|kết thúc luân hồi|ket thuc luan hoi/.test(text);
           const btns = msg.querySelectorAll('button, [role="button"]');
           let hasBuff = false;
           for (const b of btns) {

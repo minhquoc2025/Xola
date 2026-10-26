@@ -5,10 +5,15 @@ let isMuted = false;
 window.addEventListener('DOMContentLoaded', () => {
   initWebview();
   loadLogs();
+  loadLuanHoiSettings();
   startStatsPolling();
 
   window.api.onLogMessage((msg) => {
     appendLog(msg);
+    if ((msg.includes('Bot stopped') || msg.includes('Dừng bot')) && isNpcRunning) {
+      isNpcRunning = false;
+      updateBotButton();
+    }
   });
 });
 
@@ -146,19 +151,76 @@ function getNpcConfig() {
   };
 }
 
+function loadLuanHoiSettings() {
+  const savedTotalRuns = localStorage.getItem("luanhoi-total-runs");
+  if (savedTotalRuns !== null) {
+    const el = document.getElementById("luanhoi-total-runs");
+    if (el) el.value = savedTotalRuns;
+  }
+  const savedTarget = localStorage.getItem("luanhoi-target");
+  if (savedTarget !== null) {
+    const el = document.getElementById("luanhoi-target");
+    if (el) el.value = savedTarget;
+  }
+  const savedUsername = localStorage.getItem("username-lh");
+  if (savedUsername !== null) {
+    const el = document.getElementById("username-lh");
+    if (el) el.value = savedUsername;
+  }
+  const savedCmd = localStorage.getItem("luanhoi-cmd");
+  if (savedCmd !== null) {
+    const el = document.getElementById("luanhoi-cmd");
+    if (el) el.value = savedCmd;
+  }
+  const savedDelay = localStorage.getItem("button-delay-lh");
+  if (savedDelay !== null) {
+    const el = document.getElementById("button-delay-lh");
+    if (el) el.value = savedDelay;
+  }
+
+  ["luanhoi-total-runs", "luanhoi-target", "username-lh", "luanhoi-cmd", "button-delay-lh"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener("input", saveLuanHoiSettings);
+      el.addEventListener("change", saveLuanHoiSettings);
+    }
+  });
+}
+
+function saveLuanHoiSettings() {
+  const totalRunsEl = document.getElementById("luanhoi-total-runs");
+  if (totalRunsEl) localStorage.setItem("luanhoi-total-runs", totalRunsEl.value);
+
+  const targetEl = document.getElementById("luanhoi-target");
+  if (targetEl) localStorage.setItem("luanhoi-target", targetEl.value);
+
+  const usernameEl = document.getElementById("username-lh");
+  if (usernameEl) localStorage.setItem("username-lh", usernameEl.value);
+
+  const cmdEl = document.getElementById("luanhoi-cmd");
+  if (cmdEl) localStorage.setItem("luanhoi-cmd", cmdEl.value);
+
+  const delayEl = document.getElementById("button-delay-lh");
+  if (delayEl) localStorage.setItem("button-delay-lh", delayEl.value);
+}
+
 function getLuanHoiConfig() {
-  const configuredOrder = localStorage.getItem('bicanhSkillOrder') || '';
+  saveLuanHoiSettings();
+  const configuredOrder = localStorage.getItem("bicanhSkillOrder") || "";
   const skills = resolveSkillNames(configuredOrder);
+  const totalRunsEl = document.getElementById("luanhoi-total-runs");
+  const totalRunsVal = totalRunsEl ? parseInt(totalRunsEl.value) : 0;
   return {
-    mode: 'luanhoi',
+    mode: "luanhoi",
     luanhoi: true,
-    username: (document.getElementById('username-lh').value || 'Quất Bất Lực').trim(),
-    luanhoiTarget: parseInt(document.getElementById('luanhoi-target').value) || 10,
-    luanhoiCmd: (document.getElementById('luanhoi-cmd').value || '!luanhoi').trim(),
-    buttonDelayMs: (parseFloat(document.getElementById('button-delay-lh').value) || 2) * 1000,
+    username: (document.getElementById("username-lh").value || "Quất Bất Lực").trim(),
+    luanhoiTarget: parseInt(document.getElementById("luanhoi-target").value) || 10,
+    luanhoiTotalRuns: (!isNaN(totalRunsVal) && totalRunsVal > 0) ? totalRunsVal : 0,
+    luanhoiCmd: (document.getElementById("luanhoi-cmd").value || "!luanhoi").trim(),
+    buttonDelayMs: (parseFloat(document.getElementById("button-delay-lh").value) || 2) * 1000,
     luanhoiSkillNames: skills.length > 0
       ? skills
-      : ['Vạn Kiếm Quy Tông', 'Hỗn Nguyên Hộ Thể', 'Kiếm Khí Xung Thiên', 'Thái Cực Dưỡng Sinh'],
+      : ["Vạn Kiếm Quy Tông", "Hỗn Nguyên Hộ Thể", "Kiếm Khí Xung Thiên", "Thái Cực Dưỡng Sinh"],
     skillClickDelayMs: getSkillClickDelayMs(),
   };
 }
@@ -429,6 +491,11 @@ async function updateStats() {
     const battleCount = status.battleCount || 0;
     const totalBattles = status.totalBattles || 0;
 
+    if (status.isRunning !== undefined && !status.isRunning && isNpcRunning) {
+      isNpcRunning = false;
+      updateBotButton();
+    }
+
     // Top row stats - Target shows battle progress
     if (status.mode === 'dianguc') {
       document.getElementById('stat-total').textContent = `Tầng ${status.diangucFloor || 0}, bước ${status.diangucStep || 0}`;
@@ -439,7 +506,13 @@ async function updateStats() {
     } else if (status.mode === 'luanhoi') {
       const cur = status.lastLuanhoiTarget != null ? status.lastLuanhoiTarget : 0;
       const tgt = status.luanhoiTarget || 0;
-      document.getElementById('stat-total').textContent = `Tầng ${cur}/${tgt}`;
+      const totalRuns = status.luanhoiTotalRuns || 0;
+      const runs = status.luanhoiRunCount || 0;
+      if (totalRuns > 0) {
+        document.getElementById('stat-total').textContent = `Đã đi: ${runs} / ${totalRuns} lần`;
+      } else {
+        document.getElementById('stat-total').textContent = `Tầng ${cur}/${tgt}`;
+      }
     } else if (totalBattles > 0) {
       const remaining = totalBattles - battleCount;
       document.getElementById('stat-total').textContent = `${battleCount}/${totalBattles} (${remaining} còn lại)`;
