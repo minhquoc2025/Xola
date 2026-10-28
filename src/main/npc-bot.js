@@ -2605,6 +2605,9 @@ class NpcBot {
     // RESET trạng thái tầng mỗi run mới — không để giá trị cũ (từ run trước) làm sai logic
     // advance/click buff (window.luanhoiBuffTierClicked phải về 0 để tầng 1 được chọn lại).
     this.luanhoiCurrentTier = 0;
+    // FIX combo Luân Hồi: lượt mới = tầng 1 mới, combo quay về skill đầu tiên.
+    // Chỉ reset luanhoiSkillIdx (Luân Hồi); _bicanhSkillIdx của Bicanh không đụng tới.
+    this.luanhoiSkillIdx = 0;
     await this.exec('window.luanhoiBuffTierClicked = 0; window.luanhoiBuffClickedAt = 0; true;');
 
     this.log(`\n=== 🌀 LUÂN HỒI: ${this.luanhoiCmd} ===`);
@@ -2756,6 +2759,13 @@ class NpcBot {
     const isWin = battleResult && battleResult.ended && battleResult.result === 'win';
     const isAdvance = battleResult && battleResult.ended && battleResult.result === 'advance';
     const isLoss = battleResult && battleResult.ended && battleResult.result === 'loss';
+    // FIX đếm lượt: nếu trận trả về 'unknown' nhưng rewardText đã chứa cụm kết thúc
+    // tháp (Ngã Xuống / Kết Thúc Luân Hồi) thì vẫn tính là thua 1 lượt, không để
+    // lượt đó trôi qua mà không đếm (đó là lý do trước đây counter kẹt ở 0 / N).
+    const isTowerEndLoss = !!(battleResult && battleResult.rewardText &&
+      /ngã xuống luân hồi tháp|nga xuong luan hoi thap|kết thúc luân hồi|ket thuc luan hoi/i.test(battleResult.rewardText) &&
+      !/chiến thắng|thắng!/i.test(battleResult.rewardText));
+    const isLossFinal = isLoss || (battleResult && battleResult.ended && isTowerEndLoss);
 
     if (isWin) {
       this.stats.wins++;
@@ -2763,7 +2773,7 @@ class NpcBot {
     } else if (isAdvance) {
       this.stats.wins++;
       this.log('⏩ THẮNG TẦNG / SANG TẦNG KẾ!');
-    } else if (isLoss) {
+    } else if (isLossFinal) {
       this.stats.losses++;
       this.log('❌ THUA BOSS!');
     } else {
@@ -2783,7 +2793,7 @@ class NpcBot {
       return;
     }
 
-    */ if (isLoss) {
+    */ if (isLossFinal) {
       this.luanhoiRunCount++;
       const _totalRunsLimit = this.luanhoiTotalRuns || 0;
       this.log(`🏁 Kết thúc lượt Luân Hồi (thua trận). Đã đi: ${this.luanhoiRunCount}${_totalRunsLimit > 0 ? ' / ' + _totalRunsLimit : ''} lần`);
@@ -2903,6 +2913,11 @@ class NpcBot {
     }
 
     if (this.isRunning && this.runId === runId) {
+      // FIX combo Luân Hồi: tới đây là sang tầng mới (advance / thắng boss mốc),
+      // nên combo quay về skill đầu tiên. Không reset ở các nhánh retry cùng tầng
+      // (quá hạn buff, cooldown) ở trên — trong cùng 1 tầng vẫn quay vòng bình thường.
+      this.luanhoiSkillIdx = 0;
+      this.log('🔄 Sang tầng mới — combo Luân Hồi reset về skill đầu tiên.');
       // Tầng thường sau advance: buff đã chọn xong, không có cửa boss → fast-path.
       this.luanhoiFightLoop(runId, {
         autoAdvanced: quickAdvance,
@@ -2942,6 +2957,25 @@ class NpcBot {
       const msgs = document.querySelectorAll('[role="article"]');
       const recent40 = Array.from(msgs).slice(-40).reverse();
       const recent30 = recent40.slice(0, 30);
+
+      // ---- 0) TOWER-END LOSS (ưu tiên trên BUFF/ADVANCE, chỉ Luân Hồi) ----
+      // Lý do: trước đây bước BUFF/ADVANCE chạy trước nên 1 card buff cũ còn sót
+      // có thể "nuốt" message Ngã Xuống / Kết Thúc, khiến lượt đó không bao giờ
+      // được đếm (counter kẹt 0 / N, điều kiện dừng đủ lượt không bao giờ tới,
+      // và do đó stop() cuối lượt cũng không bao giờ chạy).
+      // Chỉ nhận cụm kết thúc tháp rõ ràng, vẫn giữ cổng owned như bước 3 cũ
+      // để message của lượt cũ không bị đếm lại sau khi restart (re-anchor sẽ
+      // gỡ owned của message cũ), và không nhận message có dấu hiệu thắng.
+      for (const msg of recent30) {
+        const rawText = msg.textContent || '';
+        if (msg.getAttribute('data-luanhoi-owned') !== 'true') continue;
+        const text = rawText.toLowerCase();
+        const isTowerEnd = /ngã xuống luân hồi tháp|nga xuong luan hoi thap|kết thúc luân hồi tháp|ket thuc luan hoi thap|kết thúc luân hồi|ket thuc luan hoi/.test(text);
+        const isWinText = /chiến thắng|thắng!/.test(text);
+        if (isTowerEnd && !isWinText) {
+          return { type: 'end', result: 'loss', rewardText: rawText };
+        }
+      }
 
       // ---- 1) BUFF (ưu tiên cao nhất) ----
       for (const msg of recent40) {
@@ -3081,7 +3115,10 @@ class NpcBot {
             const t = (b.textContent || '').trim().toLowerCase();
             if (t === 'chiến đấu') { hasFightBtn = true; break; }
           }
-          if (hasFightBtn) continue;
+          // FIX: message kết thúc tháp có thể kèm nút "Chiến đấu" (đánh lại) —
+          // vẫn phải tính là kết thúc lượt, không được bỏ qua như message đang trận.
+          const isTowerEndMsg = /ngã xuống luân hồi tháp|nga xuong luan hoi thap|kết thúc luân hồi|ket thuc luan hoi/.test(text);
+          if (hasFightBtn && !isTowerEndMsg) continue;
 
           if (!hasWin && !hasLoss) continue;
 
