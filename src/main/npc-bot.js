@@ -207,7 +207,11 @@ class NpcBot {
   }
 
   async luanhoiClickWait(minMs = 1800) {
-    await this.delay(Math.max(minMs, this.buttonDelayMs || 0));
+    // Luân Hồi riêng: cap 1200ms thay vì max với buttonDelayMs (mặc định 2000ms).
+    // Mỗi tầng gọi hàm này 2-3 lần nên tiết kiệm ~800ms/lần, ~2s/tầng, mà vẫn đủ
+    // cho Discord nhận click; các bước sau đều kiểm tra lại trạng thái game nên
+    // click chưa kịp cũng chỉ là chờ thêm 1 vòng poll, không sai logic.
+    await this.delay(Math.min(1200, Math.max(800, minMs)));
   }
 
   // Game gửi tin nhắn ephemeral RIÊNG (DOM node mới, không nằm trong card battle), ví dụ
@@ -2648,7 +2652,15 @@ class NpcBot {
   async luanhoiFightLoop(runId, opts = {}) {
     if (!this.isRunning || this.runId !== runId) return;
 
-    this.log('\n=== ⚔️ Chiến đấu luân hồi ===');
+    // Chống spam log khi advance kẹt ở cùng 1 tầng: header chỉ in khi đổi tầng
+    // hoặc đã quá 3s từ header trước, thay vì in mỗi lần FightLoop đệ quy
+    // (log thật đã có 2129 header cho 220 tầng, phần lớn là advance lặp).
+    const _hdrTier = this.luanhoiCurrentTier || 0;
+    if (_hdrTier !== this._lhLastHeaderTier || Date.now() - (this._lhLastHeaderAt || 0) > 3000) {
+      this.log('\n=== ⚔️ Chiến đấu luân hồi ===');
+      this._lhLastHeaderTier = _hdrTier;
+      this._lhLastHeaderAt = Date.now();
+    }
 
     // opts.autoAdvanced = true khi vừa chọn buff GIỮA TRẬN (tick type='buff') ở tầng
     // THƯỜNG: buff tầng mới đã click xong, không có cửa boss. Lúc đó pre-battle loop
@@ -2694,7 +2706,7 @@ class NpcBot {
         doorClicked = true;
         await this.luanhoiClickWait(1200);
       }
-      await this.delay(1200);
+      await this.delay(700);
       const b = await this.clickBuffByPriority();
       if (b) {
         this.log(`⚡ Đã chọn buff: "${b}"`);
@@ -2726,7 +2738,7 @@ class NpcBot {
         entered = true;
         break;
       }
-      await this.delay(this.rand(1200, 2200));
+      await this.delay(this.rand(700, 1200));
     }
 
     if (!entered) {
@@ -2772,7 +2784,11 @@ class NpcBot {
       this.log('✅ THẮNG BOSS!');
     } else if (isAdvance) {
       this.stats.wins++;
-      this.log('⏩ THẮNG TẦNG / SANG TẦNG KẾ!');
+      // Advance lặp cùng tầng (đã thấy ở BattleTick) thì không log lại,
+      // tránh 1 tầng in hàng trăm lần "THẮNG TẦNG" trong cùng 1 giây.
+      if (!(battleResult.tier > 0 && battleResult.tier === this._lhLastAdvanceTier)) {
+        this.log('⏩ THẮNG TẦNG / SANG TẦNG KẾ!');
+      }
     } else if (isLossFinal) {
       this.stats.losses++;
       this.log('❌ THUA BOSS!');
@@ -2822,6 +2838,12 @@ class NpcBot {
     this.lastLuanhoiTarget = currentTier;
     if (currentTier > 0) this.luanhoiCurrentTier = currentTier;
     const quickAdvance = isAdvance && currentTier > 0 && currentTier % 10 !== 0;
+    // Lớp chống quay vòng thứ 2 (ngoài dedup trong BattleTick): advance mà
+    // tầng không đổi so với lần advance trước thì chờ 1200ms để game kịp
+    // đổi card, thay vì đệ quy ngay lập tức và quay lại cùng card đó.
+    const _sameTierAdvance = isAdvance && currentTier > 0 && currentTier === this._lhLastAdvanceTier;
+    if (_sameTierAdvance) await this.delay(1200);
+    if (isAdvance && currentTier > 0) this._lhLastAdvanceTier = currentTier;
     if (isAdvance && !quickAdvance) await this.delay(this.rand(2500, 3500));
 
     if (currentTier >= this.luanhoiTarget && isWin) {
@@ -2902,7 +2924,7 @@ class NpcBot {
       }
     } else if (currentTier > 0 && currentTier % 10 === 0) {
       this.log(`⚔️ Vừa sang tầng ${currentTier} (mốc BOSS) — chưa đánh boss này, tiếp tục chiến đấu...`);
-    } else {
+    } else if (!_sameTierAdvance) {
       this.log(`🔄 Tầng thường ${currentTier} — game tự sang tầng kế, chờ chọn buff tiếp...`);
     }
 
@@ -2917,7 +2939,9 @@ class NpcBot {
       // nên combo quay về skill đầu tiên. Không reset ở các nhánh retry cùng tầng
       // (quá hạn buff, cooldown) ở trên — trong cùng 1 tầng vẫn quay vòng bình thường.
       this.luanhoiSkillIdx = 0;
-      this.log('🔄 Sang tầng mới — combo Luân Hồi reset về skill đầu tiên.');
+      if (!_sameTierAdvance) {
+        this.log('🔄 Sang tầng mới — combo Luân Hồi reset về skill đầu tiên.');
+      }
       // Tầng thường sau advance: buff đã chọn xong, không có cửa boss → fast-path.
       this.luanhoiFightLoop(runId, {
         autoAdvanced: quickAdvance,
@@ -3043,7 +3067,16 @@ class NpcBot {
           }
           if (!hasBuff) continue;
           if (newTier !== null && newTier > clickedTier && clickedTier > 0) {
-            return { type: 'advance', rewardText: rawText };
+            // Chống advance quay vòng: cùng 1 tầng đã báo advance trong 5s qua
+            // thì bỏ qua, để tick rơi xuống skill/cooldown thay vì FightLoop
+            // đệ quy ngay lập tức và log lại cùng tầng hàng trăm lần/giây.
+            // Tầng thật sự mới (khác tầng đã thấy) vẫn báo advance bình thường.
+            const _advSeenTier = window.luanhoiAdvanceSeenTier || 0;
+            const _advSeenAt = window.luanhoiAdvanceSeenAt || 0;
+            if (newTier === _advSeenTier && Date.now() - _advSeenAt < 5000) continue;
+            window.luanhoiAdvanceSeenTier = newTier;
+            window.luanhoiAdvanceSeenAt = Date.now();
+            return { type: 'advance', rewardText: rawText, tier: newTier };
           }
         }
       }
@@ -3079,7 +3112,12 @@ class NpcBot {
               if (tm2 && tm2[1]) tm2Tier = parseInt(tm2[1]);
             }
             if (tm2Tier > knownTier) {
-              return { type: 'advance', rewardText: rawText };
+              const _advSeenTier2 = window.luanhoiAdvanceSeenTier || 0;
+              const _advSeenAt2 = window.luanhoiAdvanceSeenAt || 0;
+              if (tm2Tier === _advSeenTier2 && Date.now() - _advSeenAt2 < 5000) continue;
+              window.luanhoiAdvanceSeenTier = tm2Tier;
+              window.luanhoiAdvanceSeenAt = Date.now();
+              return { type: 'advance', rewardText: rawText, tier: tm2Tier };
             }
           }
 
