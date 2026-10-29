@@ -83,6 +83,15 @@ class NpcBot {
     this.upgradeCount = 0;
     this.spamCount = 10;
     this.spamType = 'hp';
+    this.vandu = false;
+    this.vanduCmd = '!vandu';
+    this.vanduSkillOrder = ['Phá Giáp', 'Băng Phong', 'Hư Không Đại Na Di', 'Kim Đan Phá Sát', 'Băng Phong', 'Vạn Kiếm Quy Tông'];
+    this.vanduSkillIdx = 0;
+    this.vanduNode = 0;
+    this.vanduDanCount = 0;
+    this.vanduCircuit = null;
+    this.vanduSectCounts = {};
+    this.vanduOwnedBuffs = {};
     this.dianguc = false;
     this.diangucCmd = '!dianguc';
     this.diangucDelayMs = 2000;
@@ -296,6 +305,8 @@ class NpcBot {
     if (config.luanhoiTarget !== undefined) this.luanhoiTarget = config.luanhoiTarget;
     if (config.luanhoiCmd !== undefined) this.luanhoiCmd = config.luanhoiCmd;
     if (config.luanhoiSkillNames !== undefined) this.luanhoiSkillNames = config.luanhoiSkillNames;
+    if (config.vandu !== undefined) this.vandu = config.vandu;
+    if (config.vanduCmd !== undefined) this.vanduCmd = String(config.vanduCmd || '!vandu');
     if (config.dianguc !== undefined) this.dianguc = config.dianguc;
     if (config.diangucCmd !== undefined) this.diangucCmd = config.diangucCmd;
     if (config.diangucDelayMs !== undefined) this.diangucDelayMs = config.diangucDelayMs;
@@ -363,6 +374,12 @@ class NpcBot {
       this.log(`=== SPAM MODE: ${this.upgradeCmd} mỗi ${this.upgradeDelayMs}ms | gửi ${this.spamCount} lần ===`);
       this.upgradeCount = 0;
       this.upgradeLoop(this.runId);
+      return;
+    }
+    if (this.mode === 'vandu') {
+      this.log(`=== VÂN DU MODE: ${this.vanduCmd} ===`);
+      this.log('=== VÂN DU: chạy ổn định v1, chưa có số lần đi ===');
+      this.vanduLoop(this.runId);
       return;
     }
     if (this.mode === 'dianguc') {
@@ -623,6 +640,9 @@ class NpcBot {
       tuLuyen: this.tuLuyen,
       tuLuyenAfterTarget: this.tuLuyenAfterTarget,
       tuLuyenActive: this._tuLuyenActive,
+      vanduNode: this.vanduNode,
+      vanduDanCount: this.vanduDanCount,
+      vanduCircuit: this.vanduCircuit,
       diangucFloor: this.diangucFloor,
       diangucStep: this.diangucStep,
       climbWinsNeeded: this.climbWinsNeeded,
@@ -3865,6 +3885,446 @@ class NpcBot {
        return null;
      })()`);
   }
+
+  // ================= VÂN DU (v1, chạy ổn định, chưa có số lần đi) =================
+  // Luật đã chốt với người chơi, không tự bịa thêm:
+  // - Cửa: có mạch thì theo mạch Sinh/Khắc; không mạch thì Thương (nút game ghi
+  //   Thượng Môn) rồi Cảnh, không có 2 cửa đó thì cửa nào cũng được trừ Tử Môn.
+  // - Buff: ưu tiên tông gần mở Lĩnh Vực, rồi buff vàng, rồi Đổi Vận tối đa 2 lần
+  //   mỗi màn hình chọn buff, rồi mới tới buff trùng để nâng bậc.
+  // - Đánh: Phá Giáp, Băng Phong, Hư Không Đại Na Di, Kim Đan Phá Sát, Băng Phong,
+  //   Vạn Kiếm Quy Tông, lặp lại. Hồi máu KHÔNG phải skill: là nút vật phẩm
+  //   Cửu Chuyển Hoàn Hồn Đan hiện dưới skill, chỉ khi đã mua ở shop.
+  // - Shop (mở khi chọn Cảnh Môn): chỉ mua Cửu Chuyển, 1 cái mỗi lần gặp shop,
+  //   tối đa 3 cái mỗi chuyến; đủ 3 thì bấm Bí Tịch Thượng Cổ rồi chơi tiếp theo mạch.
+  // - Thua: game lùi về tiết điểm cũ, 3 mạng Đạo Tâm; thấy nút Trở Về Giang Hồ
+  //   thì bấm và dừng sạch như STOP, không tự bắt đầu lại trong v1.
+  // - Tiết điểm phụ (nghỉ, rương, câu đố...): v1 chỉ bấm Rời đi, KHÔNG bấm các
+  //   nút gamble như Phá Phong Ấn hay Không Gian Na Di.
+  // - Vùng: v1 không tự đổi dropdown vùng trên màn hình bắt đầu; người chơi chọn
+  //   vùng trước khi bấm START, bot chỉ bấm Bắt Đầu Xuất Phát.
+
+  vanduElementOfDoor(buttonText) {
+    const t = this.normalizeMatchText(buttonText);
+    const bracket = String(buttonText || '').match(/\[(Mộc|Hỏa|Thổ|Kim|Thủy)\]/);
+    if (bracket) return bracket[1];
+    if (t.includes('canh mon')) return 'Hỏa';
+    if (t.includes('kinh mon') || t.includes('khai mon')) return 'Kim';
+    if (t.includes('thuong mon') || t.includes('do mon')) return 'Mộc';
+    if (t.includes('tu mon') || t.includes('sinh mon')) return 'Thổ';
+    if (t.includes('huu mon')) return 'Thủy';
+    return null;
+  }
+
+  vanduNextElement(circuitType, lastElement) {
+    const chains = {
+      sinh: ['Mộc', 'Hỏa', 'Thổ', 'Kim', 'Thủy'],
+      khac: ['Thổ', 'Thủy', 'Hỏa', 'Kim', 'Mộc'],
+    };
+    const chain = chains[circuitType];
+    if (!chain) return null;
+    const idx = chain.indexOf(lastElement);
+    if (idx < 0 || idx + 1 >= chain.length) return null;
+    return chain[idx + 1];
+  }
+
+  vanduParseCircuit(text) {
+    const raw = String(text || '');
+    const type = /Mạch Tương Khắc/.test(raw) ? 'khac' : (/Mạch Tương Sinh/.test(raw) ? 'sinh' : null);
+    if (!type) return null;
+    const elements = ['Mộc', 'Hỏa', 'Thổ', 'Kim', 'Thủy'];
+    // Dòng tiến độ dạng "Mạch Tương Sinh: [Mộc] → [Hỏa] → [?] ..." — lấy các hành
+    // đã biết trước dấu [?] đầu tiên; nếu không có dòng đó thì lấy hành khởi đầu.
+    const progressMatch = raw.match(/Mạch Tương (?:Sinh|Khắc)[^\\n]*?((?:\[[^\]]+\]\s*(?:→|->)\s*)*\[[^\]]+\])/);
+    let known = [];
+    if (progressMatch) {
+      const parts = progressMatch[1].match(/\[([^\]]+)\]/g) || [];
+      for (const part of parts) {
+        const el = part.replace(/[\[\]]/g, '').trim();
+        if (elements.includes(el)) known.push(el);
+        else break;
+      }
+    }
+    if (known.length === 0) {
+      const startMatch = raw.match(/định vị khởi đầu tại hành\s*(Mộc|Hỏa|Thổ|Kim|Thủy)/);
+      if (startMatch) known = [startMatch[1]];
+    }
+    if (known.length === 0) return { type, elements: [], last: null };
+    return { type, elements: known, last: known[known.length - 1] };
+  }
+
+  vanduChooseDoor(buttons, circuit) {
+    const list = (buttons || []).filter(Boolean);
+    if (circuit) {
+      const next = this.vanduNextElement(circuit.type, circuit.last);
+      if (next) {
+        const hit = list.find(b => this.vanduElementOfDoor(b) === next);
+        if (hit) return hit;
+      }
+    }
+    // Không mạch, hoặc mạch không có cửa đúng trong 3 lựa chọn: ưu tiên
+    // Thương (Thượng) rồi Cảnh, rồi cửa nào cũng được trừ Tử Môn.
+    const norm = b => this.normalizeMatchText(b);
+    const thuong = list.find(b => norm(b).includes('thuong mon'));
+    if (thuong) return thuong;
+    const canh = list.find(b => norm(b).includes('canh mon'));
+    if (canh) return canh;
+    const other = list.find(b => !norm(b).includes('tu mon'));
+    if (other) return other;
+    return null;
+  }
+
+  vanduParseBuffCard(buttonText) {
+    const raw = String(buttonText || '');
+    let sect = null;
+    if (/Kiếm Tông/.test(raw) || /\[ *Kiếm/.test(raw)) sect = 'Kiếm';
+    else if (/Khí Tông/.test(raw) || /\[ *Khí/.test(raw)) sect = 'Khí';
+    else if (/Thuật Tông/.test(raw) || /\[ *Thuật/.test(raw)) sect = 'Thuật';
+    else if (/Ma Tông/.test(raw) || /\[ *Ma/.test(raw)) sect = 'Ma';
+    else if (/Vận Mệnh/.test(raw) || /\[ *Vận/.test(raw)) sect = 'Vận';
+    const gold = /Vàng|Thần Thoại/.test(raw);
+    const name = raw.replace(/\[[^\]]*\]/g, '').replace(/\([^)]*\)/g, '').replace(/\s+/g, ' ').trim();
+    return { raw, name, sect, gold };
+  }
+
+  vanduNextDomainThreshold(count) {
+    const thresholds = [3, 5, 8];
+    for (const t of thresholds) {
+      if (count < t) return t;
+    }
+    return null;
+  }
+
+  vanduChooseBuff(cards, sectCounts, ownedNames, allowReroll) {
+    const parsed = (cards || []).map(c => this.vanduParseBuffCard(c)).filter(c => c.name);
+    if (parsed.length === 0) return null;
+    const countOf = c => (c.sect && sectCounts[c.sect] !== undefined ? sectCounts[c.sect] : 0);
+    // (a) tông gần mở Lĩnh Vực nhất: còn 1 thẻ nữa là tới ngưỡng 3/5/8.
+    const domain = parsed.filter(c => {
+      const next = this.vanduNextDomainThreshold(countOf(c));
+      return next !== null && countOf(c) + 1 === next;
+    });
+    if (domain.length > 0) {
+      domain.sort((a, b) => (countOf(b) - countOf(a)) || (b.gold - a.gold));
+      return { action: 'pick', buttonText: domain[0].raw };
+    }
+    // (b) buff vàng (Thần Thoại).
+    const gold = parsed.filter(c => c.gold);
+    if (gold.length > 0) {
+      gold.sort((a, b) => countOf(b) - countOf(a));
+      return { action: 'pick', buttonText: gold[0].raw };
+    }
+    // (c) không có (a) hay (b) thì Đổi Vận, tối đa 2 lần mỗi màn hình (bên gọi đếm).
+    if (allowReroll) return { action: 'reroll' };
+    // (d) buff trùng để nâng bậc, rồi tới tông có nhiều nhất, rồi thẻ đầu tiên.
+    const dup = parsed.filter(c => ownedNames[c.name]);
+    if (dup.length > 0) {
+      dup.sort((a, b) => countOf(b) - countOf(a));
+      return { action: 'pick', buttonText: dup[0].raw };
+    }
+    const sorted = [...parsed].sort((a, b) => countOf(b) - countOf(a));
+    return { action: 'pick', buttonText: sorted[0].raw };
+  }
+
+  vanduShopAction(danCount, boughtThisVisit, biTichDoneThisVisit) {
+    if (danCount >= 3) {
+      if (biTichDoneThisVisit) return 'roi-di';
+      return 'bi-tich';
+    }
+    if (boughtThisVisit) return 'roi-di';
+    return 'mua-cuu-chuyen';
+  }
+
+  vanduPlayerHpPct(text) {
+    const raw = String(text || '');
+    // Ưu tiên "Khí Huyết ... %", rồi tới HP (%) đầu tiên. Đây là heuristic vì
+    // màn hình chiến đấu không ghi rõ nhãn HP của người chơi tách riêng địch.
+    let m = raw.match(/Khí Huyết[^0-9%]*(\d+)\s*%/);
+    if (m) return Number(m[1]);
+    m = raw.match(/HP[^0-9%]*(\d+)\s*%/);
+    if (m) return Number(m[1]);
+    return null;
+  }
+
+  vanduSyncSectCounts(text) {
+    const raw = String(text || '');
+    const re = /(Kiếm|Khí|Thuật|Ma)\s*Tông\s*(\d+)\s*\/\s*\d+/g;
+    let m;
+    while ((m = re.exec(raw)) !== null) {
+      const sect = m[1];
+      const n = Number(m[2]);
+      if (!this.vanduSectCounts[sect] || this.vanduSectCounts[sect] < n) {
+        this.vanduSectCounts[sect] = n;
+      }
+    }
+  }
+
+  vanduParseNode(text) {
+    const raw = String(text || '');
+    const m = raw.match(/Tiết Điểm\s*(\d+)\s*\/\s*(\d+)/i) || raw.match(/TIẾT ĐIỂM\s*(\d+)\s*\/\s*(\d+)/);
+    return m ? Number(m[1]) : null;
+  }
+
+  async vanduScanLatest() {
+    const username = this.username || '';
+    return await this.exec(`(() => {
+      const username = ${JSON.stringify(username)};
+      const nd = value => String(value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/\\u0111/g, 'd').replace(/\\u0110/g, 'd').replace(/\\u01A1/g, 'o').replace(/\\u01A0/g, 'o').replace(/\\u01B0/g, 'u').replace(/\\u01AF/g, 'u').toLowerCase().replace(/\\s+/g, ' ').trim();
+      const keywords = ['van du', 'tiet diem', 'mach', 'buff', 'cua', 'thien co', 'tien thuong', 'bat quai', 'trang thai chien truong', 'dien bien', 'tro ve giang ho', 'bat dau xuat phat', 'ky duyen', 'linh ngo', 'doi van', 'mua cuu chuyen', 'bi tich', 'roi di', 'tinh tam', 'mon ho', 'thuong mon', 'canh mon'];
+      const articles = Array.from(document.querySelectorAll('[role="article"]'));
+      for (const msg of articles.slice(-15).reverse()) {
+        if (msg.getAttribute('data-bot-ephemeral') === 'true') continue;
+        const text = msg.textContent || '';
+        const ntext = nd(text);
+        if (username && !text.includes(username) && !keywords.some(k => ntext.includes(k))) continue;
+        if (!keywords.some(k => ntext.includes(k)) && !text.includes(username)) continue;
+        const btns = Array.from(msg.querySelectorAll('button, [role="button"]'))
+          .filter(b => b.offsetParent !== null && (b.textContent || '').trim().length > 0)
+          .map(b => (b.textContent || '').trim());
+        if (btns.length === 0) continue;
+        return { msgId: msg.id || '', text, buttons: btns };
+      }
+      return null;
+    })()`);
+  }
+
+  async vanduClickButton(needle) {
+    const needleNorm = this.normalizeMatchText(needle);
+    const username = this.username || '';
+    return await this.exec(`(() => {
+      const needle = ${JSON.stringify(needleNorm)};
+      const username = ${JSON.stringify(username)};
+      const nd = value => String(value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/\\u0111/g, 'd').replace(/\\u0110/g, 'd').replace(/\\u01A1/g, 'o').replace(/\\u01A0/g, 'o').replace(/\\u01B0/g, 'u').replace(/\\u01AF/g, 'u').toLowerCase().replace(/\\s+/g, ' ').trim();
+      const articles = Array.from(document.querySelectorAll('[role="article"]'));
+      for (const msg of articles.slice(-15).reverse()) {
+        if (msg.getAttribute('data-bot-ephemeral') === 'true') continue;
+        const btns = Array.from(msg.querySelectorAll('button, [role="button"]'));
+        for (const btn of btns) {
+          if (btn.disabled || btn.offsetParent === null) continue;
+          const raw = (btn.textContent || '').trim();
+          if (!raw) continue;
+          if (nd(raw).includes(needle)) {
+            btn.disabled = false;
+            btn.click();
+            return raw;
+          }
+        }
+      }
+      return null;
+    })()`);
+  }
+
+  async vanduBattleLoop(runId) {
+    this.log('⚔️ Vân Du: vào trận');
+    let healUsed = false;
+    const startedAt = Date.now();
+    while (this.isRunning && this.runId === runId) {
+      if (Date.now() - startedAt > this.battleTimeoutMs) {
+        this.log('⚠️ Vân Du: trận quá lâu, quay lại vòng quét chính');
+        return;
+      }
+      await this.dismissEphemeralMessages();
+      const screen = await this.vanduScanLatest();
+      if (!screen) { await this.delay(2000); continue; }
+      const norm = this.normalizeMatchText(screen.text);
+      const btnNorm = screen.buttons.map(b => this.normalizeMatchText(b));
+      if (btnNorm.some(b => b.includes('tro ve giang ho'))) return;
+      const isBattle = norm.includes('trang thai chien truong') || norm.includes('dien bien hiep dau') ||
+        this.vanduSkillOrder.some(s => btnNorm.some(b => b.includes(this.normalizeMatchText(s))));
+      if (!isBattle) return;
+      // Hồi máu bằng vật phẩm dưới skill, chỉ khi máu <= 50% và chưa dùng trong trận này.
+      const hp = this.vanduPlayerHpPct(screen.text);
+      const itemBtn = screen.buttons.find(b => this.normalizeMatchText(b).includes('cuu chuyen hoan hon dan'));
+      if (!healUsed && hp !== null && hp <= 50 && itemBtn) {
+        const clicked = await this.vanduClickButton('Cửu Chuyển Hoàn Hồn Đan');
+        if (clicked) {
+          healUsed = true;
+          this.log(`💊 Vân Du: hồi máu bằng Cửu Chuyển (HP ${hp}%)`);
+          await this.delay(Math.max(1000, this.skillClickDelayMs || 1000));
+          continue;
+        }
+      }
+      const skill = this.vanduSkillOrder[this.vanduSkillIdx % this.vanduSkillOrder.length];
+      this.vanduSkillIdx++;
+      const clicked = await this.vanduClickButton(skill);
+      if (clicked) {
+        this.log(`⚔️ Vân Du: ${clicked}`);
+      } else {
+        this.logDebug(`Vân Du: không thấy skill "${skill}", chờ quét lại`);
+      }
+      await this.delay(Math.max(500, this.skillClickDelayMs || 1000));
+    }
+  }
+
+  async vanduLoop(runId) {
+    if (!this.isRunning || this.runId !== runId) return;
+    this.vanduSkillIdx = 0;
+    this.vanduNode = 0;
+    this.vanduDanCount = 0;
+    this.vanduCircuit = null;
+    this.vanduSectCounts = {};
+    this.vanduOwnedBuffs = {};
+    let shopKey = '';
+    let shopBought = false;
+    let shopBiTich = false;
+    let idleScans = 0;
+
+    this.log(`\\n=== 🌿 VÂN DU: ${this.vanduCmd} ===`);
+    await this.sendChat(this.vanduCmd);
+    await this.delay(this.rand(3000, 4000));
+    if (!this.isRunning || this.runId !== runId) return;
+
+    while (this.isRunning && this.runId === runId) {
+      await this.dismissEphemeralMessages();
+      const screen = await this.vanduScanLatest();
+      if (!screen) {
+        idleScans++;
+        if (idleScans % 15 === 0) this.log('⏳ Vân Du: chưa thấy màn hình game, vẫn chờ...');
+        if (idleScans > 90) {
+          this.log('⛔ Vân Du: quá lâu không thấy màn hình game, dừng để tránh thao tác nhầm.');
+          break;
+        }
+        await this.delay(2000);
+        continue;
+      }
+      idleScans = 0;
+      const text = screen.text || '';
+      const norm = this.normalizeMatchText(text);
+      const buttons = screen.buttons || [];
+      const btnNorm = buttons.map(b => this.normalizeMatchText(b));
+      const node = this.vanduParseNode(text);
+      if (node) this.vanduNode = node;
+
+      // Kết thúc chuyến: bấm Trở Về Giang Hồ rồi dừng sạch như STOP.
+      if (btnNorm.some(b => b.includes('tro ve giang ho'))) {
+        await this.vanduClickButton('Trở Về Giang Hồ');
+        this.log('🏁 Vân Du: hết 3 mạng, đã về Giang Hồ, kết thúc chuyến.');
+        await this.stop();
+        return;
+      }
+
+      // Màn hình bắt đầu: vùng đã chọn trước bởi người chơi, chỉ bấm xuất phát.
+      if (btnNorm.some(b => b.includes('bat dau xuat phat'))) {
+        await this.vanduClickButton('Bắt Đầu Xuất Phát');
+        this.log('🚀 Vân Du: Bắt Đầu Xuất Phát (vùng đã chọn trước)');
+        await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
+        continue;
+      }
+
+      // Cập nhật mạch từ mọi màn hình có ghi mạch, và xóa mạch khi hoàn thành.
+      const parsedCircuit = this.vanduParseCircuit(text);
+      if (parsedCircuit) this.vanduCircuit = parsedCircuit;
+      const correctMatch = text.match(/bước đúng huyền cơ mang hành\s*(Mộc|Hỏa|Thổ|Kim|Thủy)/);
+      if (correctMatch && this.vanduCircuit) this.vanduCircuit = { type: this.vanduCircuit.type, elements: [...(this.vanduCircuit.elements || []), correctMatch[1]], last: correctMatch[1] };
+      if (/HOÀN MỸ|thông trọn vẹn mạch/i.test(text)) this.vanduCircuit = null;
+
+      // Shop Tiên Thương (mở khi chọn Cảnh Môn).
+      const isShop = btnNorm.some(b => b.includes('mua cuu chuyen')) || norm.includes('tien thuong');
+      if (isShop) {
+        const key = (screen.msgId || '') + '|' + text.slice(0, 80);
+        if (key !== shopKey) { shopKey = key; shopBought = false; shopBiTich = false; }
+        const action = this.vanduShopAction(this.vanduDanCount, shopBought, shopBiTich);
+        if (action === 'mua-cuu-chuyen') {
+          const clicked = await this.vanduClickButton('Mua Cửu Chuyển Hoàn Hồn Đan');
+          if (clicked) {
+            this.vanduDanCount++;
+            shopBought = true;
+            this.log(`🛒 Vân Du: mua Cửu Chuyển Hoàn Hồn Đan (${this.vanduDanCount}/3)`);
+          }
+        } else if (action === 'bi-tich') {
+          const clicked = await this.vanduClickButton('Bí Tịch Thượng Cổ');
+          if (clicked) {
+            shopBiTich = true;
+            this.log('📜 Vân Du: đủ 3 Cửu Chuyển, bấm Bí Tịch Thượng Cổ rồi chơi tiếp theo mạch');
+          }
+        } else {
+          await this.vanduClickButton('Rời đi tiếp tục hành trình');
+          this.log('🚪 Vân Du: rời shop, tiếp tục hành trình');
+        }
+        await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
+        continue;
+      }
+
+      // Chọn buff sau khi thắng.
+      const isBuff = /CHỌN 1 TRONG 4 BUFF|LĨNH NGỘ CHIẾN KHÍ/.test(text) || btnNorm.some(b => b.includes('doi van'));
+      if (isBuff) {
+        this.vanduSyncSectCounts(text);
+        let rerolls = 0;
+        let picked = false;
+        while (this.isRunning && this.runId === runId && !picked) {
+          const cur = await this.vanduScanLatest();
+          if (!cur) break;
+          this.vanduSyncSectCounts(cur.text || '');
+          const buffButtons = (cur.buttons || []).filter(b => {
+            const n = this.normalizeMatchText(b);
+            return !n.includes('doi van') && !n.includes('roi di');
+          });
+          const choice = this.vanduChooseBuff(buffButtons, this.vanduSectCounts, this.vanduOwnedBuffs, rerolls < 2);
+          if (!choice) break;
+          if (choice.action === 'reroll') {
+            const clicked = await this.vanduClickButton('Đổi Vận');
+            if (!clicked) break;
+            rerolls++;
+            this.log(`🔄 Vân Du: Đổi Vận lần ${rerolls}/2`);
+            await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
+            continue;
+          }
+          const card = this.vanduParseBuffCard(choice.buttonText);
+          const clicked = await this.vanduClickButton(choice.buttonText);
+          if (clicked) {
+            if (card.name) this.vanduOwnedBuffs[card.name] = true;
+            if (card.sect) this.vanduSectCounts[card.sect] = (this.vanduSectCounts[card.sect] || 0) + 1;
+            this.log(`✨ Vân Du: chọn buff "${clicked}"`);
+            picked = true;
+          } else {
+            break;
+          }
+        }
+        await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
+        continue;
+      }
+
+      // Trận đánh.
+      const isBattle = norm.includes('trang thai chien truong') || norm.includes('dien bien hiep dau') ||
+        this.vanduSkillOrder.some(s => btnNorm.some(b => b.includes(this.normalizeMatchText(s))));
+      if (isBattle) {
+        await this.vanduBattleLoop(runId);
+        await this.delay(Math.max(1000, this.buttonDelayMs || 2000));
+        continue;
+      }
+
+      // Chọn cửa (Ngã Rẽ Bát Quái).
+      const doorButtons = buttons.filter(b => this.vanduElementOfDoor(b) !== null);
+      const isDoor = norm.includes('nga re') || norm.includes('hay chon 1 cua') || doorButtons.length >= 2;
+      if (isDoor && doorButtons.length > 0) {
+        const chosen = this.vanduChooseDoor(doorButtons, this.vanduCircuit);
+        if (chosen) {
+          await this.vanduClickButton(chosen);
+          this.log(`🚪 Vân Du: chọn cửa "${chosen}"${this.vanduCircuit ? ` (mạch ${this.vanduCircuit.type}, sau ${this.vanduCircuit.last || '?'})` : ''}`);
+        } else {
+          this.log('⚠️ Vân Du: chỉ thấy cửa Tử Môn, không chọn theo luật (chờ màn hình mới)');
+        }
+        await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
+        continue;
+      }
+
+      // Tiết điểm phụ v1: chỉ Rời đi, không bấm gamble.
+      if (btnNorm.some(b => b.includes('roi di'))) {
+        await this.vanduClickButton('Rời đi');
+        this.log('🚪 Vân Du: tiết điểm phụ, bấm Rời đi (v1, không gamble)');
+        await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
+        continue;
+      }
+
+      this.logDebug(`Vân Du: màn hình chưa nhận diện, nút: ${buttons.join(' | ').slice(0, 200)}`);
+      await this.delay(2500);
+    }
+
+    if (this.isRunning && this.runId === runId) {
+      await this.stop();
+    }
+  }
+
 }
 
 module.exports = { NpcBot };

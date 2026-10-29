@@ -91,12 +91,16 @@ function setMode(mode) {
   document.getElementById('tab-npc').classList.toggle('active', mode === 'npc');
   document.getElementById('tab-luanhoi').classList.toggle('active', mode === 'luanhoi');
   document.getElementById('tab-bicanh').classList.toggle('active', mode === 'bicanh');
+  const tabVandu = document.getElementById('tab-vandu');
+  if (tabVandu) tabVandu.classList.toggle('active', mode === 'vandu');
   document.getElementById('tab-dianguc').classList.toggle('active', mode === 'dianguc');
   const tabUpgrade = document.getElementById('tab-upgrade');
   if (tabUpgrade) tabUpgrade.classList.toggle('active', mode === 'spam');
   document.getElementById('config-npc').classList.toggle('active', mode === 'npc');
   document.getElementById('config-luanhoi').classList.toggle('active', mode === 'luanhoi');
   document.getElementById('config-bicanh').classList.toggle('active', mode === 'bicanh');
+  const configVandu = document.getElementById('config-vandu');
+  if (configVandu) configVandu.classList.toggle('active', mode === 'vandu');
   document.getElementById('config-dianguc').classList.toggle('active', mode === 'dianguc');
   const configUpgrade = document.getElementById('config-upgrade');
   if (configUpgrade) configUpgrade.classList.toggle('active', mode === 'spam');
@@ -159,6 +163,17 @@ function getLuanHoiConfig() {
     luanhoiSkillNames: skills.length > 0
       ? skills
       : ['Vạn Kiếm Quy Tông', 'Hỗn Nguyên Hộ Thể', 'Kiếm Khí Xung Thiên', 'Thái Cực Dưỡng Sinh'],
+    skillClickDelayMs: getSkillClickDelayMs(),
+  };
+}
+
+function getVanduConfig() {
+  return {
+    mode: 'vandu',
+    vandu: true,
+    username: (document.getElementById('username-vandu').value || 'Quất Bất Lực').trim(),
+    vanduCmd: (document.getElementById('vandu-cmd').value || '!vandu').trim(),
+    buttonDelayMs: (parseFloat(document.getElementById('vandu-delay').value) || 2) * 1000,
     skillClickDelayMs: getSkillClickDelayMs(),
   };
 }
@@ -232,6 +247,7 @@ function getDiangucConfig() {
 }
 
 function getActiveConfig() {
+  if (currentMode === 'vandu') return getVanduConfig();
   if (currentMode === 'dianguc') return getDiangucConfig();
   if (currentMode === 'bicanh') return getBicanhConfig();
   if (currentMode === 'upgrade' || currentMode === 'spam') return getUpgradeConfig();
@@ -249,14 +265,14 @@ async function toggleBot() {
     await window.api.botUpdateConfig(0, config);
     window.api.botStart(0);
     isNpcRunning = true;
-    const label = config.mode === 'luanhoi' ? 'Luân Hồi' : (config.mode === 'bicanh' ? 'Bicanh' : (config.mode === 'dianguc' ? 'Địa Ngục' : (config.mode === 'upgrade' || config.mode === 'spam' ? 'Spam' : 'NPC')));
+    const label = config.mode === 'luanhoi' ? 'Luân Hồi' : (config.mode === 'vandu' ? 'Vân Du' : (config.mode === 'bicanh' ? 'Bicanh' : (config.mode === 'dianguc' ? 'Địa Ngục' : (config.mode === 'upgrade' || config.mode === 'spam' ? 'Spam' : 'NPC'))));
     appendLog(`[${label}] ▶ Started`);
   }
   updateBotButton();
 }
 
 function updateBotButton() {
-  const btns = [document.getElementById('btn-npc-toggle'), document.getElementById('btn-luanhoi-toggle'), document.getElementById('btn-bicanh-toggle'), document.getElementById('btn-dianguc-toggle'), document.getElementById('btn-upgrade-toggle')];
+  const btns = [document.getElementById('btn-npc-toggle'), document.getElementById('btn-luanhoi-toggle'), document.getElementById('btn-bicanh-toggle'), document.getElementById('btn-dianguc-toggle'), document.getElementById('btn-upgrade-toggle'), document.getElementById('btn-vandu-toggle')];
   for (const btn of btns) {
     if (!btn) continue;
     if (isNpcRunning) {
@@ -430,7 +446,9 @@ async function updateStats() {
     const totalBattles = status.totalBattles || 0;
 
     // Top row stats - Target shows battle progress
-    if (status.mode === 'dianguc') {
+    if (status.mode === 'vandu') {
+      document.getElementById('stat-total').textContent = `🌿 Vân Du: Tiết ${status.vanduNode || 0} | Đan ${status.vanduDanCount || 0}/3`;
+    } else if (status.mode === 'dianguc') {
       document.getElementById('stat-total').textContent = `Tầng ${status.diangucFloor || 0}, bước ${status.diangucStep || 0}`;
     } else if (status.mode === 'bicanh') {
       document.getElementById('stat-total').textContent = `⚔️ Đang spam skill...`;

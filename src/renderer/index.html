@@ -470,6 +470,8 @@
                 onclick="setMode('dianguc')">🔥 Địa Ngục</button>
         <button id="tab-upgrade"
                 onclick="setMode('spam')">💀 Spam</button>
+        <button id="tab-vandu"
+                onclick="setMode('vandu')">🌿 Vân Du</button>
         <button id="btn-config-modal"
                 onclick="toggleSkillModal()"
                 style="background:#2a2a4a;color:#eee;border:1px solid #3a3a5a;padding:5px 12px;border-radius:4px;cursor:pointer;font-size:11px;">⚙️</button>
@@ -699,6 +701,44 @@
             <input id="bicanh-cmd"
                    type="text"
                    value="!bicanh">
+          </div>
+        </div>
+      </div>
+
+      <!-- === VÂN DU CONFIG (v1, chưa có số lần đi) === -->
+      <div id="config-vandu"
+           class="mode-config">
+        <div class="config-grid">
+          <div class="config-field full">
+            <button id="btn-vandu-toggle"
+                    style="width: 100%;"
+                    class="btn-start"
+                    onclick="toggleBot()">▶ START</button>
+          </div>
+          <div class="config-field">
+            <label for="username-vandu">Username</label>
+            <input id="username-vandu"
+                   type="text"
+                   value="Quất Bất Lực"
+                   placeholder="Tên Discord">
+          </div>
+          <div class="config-field">
+            <label for="vandu-cmd">Lệnh Tham Gia</label>
+            <input id="vandu-cmd"
+                   type="text"
+                   value="!vandu">
+          </div>
+          <div class="config-field">
+            <label for="vandu-delay">Delay (sec)</label>
+            <input id="vandu-delay"
+                   type="number"
+                   value="2"
+                   min="0.5"
+                   max="10"
+                   step="0.5">
+          </div>
+          <div class="config-field full">
+            <label style="font-size:9px;color:#888;">Vân Du v1: chọn vùng trước khi START, bot chỉ bấm Bắt Đầu Xuất Phát. Chưa có số lần đi.</label>
           </div>
         </div>
       </div>
