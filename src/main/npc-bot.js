@@ -2612,6 +2612,10 @@ class NpcBot {
     // FIX combo Luân Hồi: lượt mới = tầng 1 mới, combo quay về skill đầu tiên.
     // Chỉ reset luanhoiSkillIdx (Luân Hồi); _bicanhSkillIdx của Bicanh không đụng tới.
     this.luanhoiSkillIdx = 0;
+    // Target hiệu dụng của lượt này: ban đầu = Target người dùng nhập.
+    // Nếu tới Target mà chưa có mảnh, nó sẽ được nâng lên mốc boss kế (+10)
+    // ở đoạn kiểm tra Target trong luanhoiFightLoop, và reset lại ở lượt mới.
+    this.luanhoiEffectiveTarget = this.luanhoiTarget;
     await this.exec('window.luanhoiBuffTierClicked = 0; window.luanhoiBuffClickedAt = 0; true;');
 
     this.log(`\n=== 🌀 LUÂN HỒI: ${this.luanhoiCmd} ===`);
@@ -2846,36 +2850,57 @@ class NpcBot {
     if (isAdvance && currentTier > 0) this._lhLastAdvanceTier = currentTier;
     if (isAdvance && !quickAdvance) await this.delay(this.rand(2500, 3500));
 
-    if (currentTier >= this.luanhoiTarget && isWin) {
-      this.log(`✅ Đã đạt tầng mục tiêu ${this.luanhoiTarget} (hiện tại ${currentTier}). Chọn DỪNG nhận thưởng.`);
-      const stopResult = await this.clickContinueOrStop('stop');
-      this.log(`[DỪNG] clickContinueOrStop('stop') returned: ${stopResult}`);
-      this.luanhoiRunCount++;
-      const _totalRunsLimit = this.luanhoiTotalRuns || 0;
-      this.log(`🏁 Kết thúc lượt Luân Hồi (đạt Tầng Dừng). Đã đi: ${this.luanhoiRunCount}${_totalRunsLimit > 0 ? ' / ' + _totalRunsLimit : ''} lần`);
-      if (_totalRunsLimit > 0 && this.luanhoiRunCount >= _totalRunsLimit) {
-        this.log(`🛑 Đã hoàn thành đủ ${_totalRunsLimit} lần đi. Dừng bot.`);
-        this.printStats();
-        await this.stop();
-        return;
-      }
-      this.printStats();
-
-      // >>> NEW: tự động gửi lại lệnh !luanhoi để chạy vòng mới, giống cơ chế
-      // startTuLuyenAfterTarget() của mode NPC — thay vì stop() luôn.
-      if (this.luanhoiAutoRestart) {
-        this.log(`🔁 Tự động bắt đầu lại Luân Hồi (${this.luanhoiCmd}) sau ${this.luanhoiRestartDelaySec}s...`);
-        await this.cooldownWait(this.luanhoiRestartDelaySec, runId);
-        if (this.isRunning && this.runId === runId) {
-          this.luanhoiSkillIdx = 0;
-          this.lastLuanhoiTarget = null;
-          this.luanhoiLoop(runId);
+    const _effectiveTarget = this.luanhoiEffectiveTarget || this.luanhoiTarget;
+    if (currentTier >= _effectiveTarget && isWin) {
+      // Quy tắc Mảnh set (2026-10-31): tới Target mà chưa có mảnh thì KHÔNG
+      // dừng, KHÔNG đếm lượt, mà đi tiếp tới mốc boss kế (+10 tầng).
+      // Ví dụ: Target 200, Mảnh set: 0 loại -> đi tiếp tới 210, vẫn 0 -> 220,
+      // đánh xong 220 mà Mảnh set > 0 thì mới dừng / đếm lượt như cũ.
+      // "Có mảnh" = Mảnh set >= 1 loại trong panel thưởng sau boss.
+      let _manh = this.parseLuanhoiManhSet(battleResult && battleResult.rewardText ? battleResult.rewardText : '');
+      if (_manh === null) _manh = await this.readLuanhoiManhSet();
+      if (_manh !== null && _manh <= 0) {
+        const _nextTarget = (Math.floor(currentTier / 10) + 1) * 10;
+        this.luanhoiEffectiveTarget = _nextTarget;
+        this.log(`🧩 Tới tầng ${_effectiveTarget} (hiện tại ${currentTier}) nhưng Mảnh set: 0 loại — chưa có mảnh, đi tiếp tới tầng ${_nextTarget}, không dừng, không đếm lượt.`);
+        // Không return ở đây: rơi xuống logic boss mốc bên dưới để bấm
+        // "Tiếp tục leo tháp" và leo tiếp bình thường.
+      } else {
+        if (_manh === null) {
+          this.log(`⚠️ Không đọc được "Mảnh set" ở tầng ${currentTier} — dừng theo Target cũ (${_effectiveTarget}) để tránh chạy vô hạn.`);
+        } else {
+          this.log(`🧩 Đã có Mảnh set: ${_manh} loại ở tầng ${currentTier} — đủ điều kiện dừng.`);
         }
+        this.log(`✅ Đã đạt tầng mục tiêu ${_effectiveTarget} (hiện tại ${currentTier}). Chọn DỪNG nhận thưởng.`);
+        const stopResult = await this.clickContinueOrStop('stop');
+        this.log(`[DỪNG] clickContinueOrStop('stop') returned: ${stopResult}`);
+        this.luanhoiRunCount++;
+        const _totalRunsLimit = this.luanhoiTotalRuns || 0;
+        this.log(`🏁 Kết thúc lượt Luân Hồi (đạt Tầng Dừng). Đã đi: ${this.luanhoiRunCount}${_totalRunsLimit > 0 ? ' / ' + _totalRunsLimit : ''} lần`);
+        if (_totalRunsLimit > 0 && this.luanhoiRunCount >= _totalRunsLimit) {
+          this.log(`🛑 Đã hoàn thành đủ ${_totalRunsLimit} lần đi. Dừng bot.`);
+          this.printStats();
+          await this.stop();
+          return;
+        }
+        this.printStats();
+
+        // >>> NEW: tự động gửi lại lệnh !luanhoi để chạy vòng mới, giống cơ chế
+        // startTuLuyenAfterTarget() của mode NPC — thay vì stop() luôn.
+        if (this.luanhoiAutoRestart) {
+          this.log(`🔁 Tự động bắt đầu lại Luân Hồi (${this.luanhoiCmd}) sau ${this.luanhoiRestartDelaySec}s...`);
+          await this.cooldownWait(this.luanhoiRestartDelaySec, runId);
+          if (this.isRunning && this.runId === runId) {
+            this.luanhoiSkillIdx = 0;
+            this.lastLuanhoiTarget = null;
+            this.luanhoiLoop(runId);
+          }
+          return;
+        }
+
+        this.stop();
         return;
       }
-
-      this.stop();
-      return;
     }
 
     // Boss mốc (tầng 10, 20, 30...) không tự sang tầng: cần bấm "Tiếp tục leo tháp".
@@ -3604,6 +3629,39 @@ class NpcBot {
     }
     this.log(`🗼 Tầng hiện tại: ${val}`);
     return val;
+  }
+
+  // Đọc số loại "Mảnh set" từ 1 đoạn text thưởng sau boss.
+  // Ví dụ game hiện: "🧩 Mảnh set: 1 loại" -> 1, "Mảnh set: 0 loại" -> 0.
+  // Không thấy dòng đó -> null (không kết luận là có hay không có mảnh).
+  parseLuanhoiManhSet(text) {
+    if (!text) return null;
+    const norm = String(text).normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/g, 'd').replace(/Đ/g, 'd').toLowerCase();
+    const m = norm.match(/manh\s*set\s*:\s*([0-9]+)/);
+    if (m) return parseInt(m[1], 10);
+    return null;
+  }
+
+  // Quét message game mới nhất (đã gắn owned) để lấy "Mảnh set" mới nhất.
+  // Dùng khi battleResult.rewardText không chứa dòng Mảnh set (panel thưởng
+  // có thể nằm ở message riêng sau khi hạ boss).
+  async readLuanhoiManhSet() {
+    await this.markLuanhoiMessages();
+    const val = await this.exec(`(() => {
+      const msgs = document.querySelectorAll('[role="article"]');
+      const recent = Array.from(msgs).slice(-40).reverse();
+      for (const msg of recent) {
+        if (msg.getAttribute('data-luanhoi-owned') !== 'true') continue;
+        const text = msg.textContent || '';
+        const norm = text.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+          .replace(/đ/g, 'd').replace(/Đ/g, 'd').toLowerCase();
+        const m = norm.match(/manh\s*set\s*:\s*([0-9]+)/);
+        if (m) return parseInt(m[1], 10);
+      }
+      return null;
+    })()`);
+    return (val === null || val === undefined) ? null : val;
   }
 
   // Click nút "Tiếp tục" hoặc "Dừng nhận thưởng"
