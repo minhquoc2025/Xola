@@ -151,43 +151,18 @@ function getNpcConfig() {
   };
 }
 
-// Target hiệu dụng: nếu select là "custom" thì lấy ô tự nhập, ngược lại
-// lấy giá trị select. Trả về số nguyên > 0, hoặc NaN nếu chưa nhập hợp lệ.
-function getLuanHoiTargetValue() {
-  const targetEl = document.getElementById("luanhoi-target");
-  const customEl = document.getElementById("luanhoi-target-custom");
-  if (!targetEl) return NaN;
-  if (targetEl.value === "custom") {
-    return customEl ? parseInt(customEl.value) : NaN;
-  }
-  return parseInt(targetEl.value);
-}
-
 function loadLuanHoiSettings() {
   const savedTotalRuns = localStorage.getItem("luanhoi-total-runs");
   if (savedTotalRuns !== null) {
     const el = document.getElementById("luanhoi-total-runs");
     if (el) el.value = savedTotalRuns;
   }
-  // Select Target giữ nguyên các mức cũ, thêm "Tự nhập..." ở cuối.
-  // Giá trị đã lưu trước đây vẫn là 1 mức preset -> load đúng mức đó.
-  // Giá trị tự nhập (không nằm trong preset) -> load lại thành select
-  // "Tự nhập..." + ô tự nhập, để lần sau mở app vẫn thấy đúng số đó.
+  // Target giờ là 1 input duy nhất (input + datalist): giá trị đã lưu,
+  // dù là preset hay tự nhập, đều load thẳng vào ô đó.
   const savedTarget = localStorage.getItem("luanhoi-target");
-  const savedCustom = localStorage.getItem("luanhoi-target-custom");
-  const presets = ["50", "100", "150", "200", "220", "240", "260", "280", "300"];
   if (savedTarget !== null) {
     const el = document.getElementById("luanhoi-target");
-    const customEl = document.getElementById("luanhoi-target-custom");
-    if (el) {
-      if (presets.includes(savedTarget)) {
-        el.value = savedTarget;
-        if (customEl && savedCustom !== null) customEl.value = savedCustom;
-      } else {
-        el.value = "custom";
-        if (customEl) customEl.value = savedCustom !== null ? savedCustom : savedTarget;
-      }
-    }
+    if (el) el.value = savedTarget;
   }
   const savedUsername = localStorage.getItem("username-lh");
   if (savedUsername !== null) {
@@ -205,45 +180,21 @@ function loadLuanHoiSettings() {
     if (el) el.value = savedDelay;
   }
 
-  ["luanhoi-total-runs", "luanhoi-target", "luanhoi-target-custom", "username-lh", "luanhoi-cmd", "button-delay-lh"].forEach(id => {
+  ["luanhoi-total-runs", "luanhoi-target", "username-lh", "luanhoi-cmd", "button-delay-lh"].forEach(id => {
     const el = document.getElementById(id);
     if (el) {
       el.addEventListener("input", saveLuanHoiSettings);
       el.addEventListener("change", saveLuanHoiSettings);
     }
   });
-  // Gõ vào ô tự nhập thì tự chuyển select sang "Tự nhập...", để không
-  // bị trường hợp ô tự nhập có số mà select vẫn đang ở 1 mức preset khác
-  // (không rõ bot sẽ lấy số nào).
-  const customEl = document.getElementById("luanhoi-target-custom");
-  const targetEl = document.getElementById("luanhoi-target");
-  if (customEl && targetEl) {
-    customEl.addEventListener("input", () => {
-      if (customEl.value !== "" && targetEl.value !== "custom") {
-        targetEl.value = "custom";
-      }
-      saveLuanHoiSettings();
-    });
-  }
 }
 
 function saveLuanHoiSettings() {
   const totalRunsEl = document.getElementById("luanhoi-total-runs");
   if (totalRunsEl) localStorage.setItem("luanhoi-total-runs", totalRunsEl.value);
 
-  // Lưu Target hiệu dụng (preset hoặc số tự nhập), không lưu chữ "custom",
-  // để lần sau mở app vẫn load đúng số, và code cũ đọc key này vẫn đúng.
   const targetEl = document.getElementById("luanhoi-target");
-  const customEl = document.getElementById("luanhoi-target-custom");
-  if (customEl) localStorage.setItem("luanhoi-target-custom", customEl.value);
-  if (targetEl) {
-    const effective = getLuanHoiTargetValue();
-    if (!isNaN(effective) && effective > 0) {
-      localStorage.setItem("luanhoi-target", String(effective));
-    } else if (targetEl.value !== "custom") {
-      localStorage.setItem("luanhoi-target", targetEl.value);
-    }
-  }
+  if (targetEl) localStorage.setItem("luanhoi-target", targetEl.value);
 
   const usernameEl = document.getElementById("username-lh");
   if (usernameEl) localStorage.setItem("username-lh", usernameEl.value);
@@ -265,10 +216,7 @@ function getLuanHoiConfig() {
     mode: "luanhoi",
     luanhoi: true,
     username: (document.getElementById("username-lh").value || "Quất Bất Lực").trim(),
-    luanhoiTarget: (() => {
-      const v = getLuanHoiTargetValue();
-      return (!isNaN(v) && v > 0) ? v : 10;
-    })(),
+    luanhoiTarget: parseInt(document.getElementById("luanhoi-target").value) || 10,
     luanhoiTotalRuns: (!isNaN(totalRunsVal) && totalRunsVal > 0) ? totalRunsVal : 0,
     luanhoiCmd: (document.getElementById("luanhoi-cmd").value || "!luanhoi").trim(),
     buttonDelayMs: (parseFloat(document.getElementById("button-delay-lh").value) || 2) * 1000,

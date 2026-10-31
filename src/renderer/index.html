@@ -611,25 +611,28 @@
           </div>
           <div class="config-field">
             <label for="luanhoi-target">Tầng Dừng (Target)</label>
-            <select id="luanhoi-target"
-                    style="width:100%;padding:3px 5px;background:#0a0a1a;border:1px solid #1a1a4e;border-radius:3px;color:#eee;font-size:11px;outline:none;">
-              <option value="50">50</option>
-              <option value="100">100</option>
-              <option value="150">150</option>
-              <option value="200">200</option>
-              <option value="220">220</option>
-              <option value="240">240</option>
-              <option value="260">260</option>
-              <option value="280">280</option>
-              <option value="300">300</option>
-              <option value="custom">Tự nhập...</option>
-            </select>
-            <input id="luanhoi-target-custom"
-                   type="number"
-                   min="1"
-                   max="9999"
-                   placeholder="Tự nhập tầng..."
-                   style="margin-top:4px;">
+            <!-- 1 input duy nhất: gõ số tự do, bấm mũi tên xuống để chọn
+                 nhanh 1 mức preset trong datalist (50-300). Dùng type="text"
+                 + inputmode="numeric" thay vì type="number" vì datalist không
+                 hiện dropdown đáng tin cậy trên input number ở Chromium. -->
+            <input id="luanhoi-target"
+                   type="text"
+                   inputmode="numeric"
+                   pattern="[0-9]*"
+                   list="luanhoi-target-list"
+                   value="50"
+                   placeholder="Chọn hoặc tự nhập tầng...">
+            <datalist id="luanhoi-target-list">
+              <option value="50"></option>
+              <option value="100"></option>
+              <option value="150"></option>
+              <option value="200"></option>
+              <option value="220"></option>
+              <option value="240"></option>
+              <option value="260"></option>
+              <option value="280"></option>
+              <option value="300"></option>
+            </datalist>
           </div>
           <div class="config-field">
             <label for="luanhoi-total-runs">Số lần đi</label>
