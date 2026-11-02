@@ -250,7 +250,10 @@ class NpcBot {
           node.setAttribute('data-bot-ephemeral-dismissed', 'true');
           link.disabled = false;
           link.click();
-          clicked = raw;
+          // Log cả nội dung tin nhắn, không chỉ chữ "Bỏ qua tin nhắn": nếu không
+          // log sẽ không phân biệt được tin vừa dismiss là "đang hồi" hay
+          // "Đợi lượt...", rất khó chẩn đoán khi bot vẫn báo hồi chiêu liên tục.
+          clicked = String(node.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 120);
           break;
         }
       }
@@ -1755,7 +1758,11 @@ class NpcBot {
          .replace(/\u01A1/g, 'o').replace(/\u01A0/g, 'o')
          .replace(/\u01B0/g, 'u').replace(/\u01AF/g, 'u')
          .toLowerCase().replace(/\s+/g, ' ').trim();
-       const msgs = document.querySelectorAll('[role="article"]');
+       // Quét cùng tập node như dismissEphemeralMessages: tin ephemeral có thể
+       // là [role="article"] HOẶC thẻ bọc mang class "ephemeral". Bản trước chỉ
+       // quét article nên có thể miss tin "Đợi lượt..." nằm ở thẻ bọc, dismiss
+       // vẫn bấm được nó nhưng peek thì không thấy -> loop vẫn tiến skill sai.
+       const msgs = document.querySelectorAll('[role="article"], [class*="ephemeral"]');
        const recent = Array.from(msgs).slice(-40).reverse();
        let cooldown = false;
        for (const msg of recent) {

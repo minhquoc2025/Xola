@@ -84,6 +84,19 @@ async function testPeekBicanhEphemeralKind() {
   if (await noneBot.peekBicanhEphemeralKind() !== null) {
     throw new Error('peek phải trả null khi không có tin nhắn ephemeral');
   }
+  // Tin "Đợi lượt..." chỉ nằm ở thẻ bọc class ephemeral, không phải article:
+  // peek phải quét cả 2 loại selector như dismiss, nếu không sẽ miss và loop
+  // vẫn tiến skill sai dù dismiss vẫn bấm được tin đó.
+  const classOnlyBot = new NpcBot({
+    executeJavaScript: (script) => vm.runInNewContext(script, {
+      document: {
+        querySelectorAll: (selector) => (String(selector).includes('ephemeral') ? [waitMsg] : []),
+      },
+    }),
+  }, 1);
+  if (await classOnlyBot.peekBicanhEphemeralKind() !== 'wait-turn') {
+    throw new Error('peek phải tìm được tin "Đợi lượt..." ở thẻ bọc class ephemeral');
+  }
   console.log('Bicanh ephemeral peek classification passed');
 }
 
