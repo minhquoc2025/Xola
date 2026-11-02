@@ -260,7 +260,11 @@ class NpcBot {
           }
           link.disabled = false;
           link.click();
-          clicked.push(String(node.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 120));
+          // Log nội dung article cha (chứa "X đang hồi..." / "Có phải mày
+          // đâu!") thay vì chỉ footer, vì footer chỉ có "Bỏ qua tin nhắn"
+          // nên log cũ không đối chiếu được tin nào ứng với click nào.
+          const logText = article ? String(article.textContent || '') : String(node.textContent || '');
+          clicked.push(logText.replace(/\s+/g, ' ').trim().slice(0, 120));
           break;
         }
       }
@@ -1756,8 +1760,11 @@ class NpcBot {
   //   29,26,23,29,26,23... nhưng game chỉ tính 29,26,29,26,23 rồi báo hồi chiêu liên tục).
   // - 'cooldown': "skill đang hồi! Còn 1 turn." — skill đó đang hồi thật, tiến tới
   //   skill tiếp theo trong combo như cũ là đúng.
+  // - 'wrong-person': "🤡 Có phải mày đâu!" — click vừa rồi bấm nhầm nút của
+  //   người khác, lượt đó chưa được tính cho trận của mình, phải lùi về skill
+  //   trước để bấm lại đúng trận, KHÔNG tiến combo, KHÔNG trừ cooldown.
   // Trả về null nếu không có tin nhắn ephemeral nào chưa dismiss.
-  // Chi tiết cho loop Bicanh: { kind: 'wait-turn'|'cooldown', skill, turns }.
+  // Chi tiết cho loop Bicanh: { kind: 'wait-turn'|'cooldown'|'wrong-person', skill, turns }.
   // skill/turns chỉ có ý nghĩa với cooldown, vd "Kim Đan Phá Sát đang hồi!
   // Còn 2 turn." -> { kind: 'cooldown', skill: 'Kim Đan Phá Sát', turns: 2 }.
   // Nhờ dismiss đã đánh dấu cả article cha, các tin cũ sẽ bị bỏ qua nên tin
@@ -1796,6 +1803,11 @@ class NpcBot {
          // 'doi luot' nguy hiểm hơn: ưu tiên trả về ngay, kể cả khi trong 40 tin
          // gần nhất có cả tin "đang hồi" của một skill khác.
          if (text.includes('doi luot')) return { kind: 'wait-turn', skill: null, turns: null };
+         // 'co phai may dau' cũng là lượt bị từ chối, nhưng khác nguyên nhân:
+         // click vừa rồi bấm nhầm nút của người khác, nên lượt đó chưa được
+         // tính cho trận của mình. Xử lý như wait-turn (lùi về skill trước
+         // để bấm lại), KHÔNG được tiến combo hay trừ cooldown.
+         if (text.includes('co phai may dau')) return { kind: 'wrong-person', skill: null, turns: null };
          if (text.includes('dang hoi') && !cooldown) {
            let skill = null;
            for (const pair of skillPairs) {
@@ -3959,6 +3971,20 @@ class NpcBot {
     // ở log 08:47-08:48 (toàn "Còn 1/2 turn", không có "Đợi lượt...").
     const bicanhCooldownLeft = new Map();
     let bicanhConsecutiveSkips = 0;
+    // bicanhPrevClicked: lượt clickNext ngay trước đó có bấm được nút nào
+    // không. Chỉ khi lượt trước thực sự bấm thì lượt đó mới tính là 1 lượt
+    // game, mới được trừ cooldown. Lượt không bấm (không tìm thấy nút, bị
+    // lùi đợi lượt, bấm nhầm, bỏ qua do biết trước) KHÔNG được trừ, nếu
+    // không map sẽ về 0 sớm và bot bấm lại skill vẫn đang hồi.
+    let bicanhPrevClicked = false;
+    // bicanhPrevWasRejected: lượt ngay trước đó kết thúc bằng 1 tin bị từ
+    // chối (đợi lượt / bấm nhầm) mà KHÔNG có click nào ở giữa. Tin bị từ
+    // chối chỉ sinh ra từ 1 click, nên nếu nó lại xuất hiện mà không có
+    // click mới ở giữa thì đó là tin cũ/trùng, KHÔNG được lùi thêm 1 skill
+    // nữa — lùi 2 lần liên tiếp là nguyên nhân bot bấm lại skill đã được
+    // tính rồi (vd log 09:06:43-45: lùi Vạn rồi lùi Kim, rồi bấm lại Kim
+    // trong khi Kim đã bấm ở 09:06:41), rồi từ đó mỗi skill bị bấm 2 lần.
+    let bicanhPrevWasRejected = false;
     const bicanhComboLength = this.bicanhSkillOrder.length > 0 ? this.bicanhSkillOrder.length : this.luanhoiSkillNames.length;
     const bicanhSkillAt = (idx) => {
       if (this.bicanhSkillOrder.length > 0) {
@@ -3997,13 +4023,16 @@ class NpcBot {
       const result = await this.clickNextBicanhSkill(skillName);
       bicanhConsecutiveSkips = 0;
       // Tin hồi chiêu đúng là skill sắp bấm này: đã biết đang hồi thì đừng
-      // bấm, ghi nhớ cooldown rồi tiến tới skill khác ngay.
+      // bấm, ghi nhớ cooldown rồi tiến tới skill khác ngay. Lượt này không
+      // bấm nên không tính là lượt game, prevClicked = false để lượt sau
+      // không trừ cooldown nhầm.
       if (result && result.skipCurrent && result.cooldownDetail) {
         const detail = result.cooldownDetail;
         if (detail.skill && detail.turns) {
           bicanhCooldownLeft.set(detail.skill, detail.turns);
           this.log(`⏭️ Bỏ qua "${detail.skill}" đang hồi còn ${detail.turns} turn — đã biết trước khi bấm, không bấm nữa...`);
         }
+        bicanhPrevClicked = false;
         this._bicanhSkillIdx++;
         continue;
       }
@@ -4016,21 +4045,53 @@ class NpcBot {
           this.log(`⏳ "${targetSkill}" đang hồi còn ${detail.turns} turn — ghi nhớ, sẽ bỏ qua cho tới khi đủ lượt chấp nhận...`);
         }
         // Lượt trước bị báo hồi nên KHÔNG trừ cooldown của các skill khác.
-      } else if (result && !result.waitTurn) {
-        // Không có tin mới -> lượt trước (nếu có) được game chấp nhận, trừ 1
-        // lượt hồi cho mọi skill đang chờ.
+      } else if (result && !result.waitTurn && !result.wrongPerson && bicanhPrevClicked) {
+        // Không có tin mới VÀ lượt trước thực sự đã bấm -> lượt trước được
+        // game chấp nhận, trừ 1 lượt hồi cho mọi skill đang chờ. Nếu lượt
+        // trước không bấm (không tìm thấy nút, bị lùi, v.v.) thì không trừ,
+        // nếu không map về 0 sớm và bot bấm lại skill vẫn đang hồi.
         for (const [name, turns] of Array.from(bicanhCooldownLeft)) {
           if (turns > 1) bicanhCooldownLeft.set(name, turns - 1);
           else bicanhCooldownLeft.delete(name);
         }
       }
-      if (result && result.waitTurn) {
-        // Tin nhắn "Đợi lượt trước xử lý xong đã!" còn sót từ lượt click trước:
-        // skill đó chưa được game tính, nên lùi index về skill đó để click lại,
-        // KHÔNG tiến tới skillName hiện tại. Vd combo 29,26,23: click 23 bị báo
-        // đợi lượt, bot cũ tiến tới 29 làm game tính 29,26,29,26,23 lệch cooldown
-        // và báo hồi chiêu liên tục; bot mới click lại 23 cho tới khi game nhận lượt.
-        bicanhWaitTurnRetries++;
+      if (result && (result.waitTurn || result.wrongPerson)) {
+        // Tin bị từ chối còn sót từ lượt click trước: skill đó chưa được
+        // game tính, nên lùi index về skill đó để click lại, KHÔNG tiến tới
+        // skillName hiện tại. Vd combo 29,26,23: click 23 bị báo đợi lượt,
+        // bot cũ tiến tới 29 làm game tính 29,26,29,26,23 lệch cooldown và
+        // báo hồi chiêu liên tục; bot mới click lại 23 cho tới khi game nhận lượt.
+        // "Có phải mày đâu!" cũng vậy, chỉ khác nguyên nhân: click trước bấm
+        // nhầm nút của người khác nên cũng chưa được tính cho trận của mình.
+        if (bicanhPrevWasRejected) {
+          // Tin bị từ chối lặp lại mà không có click nào ở giữa: tin này
+          // không thể sinh ra từ 1 click mới, nên nó là tin cũ/trùng mà
+          // dismiss chưa dọn sạch. Lùi thêm 1 skill nữa ở đây là sai và
+          // chính là chỗ bot bấm lại skill đã được tính (log 09:06:43-45).
+          // Thay vì lùi, bấm thử skill hiện tại luôn, bỏ qua peek lần này.
+          this.log(`⚠️ Tin bị từ chối lặp lại mà không có click mới ở giữa — coi là tin cũ, bấm thử "${skillName}" luôn...`);
+          bicanhPrevWasRejected = false;
+          const forceResult = await this.clickNextBicanhSkill(skillName, { ignoreEphemeral: true });
+          if (forceResult && forceResult.clicked) {
+            bicanhWaitTurnRetries = 0;
+            bicanhPrevClicked = true;
+            this.log(`🌀 Click skill bicanh: "${forceResult.clicked}"`);
+            this._bicanhSkillIdx++;
+            const cd = await this.checkBicanhCooldown();
+            if (cd > 0) {
+              this.log(`⏳ Cooldown — chờ ${cd}ms`);
+              await this.delay(cd);
+            } else {
+              await this.delay(this.skillClickDelayMs);
+            }
+          } else {
+            bicanhPrevClicked = false;
+            this.log(`⚠️ Không tìm thấy skill "${skillName}" — đợi ${this.skillRetryWaitMs}ms rồi thử lại (giữ nguyên combo)...`);
+            await this.delay(this.skillRetryWaitMs);
+          }
+          continue;
+        }
+        if (result.waitTurn) bicanhWaitTurnRetries++;
         let prevSkillName = null;
         if (this._bicanhSkillIdx > 0) {
           const prevIdx = this._bicanhSkillIdx - 1;
@@ -4042,7 +4103,16 @@ class NpcBot {
           }
           this._bicanhSkillIdx--;
         }
-        this.log(`⏳ Game báo "Đợi lượt trước xử lý xong đã!" (lần ${bicanhWaitTurnRetries}) — lượt trước chưa được tính, click lại "${prevSkillName || 'skill trước đó'}" thay vì tiến tới "${skillName}"...`);
+        // Lưu ý: index chỉ bằng 0 lúc mới bắt đầu trận, khi đó chưa có
+        // click nào trước đó nên không lùi được; giữ nguyên index để bấm
+        // lại skill hiện tại, KHÔNG lùi về skill cuối vòng trước (sai thứ tự).
+        if (result.waitTurn) {
+          this.log(`⏳ Game báo "Đợi lượt trước xử lý xong đã!" (lần ${bicanhWaitTurnRetries}) — lượt trước chưa được tính, click lại "${prevSkillName || 'skill trước đó'}" thay vì tiến tới "${skillName}"...`);
+        } else {
+          this.log(`🤡 Game báo "Có phải mày đâu!" — click trước bấm nhầm của người khác, chưa được tính, click lại "${prevSkillName || 'skill trước đó'}" thay vì tiến tới "${skillName}"...`);
+        }
+        bicanhPrevClicked = false;
+        bicanhPrevWasRejected = true;
         // Chờ lượt trước của game xử lý xong rồi mới click lại skill đó.
         await this.delay(this.skillClickDelayMs);
         continue;
@@ -4050,6 +4120,8 @@ class NpcBot {
       const clicked = result ? result.clicked : null;
       if (clicked) {
         bicanhWaitTurnRetries = 0;
+        bicanhPrevClicked = true;
+        bicanhPrevWasRejected = false;
         this.log(`🌀 Click skill bicanh: "${clicked}"`);
         // Chỉ tăng index khi click đúng skill đích để giữ đúng quỹ đạo cooldown.
         this._bicanhSkillIdx++;
@@ -4063,6 +4135,9 @@ class NpcBot {
       } else {
         // Không tìm thấy skill đích (đang hồi/chưa render) → KHÔNG nhảy cóc, chờ rồi thử lại
         // cùng skill để không phá vỡ nhịp cooldown đã tính (vd 3:3:3).
+        // Lượt này không bấm nên prevClicked = false, lượt sau không trừ
+        // cooldown nhầm; prevWasRejected giữ nguyên vì vẫn chưa có click mới.
+        bicanhPrevClicked = false;
         this.log(`⚠️ Không tìm thấy skill "${skillName}" — đợi ${this.skillRetryWaitMs}ms rồi thử lại (giữ nguyên combo)...`);
         await this.delay(this.skillRetryWaitMs);
       }
@@ -4148,11 +4223,13 @@ class NpcBot {
       })()`);
    }
 
-   // Click skill bicanh theo tên. Trả về { clicked, waitTurn, cooldownDetail, skipCurrent }:
+   // Click skill bicanh theo tên. Trả về { clicked, waitTurn, wrongPerson, cooldownDetail, skipCurrent }:
    // waitTurn = true nghĩa là trước khi click skill này, game còn sót tin nhắn
    // "Đợi lượt trước xử lý xong đã!" — tức skill ở lượt trước chưa được tính,
    // và tin nhắn đó đã được dismiss ở đây. Loop phải lùi về skill trước đó để
    // click lại, KHÔNG được click skill này (xem bicanhLoop).
+   // wrongPerson = true tương tự, nhưng với tin "Có phải mày đâu!" — click
+   // trước đó bấm nhầm của người khác, cũng chưa được tính cho trận của mình.
    // cooldownDetail là tin
    // "đang hồi" mới nhất sinh ra từ lượt click TRƯỚC đó (không phải lượt này),
    // loop dùng nó để ghi nhớ skill đó còn bao nhiêu turn thì hồi.
@@ -4160,17 +4237,23 @@ class NpcBot {
    // (vd sau wait-turn lùi về Vạn Kiếm thì peek lại thấy Vạn Kiếm đang hồi):
    // đã biết nó đang hồi thì ĐỪNG bấm nữa, loop phải tiến tới skill khác
    // ngay, thay vì bấm rồi mới ghi nhớ như bản trước (log 08:58:04, 08:58:08).
-  async clickNextBicanhSkill(skillName) {
+  async clickNextBicanhSkill(skillName, opts = {}) {
     // Xác định loại tin nhắn ephemeral TRƯỚC khi bấm "Bỏ qua tin nhắn",
     // vì sau khi dismiss thì không còn đọc được nó thuộc trường hợp nào nữa.
-    const ephemeralDetail = await this.peekBicanhEphemeralDetail();
-    await this.dismissEphemeralMessages();
+    // opts.ignoreEphemeral: dùng khi loop đã xác định tin bị từ chối là tin
+    // cũ/trùng (lặp lại mà không có click mới ở giữa) — bỏ qua peek để bấm
+    // thẳng skill hiện tại, nếu không loop sẽ kẹt ở tin cũ mãi.
+    const ephemeralDetail = opts.ignoreEphemeral ? null : await this.peekBicanhEphemeralDetail();
+    if (!opts.ignoreEphemeral) await this.dismissEphemeralMessages();
     if (ephemeralDetail && ephemeralDetail.kind === 'wait-turn') {
-      return { clicked: null, waitTurn: true, cooldownDetail: null, skipCurrent: false };
+      return { clicked: null, waitTurn: true, wrongPerson: false, cooldownDetail: null, skipCurrent: false };
+    }
+    if (ephemeralDetail && ephemeralDetail.kind === 'wrong-person') {
+      return { clicked: null, waitTurn: false, wrongPerson: true, cooldownDetail: null, skipCurrent: false };
     }
     const cooldownDetail = (ephemeralDetail && ephemeralDetail.kind === 'cooldown') ? ephemeralDetail : null;
     if (cooldownDetail && cooldownDetail.skill === skillName) {
-      return { clicked: null, waitTurn: false, cooldownDetail, skipCurrent: true };
+      return { clicked: null, waitTurn: false, wrongPerson: false, cooldownDetail, skipCurrent: true };
     }
     const username = this.username || '';
     const nameNoD = skillName.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -4220,7 +4303,7 @@ class NpcBot {
        }
        return null;
      })()`);
-    return { clicked, waitTurn: false, cooldownDetail, skipCurrent: false };
+    return { clicked, waitTurn: false, wrongPerson: false, cooldownDetail, skipCurrent: false };
   }
 }
 

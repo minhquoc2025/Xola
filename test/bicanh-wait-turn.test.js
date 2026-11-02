@@ -225,8 +225,12 @@ async function testBicanhSkipCurrentCooldown() {
 
   await bot.bicanhLoop(1);
 
-  // s29 bị bỏ qua ở lần đầu, sau đó s26 + s23 qua lượt thì s29 mới được bấm lại.
-  const expected = [s29, s26, s23, s29];
+  // s29 bị bỏ qua ở lần đầu (ghi hồi 2 turn), sau đó s26 + s23 qua lượt
+  // thì s29 vẫn bị bỏ qua 1 lần nữa vì lượt của s23 chỉ được trừ ở lượt
+  // bấm tiếp theo, sau bước kiểm tra map — đây là thận trọng có chủ ý:
+  // thà bỏ qua thêm 1 vòng còn hơn bấm lại khi vẫn đang hồi. Sau s26 +
+  // s23 của vòng sau thì s29 mới được bấm lại.
+  const expected = [s29, s26, s23, s26, s23, s29];
   if (JSON.stringify(seen) !== JSON.stringify(expected)) {
     throw new Error('Bicanh skipCurrent phải tiến skill khác ngay, thực tế: ' + JSON.stringify(seen));
   }
@@ -262,6 +266,170 @@ async function testClickNextSkipsKnownCooldownSkill() {
   console.log('Bicanh clickNext skipCurrent passed');
 }
 
+// 8. Tin "Có phải mày đâu!" (bấm nhầm của người khác): peek phải nhận ra
+// là wrong-person, và loop phải lùi về skill trước đó để bấm lại đúng trận,
+// KHÔNG tiến tới skill tiếp theo, KHÔNG coi như lượt đã qua.
+async function testPeekWrongPerson() {
+  const wrongBot = makePeekBot([msg('🤡 Có phải mày đâu! Chỉ bạn mới có thể thấy điều này • Bỏ qua tin nhắn')]);
+  const detail = await wrongBot.peekBicanhEphemeralDetail();
+  if (!detail || detail.kind !== 'wrong-person') {
+    throw new Error('peek phải nhận ra "Có phải mày đâu!" là wrong-person, thực tế: ' + JSON.stringify(detail));
+  }
+  console.log('Bicanh wrong-person peek passed');
+}
+
+async function testBicanhWrongPersonRetriesPreviousSkill() {
+  const bot = new NpcBot({ executeJavaScript: () => 0 }, 1);
+  bot.isRunning = true;
+  bot.runId = 1;
+  bot.bicanhSkillOrder = [29, 26, 23];
+  const logs = [];
+  bot.log = (...args) => logs.push(args.join(' '));
+  bot.delay = async () => {};
+  bot.sendChat = async () => {};
+  bot.waitForBicanhButton = async () => 'battle';
+  bot.checkBicanhCooldown = async () => 0;
+
+  const s29 = bot.luanhoiSkillNames[28];
+  const s26 = bot.luanhoiSkillNames[25];
+  const s23 = bot.luanhoiSkillNames[22];
+  const seen = [];
+  const counts = {};
+  bot.clickNextBicanhSkill = async (skillName) => {
+    seen.push(skillName);
+    counts[skillName] = (counts[skillName] || 0) + 1;
+    // Lần tới s26: peek thấy tin "Có phải mày đâu!" từ lần click s29 trước
+    // đó -> loop phải lùi về s29 bấm lại, không được tiến tới s23.
+    if (skillName === s26 && counts[s26] === 1) {
+      return { clicked: null, waitTurn: false, wrongPerson: true, cooldownDetail: null, skipCurrent: false };
+    }
+    if (skillName === s23 && counts[s23] === 1) bot.isRunning = false;
+    return { clicked: skillName, waitTurn: false, wrongPerson: false, cooldownDetail: null, skipCurrent: false };
+  };
+
+  await bot.bicanhLoop(1);
+
+  const expected = [s29, s26, s29, s26, s23];
+  if (JSON.stringify(seen) !== JSON.stringify(expected)) {
+    throw new Error('Bicanh wrong-person phải bấm lại skill trước đó, thực tế: ' + JSON.stringify(seen));
+  }
+  if (!logs.some((line) => line.includes('Có phải mày đâu') && line.includes(s29))) {
+    throw new Error('Bicanh wrong-person phải log rõ là bấm lại skill trước đó, log thực tế: ' + JSON.stringify(logs));
+  }
+  console.log('Bicanh wrong-person retries previous skill passed');
+}
+
+async function testClickNextWrongPersonDoesNotClick() {
+  let clickScriptRun = false;
+  const bot = new NpcBot({ executeJavaScript: () => 0 }, 1);
+  bot.username = '';
+  bot.peekBicanhEphemeralDetail = async () => ({ kind: 'wrong-person', skill: null, turns: null });
+  bot.dismissEphemeralMessages = async () => {};
+  bot.exec = async () => { clickScriptRun = true; return null; };
+  const result = await bot.clickNextBicanhSkill('Kim Đan Phá Sát');
+  if (!result || !result.wrongPerson || result.clicked) {
+    throw new Error('clickNext phải trả wrongPerson và không click, thực tế: ' + JSON.stringify(result));
+  }
+  if (clickScriptRun) {
+    throw new Error('clickNext không được chạy script click khi thấy tin bấm nhầm');
+  }
+  console.log('Bicanh clickNext wrong-person passed');
+}
+
+// 11. Lùi đợi lượt 2 lần liên tiếp mà không có click ở giữa là sai: tin
+// thứ 2 không thể sinh ra từ click mới, nên loop phải bấm thử skill hiện
+// tại (ignoreEphemeral) thay vì lùi thêm 1 skill nữa và bấm lại skill đã
+// được tính (nguyên nhân "mỗi skill bị bấm 2 lần" ở log 09:06:43-45).
+async function testBicanhDuplicateWaitTurnDoesNotStepBackTwice() {
+  const bot = new NpcBot({ executeJavaScript: () => 0 }, 1);
+  bot.isRunning = true;
+  bot.runId = 1;
+  bot.bicanhSkillOrder = [29, 26, 23];
+  const logs = [];
+  bot.log = (...args) => logs.push(args.join(' '));
+  bot.delay = async () => {};
+  bot.sendChat = async () => {};
+  bot.waitForBicanhButton = async () => 'battle';
+  bot.checkBicanhCooldown = async () => 0;
+
+  const s29 = bot.luanhoiSkillNames[28];
+  const s26 = bot.luanhoiSkillNames[25];
+  const s23 = bot.luanhoiSkillNames[22];
+  const seen = [];
+  let forceUsed = false;
+  const counts = {};
+  bot.clickNextBicanhSkill = async (skillName, opts = {}) => {
+    seen.push(skillName);
+    counts[skillName] = (counts[skillName] || 0) + 1;
+    if (opts.ignoreEphemeral) {
+      forceUsed = true;
+      bot.isRunning = false;
+      return { clicked: skillName, waitTurn: false, wrongPerson: false, cooldownDetail: null, skipCurrent: false };
+    }
+    // s29 (vòng sau) báo đợi lượt lần 1 -> lùi về s23. Tới s23 lại báo đợi
+    // lượt lần 2 mà không có click nào ở giữa -> phải bấm thử s23, không
+    // được lùi về s26.
+    if (skillName === s29 && counts[s29] === 2) return { clicked: null, waitTurn: true, wrongPerson: false, cooldownDetail: null, skipCurrent: false };
+    if (skillName === s23 && counts[s23] === 2) return { clicked: null, waitTurn: true, wrongPerson: false, cooldownDetail: null, skipCurrent: false };
+    return { clicked: skillName, waitTurn: false, wrongPerson: false, cooldownDetail: null, skipCurrent: false };
+  };
+
+  await bot.bicanhLoop(1);
+
+  if (!forceUsed) throw new Error('Bicanh duplicate wait-turn phải bấm thử skill hiện tại với ignoreEphemeral');
+  // Sau lần đợi lượt thứ 2, s26 không được xuất hiện lại (lùi thêm là sai).
+  const afterSecondWait = seen.slice(5);
+  if (afterSecondWait.includes(s26)) {
+    throw new Error('Bicanh duplicate wait-turn không được lùi về skill trước nữa, thực tế: ' + JSON.stringify(seen));
+  }
+  console.log('Bicanh duplicate wait-turn does not step back twice passed');
+}
+
+// 12. Lượt không bấm không được trừ cooldown: s29 hồi 2 turn, s23 bị
+// "không tìm thấy" 2 lần liên tiếp thì s29 chỉ được trừ 1 lần (cho lượt
+// s26 đã bấm trước đó), không phải trừ mỗi lần không tìm thấy, nếu không
+// s29 sẽ về 0 sớm và bị bấm lại khi vẫn đang hồi.
+async function testBicanhNotFoundDoesNotDecrementCooldown() {
+  const bot = new NpcBot({ executeJavaScript: () => 0 }, 1);
+  bot.isRunning = true;
+  bot.runId = 1;
+  bot.bicanhSkillOrder = [29, 26, 23];
+  const logs = [];
+  bot.log = (...args) => logs.push(args.join(' '));
+  bot.delay = async () => {};
+  bot.sendChat = async () => {};
+  bot.waitForBicanhButton = async () => 'battle';
+  bot.checkBicanhCooldown = async () => 0;
+
+  const s29 = bot.luanhoiSkillNames[28];
+  const s26 = bot.luanhoiSkillNames[25];
+  const s23 = bot.luanhoiSkillNames[22];
+  const seen = [];
+  const counts = {};
+  bot.clickNextBicanhSkill = async (skillName) => {
+    seen.push(skillName);
+    counts[skillName] = (counts[skillName] || 0) + 1;
+    if (skillName === s26 && counts[s26] === 1) {
+      return { clicked: skillName, waitTurn: false, wrongPerson: false, cooldownDetail: { kind: 'cooldown', skill: s29, turns: 2 }, skipCurrent: false };
+    }
+    if (skillName === s23 && counts[s23] <= 2) {
+      return { clicked: null, waitTurn: false, wrongPerson: false, cooldownDetail: null, skipCurrent: false };
+    }
+    if (skillName === s29 && counts[s29] === 2) bot.isRunning = false;
+    return { clicked: skillName, waitTurn: false, wrongPerson: false, cooldownDetail: null, skipCurrent: false };
+  };
+
+  await bot.bicanhLoop(1);
+
+  // s29 (lần 1) -> s26 (ghi s29=2) -> s23 không tìm thấy x2 -> s23 bấm được
+  // -> s29 bị bỏ qua 1 lần (còn 1, chưa về 0) -> s26 -> s23 -> s29 bấm lại.
+  const expected = [s29, s26, s23, s23, s23, s26, s23, s29];
+  if (JSON.stringify(seen) !== JSON.stringify(expected)) {
+    throw new Error('Bicanh not-found không được trừ cooldown mỗi lần, thực tế: ' + JSON.stringify(seen));
+  }
+  console.log('Bicanh not-found does not decrement cooldown passed');
+}
+
 testBicanhWaitTurnRetriesPreviousSkill()
   .then(testPeekBicanhEphemeralKind)
   .then(testPeekBicanhEphemeralDetail)
@@ -269,6 +437,11 @@ testBicanhWaitTurnRetriesPreviousSkill()
   .then(testDismissMarksParentArticle)
   .then(testBicanhSkipCurrentCooldown)
   .then(testClickNextSkipsKnownCooldownSkill)
+  .then(testPeekWrongPerson)
+  .then(testBicanhWrongPersonRetriesPreviousSkill)
+  .then(testClickNextWrongPersonDoesNotClick)
+  .then(testBicanhDuplicateWaitTurnDoesNotStepBackTwice)
+  .then(testBicanhNotFoundDoesNotDecrementCooldown)
   .catch((error) => {
     console.error(error);
     process.exitCode = 1;
