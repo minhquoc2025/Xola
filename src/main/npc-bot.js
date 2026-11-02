@@ -4006,22 +4006,30 @@ class NpcBot {
     while (this.isRunning && this.runId === runId) {
       const skillName = bicanhSkillAt(this._bicanhSkillIdx);
       if (!skillName) { this._bicanhSkillIdx++; continue; }
-      // Bỏ qua skill đang hồi chưa đủ lượt chấp nhận, để các skill khác
-      // qua lượt trước và làm cooldown của nó giảm thật, thay vì bấm lại
-      // nó ngay vòng sau và lại bị báo hồi. Cùng một nhánh bỏ qua cho cả
-      // skill vừa bấm: bỏ qua (không bấm) không làm lượt game tiến, nên
-      // quay lại skill vừa bấm sau các lượt bỏ qua vẫn là bấm lại ngay.
+      // XOAY CHUẨN, KHÔNG NHẢY SKILL (quyết định của Nguyen 2026-11-02):
+      // mỗi vòng chỉ chạy đúng Hư - Kim - Vạn - Hư - Kim - Vạn, theo đúng
+      // thứ tự combo. Skill nào đang hồi thì CHỜ VÀ BẤM LẠI ĐÚNG SKILL ĐÓ,
+      // KHÔNG tiến tới skill khác. Nhảy tới skill khác là phá vòng: skill
+      // nhảy tới cũng chưa đủ 3 turn hồi kể từ lần dùng trước của nó, nên
+      // nó cũng bị báo hồi, rồi lại nhảy, rồi cả vòng loạn lên (log
+      // 09:41). Chờ ở đây trừ 1 lượt trong map mỗi lần chờ, rồi bấm lại
+      // cùng skill khi map về 0.
       const bicanhLeft = bicanhCooldownLeft.get(skillName) || 0;
+      if (bicanhLeft > 0) {
+        this.log(`⏳ "${skillName}" đang hồi còn ${bicanhLeft} lượt — chờ rồi bấm lại đúng skill này, không nhảy tới skill khác...`);
+        await this.delay(this.skillRetryWaitMs);
+        if (bicanhLeft > 1) bicanhCooldownLeft.set(skillName, bicanhLeft - 1);
+        else bicanhCooldownLeft.delete(skillName);
+        continue;
+      }
+      // Chặn bấm lại skill vừa bấm (giữ nguyên từ 1816bc0, chỉ dùng làm
+      // phao cứu khi vòng bị lệch): trong vòng chuẩn thì nhánh này không
+      // bao giờ chạm tới, vì sau 1 lần bấm thì index đã tiến tới skill
+      // khác rồi.
       const bicanhJustUsed = Boolean(bicanhLastClickedSkill && skillName === bicanhLastClickedSkill);
-      if (bicanhLeft > 0 || bicanhJustUsed) {
+      if (bicanhJustUsed) {
         bicanhConsecutiveSkips++;
         if (bicanhConsecutiveSkips >= bicanhComboLength) {
-          // Tất cả skill combo đều chưa sẵn sàng (đang hồi hoặc vừa bấm):
-          // không có lượt chấp nhận nào để trừ cooldown, chờ rồi thử lại
-          // skill sắp hồi nhất thay vì quay vòng bỏ qua mãi. Lưu ý: không
-          // xóa bicanhLastClickedSkill ở đây, nếu không lượt sau sẽ bấm
-          // lại đúng skill vừa bấm; vòng bỏ qua tiếp theo sẽ tự đi tới
-          // skill đã được xóa khỏi map.
           let earliest = null;
           for (const [name, turns] of bicanhCooldownLeft) {
             if (turns > 0 && (!earliest || turns < earliest[1])) earliest = [name, turns];
@@ -4032,28 +4040,26 @@ class NpcBot {
           await this.delay(this.skillRetryWaitMs);
           continue;
         }
-        if (bicanhJustUsed) {
-          this.log(`⏭️ Bỏ qua "${skillName}" vừa bấm xong, chưa có skill khác qua lượt — chờ skill khác trước...`);
-        } else {
-          this.log(`⏭️ Bỏ qua "${skillName}" đang hồi còn ${bicanhLeft} lượt — chờ skill khác qua lượt trước...`);
-        }
+        this.log(`⏭️ Bỏ qua "${skillName}" vừa bấm xong, chưa có skill khác qua lượt — chờ skill khác trước...`);
         this._bicanhSkillIdx++;
         continue;
       }
       const result = await this.clickNextBicanhSkill(skillName);
       bicanhConsecutiveSkips = 0;
       // Tin hồi chiêu đúng là skill sắp bấm này: đã biết đang hồi thì đừng
-      // bấm, ghi nhớ cooldown rồi tiến tới skill khác ngay. Lượt này không
-      // bấm nên không tính là lượt game, prevClicked = false để lượt sau
-      // không trừ cooldown nhầm.
+      // bấm, ghi nhớ cooldown rồi CHỜ VÀ BẤM LẠI ĐÚNG SKILL NÀY ở vòng
+      // sau, KHÔNG tiến tới skill khác (xoay chuẩn). Lượt này không bấm
+      // nên không tính là lượt game, prevClicked = false để lượt sau
+      // không trừ cooldown nhầm. Lần lặp tiếp theo sẽ vào nhánh chờ ở
+      // đầu vòng và trừ dần map về 0 rồi mới bấm.
       if (result && result.skipCurrent && result.cooldownDetail) {
         const detail = result.cooldownDetail;
         if (detail.skill && detail.turns) {
           bicanhCooldownLeft.set(detail.skill, detail.turns);
-          this.log(`⏭️ Bỏ qua "${detail.skill}" đang hồi còn ${detail.turns} turn — đã biết trước khi bấm, không bấm nữa...`);
+          this.log(`⏳ "${detail.skill}" đang hồi còn ${detail.turns} turn — đã biết trước khi bấm, chờ rồi bấm lại đúng skill này, không nhảy skill khác...`);
         }
         bicanhPrevClicked = false;
-        this._bicanhSkillIdx++;
+        await this.delay(this.skillRetryWaitMs);
         continue;
       }
       // Tin mới từ lượt click TRƯỚC đó, đọc được ở đầu clickNext lần này:
@@ -4062,7 +4068,7 @@ class NpcBot {
         const targetSkill = detail.skill || (this._bicanhSkillIdx > 0 ? bicanhSkillAt(this._bicanhSkillIdx - 1) : null);
         if (targetSkill && detail.turns) {
           bicanhCooldownLeft.set(targetSkill, detail.turns);
-          this.log(`⏳ "${targetSkill}" đang hồi còn ${detail.turns} turn — ghi nhớ, sẽ bỏ qua cho tới khi đủ lượt chấp nhận...`);
+          this.log(`⏳ "${targetSkill}" đang hồi còn ${detail.turns} turn — ghi nhớ, sẽ chờ rồi bấm lại đúng skill này khi tới lượt nó, không nhảy skill khác...`);
         }
         // Lượt trước bị báo hồi nên KHÔNG trừ cooldown của các skill khác.
       } else if (result && !result.waitTurn && !result.wrongPerson && bicanhPrevClicked) {
