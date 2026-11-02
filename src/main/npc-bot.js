@@ -610,20 +610,8 @@ class NpcBot {
     return this.spamType === 'roll_x10' || this.upgradeCmd === '/roll_x10';
   }
 
-  // Dọn túi: bán hết sao 1-3 sao bằng /sellall.
-  async sellAllStars() {
-    this.log(`🧹 Dọn túi: gửi ${SELLALL_STAR_CMDS.length} lệnh /sellall...`);
-    for (const cmd of SELLALL_STAR_CMDS) {
-      try {
-        await this.sendSlashChat(cmd);
-        this.log(`🧹 Đã gửi: ${cmd}`);
-      } catch (e) {
-        this.log('⚠️ Dọn túi lỗi:', e.message);
-      }
-      await this.delay(Math.max(500, this.upgradeDelayMs));
-    }
-    this.log('🧹 Dọn túi xong.');
-  }
+  // Upgrade/spam methods are attached via npc-modes/upgrade-mode.js
+  // getStatus follows
 
   getStatus() {
     return {
@@ -4331,5 +4319,8 @@ class NpcBot {
     return { clicked, waitTurn: false, wrongPerson: false, cooldownDetail, skipCurrent: false };
   }
 }
+
+const attachModes = require('./npc-modes');
+attachModes(NpcBot);
 
 module.exports = { NpcBot };
