@@ -1738,6 +1738,38 @@ class NpcBot {
      })()`);
   }
 
+  // Phân biệt 2 loại tin nhắn ephemeral TRƯỚC khi bấm "Bỏ qua tin nhắn":
+  // - 'wait-turn': "Đợi lượt trước xử lý xong đã!" — game click nhanh quá, lượt trước
+  //   chưa xử lý xong nên skill vừa click CHƯA được game tính. Trường hợp này
+  //   KHÔNG được tiến tới skill tiếp theo, phải click lại đúng skill đó, nếu không
+  //   cooldown của game sẽ lệch khỏi thứ tự click của bot (vd bot click
+  //   29,26,23,29,26,23... nhưng game chỉ tính 29,26,29,26,23 rồi báo hồi chiêu liên tục).
+  // - 'cooldown': "skill đang hồi! Còn 1 turn." — skill đó đang hồi thật, tiến tới
+  //   skill tiếp theo trong combo như cũ là đúng.
+  // Trả về null nếu không có tin nhắn ephemeral nào chưa dismiss.
+  async peekBicanhEphemeralKind() {
+    return await this.exec(`(() => {
+       const nd = value => String(value || '')
+         .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+         .replace(/\u0111/g, 'd').replace(/\u0110/g, 'd')
+         .replace(/\u01A1/g, 'o').replace(/\u01A0/g, 'o')
+         .replace(/\u01B0/g, 'u').replace(/\u01AF/g, 'u')
+         .toLowerCase().replace(/\s+/g, ' ').trim();
+       const msgs = document.querySelectorAll('[role="article"]');
+       const recent = Array.from(msgs).slice(-40).reverse();
+       let cooldown = false;
+       for (const msg of recent) {
+         if (msg.getAttribute && msg.getAttribute('data-bot-ephemeral-dismissed') === 'true') continue;
+         const text = nd(msg.textContent);
+         // 'doi luot' nguy hiểm hơn: ưu tiên trả về ngay, kể cả khi trong 40 tin
+         // gần nhất có cả tin "đang hồi" của một skill khác.
+         if (text.includes('doi luot')) return 'wait-turn';
+         if (text.includes('dang hoi')) cooldown = true;
+       }
+       return cooldown ? 'cooldown' : null;
+     })()`);
+  }
+
   async checkNoResponse() {
     const skillNames = (this.luanhoiSkillNames || []).filter(Boolean);
     return await this.exec(`(() => {
@@ -3874,6 +3906,7 @@ class NpcBot {
 
     // Spam skill theo danh sách, lặp lại cho đến khi user bấm stop
     this._bicanhSkillIdx = 0;
+    let bicanhWaitTurnRetries = 0;
     while (this.isRunning && this.runId === runId) {
       let skillName;
       if (this.bicanhSkillOrder.length > 0) {
@@ -3883,8 +3916,33 @@ class NpcBot {
         skillName = this.luanhoiSkillNames[this._bicanhSkillIdx % this.luanhoiSkillNames.length];
       }
       if (!skillName) { this._bicanhSkillIdx++; continue; }
-      const clicked = await this.clickNextBicanhSkill(skillName);
+      const result = await this.clickNextBicanhSkill(skillName);
+      if (result && result.waitTurn) {
+        // Tin nhắn "Đợi lượt trước xử lý xong đã!" còn sót từ lượt click trước:
+        // skill đó chưa được game tính, nên lùi index về skill đó để click lại,
+        // KHÔNG tiến tới skillName hiện tại. Vd combo 29,26,23: click 23 bị báo
+        // đợi lượt, bot cũ tiến tới 29 làm game tính 29,26,29,26,23 lệch cooldown
+        // và báo hồi chiêu liên tục; bot mới click lại 23 cho tới khi game nhận lượt.
+        bicanhWaitTurnRetries++;
+        let prevSkillName = null;
+        if (this._bicanhSkillIdx > 0) {
+          const prevIdx = this._bicanhSkillIdx - 1;
+          if (this.bicanhSkillOrder.length > 0) {
+            const prevStt = this.bicanhSkillOrder[prevIdx % this.bicanhSkillOrder.length];
+            prevSkillName = this.luanhoiSkillNames[prevStt - 1];
+          } else {
+            prevSkillName = this.luanhoiSkillNames[prevIdx % this.luanhoiSkillNames.length];
+          }
+          this._bicanhSkillIdx--;
+        }
+        this.log(`⏳ Game báo "Đợi lượt trước xử lý xong đã!" (lần ${bicanhWaitTurnRetries}) — lượt trước chưa được tính, click lại "${prevSkillName || 'skill trước đó'}" thay vì tiến tới "${skillName}"...`);
+        // Chờ lượt trước của game xử lý xong rồi mới click lại skill đó.
+        await this.delay(this.skillClickDelayMs);
+        continue;
+      }
+      const clicked = result ? result.clicked : null;
       if (clicked) {
+        bicanhWaitTurnRetries = 0;
         this.log(`🌀 Click skill bicanh: "${clicked}"`);
         // Chỉ tăng index khi click đúng skill đích để giữ đúng quỹ đạo cooldown.
         this._bicanhSkillIdx++;
@@ -3983,9 +4041,19 @@ class NpcBot {
       })()`);
    }
 
-   // Click skill bicanh theo tên
+   // Click skill bicanh theo tên. Trả về { clicked, waitTurn }:
+   // waitTurn = true nghĩa là trước khi click skill này, game còn sót tin nhắn
+   // "Đợi lượt trước xử lý xong đã!" — tức skill ở lượt trước chưa được tính,
+   // và tin nhắn đó đã được dismiss ở đây. Loop phải lùi về skill trước đó để
+   // click lại, KHÔNG được click skill này (xem bicanhLoop).
   async clickNextBicanhSkill(skillName) {
+    // Xác định loại tin nhắn ephemeral TRƯỚC khi bấm "Bỏ qua tin nhắn",
+    // vì sau khi dismiss thì không còn đọc được nó thuộc trường hợp nào nữa.
+    const ephemeralKind = await this.peekBicanhEphemeralKind();
     await this.dismissEphemeralMessages();
+    if (ephemeralKind === 'wait-turn') {
+      return { clicked: null, waitTurn: true };
+    }
     const username = this.username || '';
     const nameNoD = skillName.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .replace(/\u0111/g, 'd').replace(/\u0110/g, 'd')
@@ -3993,7 +4061,7 @@ class NpcBot {
       .replace(/\u01B0/g, 'u').replace(/\u01AF/g, 'u')
       .toLowerCase();
 
-    return await this.exec(`(() => {
+    const clicked = await this.exec(`(() => {
        const isOwnedGameMessage = (text, userName, keywords = []) => {
          const rawText = String(text || '');
          const normalizedText = rawText.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -4034,6 +4102,7 @@ class NpcBot {
        }
        return null;
      })()`);
+    return { clicked, waitTurn: false };
   }
 }
 
