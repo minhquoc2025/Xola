@@ -100,8 +100,103 @@ async function testPeekBicanhEphemeralKind() {
   console.log('Bicanh ephemeral peek classification passed');
 }
 
+// 3. peek detail: parse được skill + số turn từ tin "đang hồi".
+async function testPeekBicanhEphemeralDetail() {
+  const cdBot = makePeekBot([msg('⏳ Kim Đan Phá Sát đang hồi! Còn 2 turn. Chỉ bạn mới có thể thấy điều này • Bỏ qua tin nhắn')]);
+  const detail = await cdBot.peekBicanhEphemeralDetail();
+  if (!detail || detail.kind !== 'cooldown' || detail.skill !== 'Kim Đan Phá Sát' || detail.turns !== 2) {
+    throw new Error('peek detail phải parse skill + turns, thực tế: ' + JSON.stringify(detail));
+  }
+  const waitBot = makePeekBot([msg('⏳ Đợi lượt trước xử lý xong đã!')]);
+  const waitDetail = await waitBot.peekBicanhEphemeralDetail();
+  if (!waitDetail || waitDetail.kind !== 'wait-turn') {
+    throw new Error('peek detail phải nhận ra wait-turn, thực tế: ' + JSON.stringify(waitDetail));
+  }
+  console.log('Bicanh ephemeral peek detail passed');
+}
+
+// 4. Loop Bicanh: skill bị báo hồi 2 turn thì phải bỏ qua cho tới khi đủ
+// 2 lượt chấp nhận, thay vì bấm lại ngay vòng sau và lại bị báo hồi.
+async function testBicanhCooldownSkip() {
+  const bot = new NpcBot({ executeJavaScript: () => 0 }, 1);
+  bot.isRunning = true;
+  bot.runId = 1;
+  bot.bicanhSkillOrder = [29, 26, 23];
+  const logs = [];
+  bot.log = (...args) => logs.push(args.join(' '));
+  bot.delay = async () => {};
+  bot.sendChat = async () => {};
+  bot.waitForBicanhButton = async () => 'battle';
+  bot.checkBicanhCooldown = async () => 0;
+
+  const s29 = bot.luanhoiSkillNames[28];
+  const s26 = bot.luanhoiSkillNames[25];
+  const s23 = bot.luanhoiSkillNames[22];
+  const seen = [];
+  const counts = {};
+  bot.clickNextBicanhSkill = async (skillName) => {
+    seen.push(skillName);
+    counts[skillName] = (counts[skillName] || 0) + 1;
+    if (skillName === s26 && counts[s26] === 1) {
+      // Trước lần click s26 này, s29 vừa bị báo hồi 2 turn.
+      return { clicked: skillName, waitTurn: false, cooldownDetail: { kind: 'cooldown', skill: s29, turns: 2 } };
+    }
+    if (skillName === s29 && counts[s29] === 2) bot.isRunning = false;
+    return { clicked: skillName, waitTurn: false, cooldownDetail: null };
+  };
+
+  await bot.bicanhLoop(1);
+
+  // s29 bị bỏ qua 1 lần giữa s23 và s26, chỉ click lại sau khi s23 + s26
+  // đều được chấp nhận (2 lượt), chứ không phải ngay vòng sau s23.
+  const expected = [s29, s26, s23, s26, s23, s29];
+  if (JSON.stringify(seen) !== JSON.stringify(expected)) {
+    throw new Error('Bicanh cooldown phải bỏ qua skill chưa hồi, thực tế: ' + JSON.stringify(seen));
+  }
+  if (!logs.some((line) => line.includes('Bỏ qua') && line.includes(s29))) {
+    throw new Error('Bicanh cooldown phải log rõ skill bị bỏ qua, log thực tế: ' + JSON.stringify(logs));
+  }
+  console.log('Bicanh cooldown skip passed');
+}
+
+// 5. Dismiss: bấm link ở node footer thì phải đánh dấu cả article cha là
+// dismissed, nếu không peek/check sẽ đọc lại tin cũ mãi.
+async function testDismissMarksParentArticle() {
+  const attrs = {};
+  const article = {
+    textContent: '⏳ Kim Đan Phá Sát đang hồi! Còn 2 turn. Chỉ bạn mới có thể thấy điều này • Bỏ qua tin nhắn',
+    getAttribute: (name) => attrs[name] || null,
+    setAttribute: (name, value) => { attrs[name] = value; },
+    querySelectorAll: () => [],
+    closest: () => article,
+  };
+  let linkClicked = false;
+  const footer = {
+    textContent: 'Chỉ bạn mới có thể thấy điều này • Bỏ qua tin nhắn',
+    getAttribute: () => null,
+    setAttribute: () => {},
+    querySelectorAll: () => [{ textContent: 'Bỏ qua tin nhắn', disabled: false, click: () => { linkClicked = true; } }],
+    closest: () => article,
+  };
+  const bot = new NpcBot({
+    executeJavaScript: (script) => vm.runInNewContext(script, {
+      document: { querySelectorAll: () => [article, footer] },
+    }),
+  }, 1);
+  bot.log = () => {};
+  await bot.dismissEphemeralMessages();
+  if (!linkClicked) throw new Error('dismiss phải bấm link Bỏ qua tin nhắn');
+  if (attrs['data-bot-ephemeral-dismissed'] !== 'true') {
+    throw new Error('dismiss phải đánh dấu article cha là dismissed, thực tế: ' + JSON.stringify(attrs));
+  }
+  console.log('Bicanh dismiss marks parent article passed');
+}
+
 testBicanhWaitTurnRetriesPreviousSkill()
   .then(testPeekBicanhEphemeralKind)
+  .then(testPeekBicanhEphemeralDetail)
+  .then(testBicanhCooldownSkip)
+  .then(testDismissMarksParentArticle)
   .catch((error) => {
     console.error(error);
     process.exitCode = 1;

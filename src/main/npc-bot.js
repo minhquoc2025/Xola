@@ -234,30 +234,37 @@ class NpcBot {
         .toLowerCase().replace(/\s+/g, ' ').trim();
 
       // Node ephemeral có thể là [role="article"] hoặc thẻ bọc mang class "ephemeral".
+      // Thực tế ở Discord, link "Bỏ qua tin nhắn" nằm ở node footer chỉ chứa
+      // "Chỉ bạn mới có thể thấy điều này • Bỏ qua tin nhắn", còn nội dung
+      // "X đang hồi! Còn N turn." nằm ở node article cha. Bản trước chỉ đánh
+      // dấu footer, article cha vẫn chưa dismissed nên peek/checkBicanhCooldown
+      // đọc lại tin cũ mãi, tưởng là tin mới mỗi vòng. Vì vậy: bấm HẾT link
+      // dismiss chưa bấm (không chỉ cái đầu tiên), và đánh dấu cả article cha.
       const nodes = Array.from(document.querySelectorAll('[role="article"], [class*="ephemeral"]'));
       const recent = nodes.slice(-40).reverse();
-      let clicked = null;
+      const clicked = [];
       for (const node of recent) {
         const text = nd(node.textContent);
         if (!markerNeedles.some(needle => text.includes(needle))) continue;
         node.setAttribute('data-bot-ephemeral', 'true');
-        if (clicked) continue;
         if (node.getAttribute('data-bot-ephemeral-dismissed') === 'true') continue;
         const links = Array.from(node.querySelectorAll('a, button, [role="button"]'));
         for (const link of links) {
           const raw = (link.textContent || '').trim();
           if (!raw || !nd(raw).includes(dismissNeedle)) continue;
           node.setAttribute('data-bot-ephemeral-dismissed', 'true');
+          const article = node.closest ? node.closest('[role="article"]') : null;
+          if (article) {
+            article.setAttribute('data-bot-ephemeral', 'true');
+            article.setAttribute('data-bot-ephemeral-dismissed', 'true');
+          }
           link.disabled = false;
           link.click();
-          // Log cả nội dung tin nhắn, không chỉ chữ "Bỏ qua tin nhắn": nếu không
-          // log sẽ không phân biệt được tin vừa dismiss là "đang hồi" hay
-          // "Đợi lượt...", rất khó chẩn đoán khi bot vẫn báo hồi chiêu liên tục.
-          clicked = String(node.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+          clicked.push(String(node.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 120));
           break;
         }
       }
-      return clicked;
+      return clicked.length ? clicked.join(' | ') : null;
     })()`);
 
     if (clicked) this.log(`🧹 Đã dismiss tin nhắn ephemeral: "${clicked}"`);
@@ -1750,31 +1757,61 @@ class NpcBot {
   // - 'cooldown': "skill đang hồi! Còn 1 turn." — skill đó đang hồi thật, tiến tới
   //   skill tiếp theo trong combo như cũ là đúng.
   // Trả về null nếu không có tin nhắn ephemeral nào chưa dismiss.
-  async peekBicanhEphemeralKind() {
+  // Chi tiết cho loop Bicanh: { kind: 'wait-turn'|'cooldown', skill, turns }.
+  // skill/turns chỉ có ý nghĩa với cooldown, vd "Kim Đan Phá Sát đang hồi!
+  // Còn 2 turn." -> { kind: 'cooldown', skill: 'Kim Đan Phá Sát', turns: 2 }.
+  // Nhờ dismiss đã đánh dấu cả article cha, các tin cũ sẽ bị bỏ qua nên tin
+  // tìm được ở đây là tin mới, sinh ra từ lượt click ngay trước đó.
+  async peekBicanhEphemeralDetail() {
+    // Normalize giống hệt nd trong exec bên dưới (Đ/đ -> d), KHÔNG dùng
+    // normalizeMatchText vì hàm đó chỉ đổi đ thường, giữ Đ hoa thành đ sau
+    // toLowerCase nên không khớp với text đã đổi thành d.
+    const normalizeSkill = (name) => String(name || '')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/\u0111/g, 'd').replace(/\u0110/g, 'd')
+      .replace(/\u01A1/g, 'o').replace(/\u01A0/g, 'o')
+      .replace(/\u01B0/g, 'u').replace(/\u01AF/g, 'u')
+      .toLowerCase().replace(/\s+/g, ' ').trim();
+    const skillPairs = (this.luanhoiSkillNames || [])
+      .filter(Boolean)
+      .map((name) => [normalizeSkill(name), name])
+      .sort((a, b) => b[0].length - a[0].length);
+    // Lưu ý: đoạn này nằm trong template literal nên \s, \d, \uXXXX phải
+    // viết 2 backslash, nếu không template sẽ nuốt backslash thành s/d và
+    // regex parse turn sẽ không bao giờ khớp.
     return await this.exec(`(() => {
        const nd = value => String(value || '')
-         .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-         .replace(/\u0111/g, 'd').replace(/\u0110/g, 'd')
-         .replace(/\u01A1/g, 'o').replace(/\u01A0/g, 'o')
-         .replace(/\u01B0/g, 'u').replace(/\u01AF/g, 'u')
-         .toLowerCase().replace(/\s+/g, ' ').trim();
-       // Quét cùng tập node như dismissEphemeralMessages: tin ephemeral có thể
-       // là [role="article"] HOẶC thẻ bọc mang class "ephemeral". Bản trước chỉ
-       // quét article nên có thể miss tin "Đợi lượt..." nằm ở thẻ bọc, dismiss
-       // vẫn bấm được nó nhưng peek thì không thấy -> loop vẫn tiến skill sai.
+         .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '')
+         .replace(/\\u0111/g, 'd').replace(/\\u0110/g, 'd')
+         .replace(/\\u01A1/g, 'o').replace(/\\u01A0/g, 'o')
+         .replace(/\\u01B0/g, 'u').replace(/\\u01AF/g, 'u')
+         .toLowerCase().replace(/\\s+/g, ' ').trim();
+       const skillPairs = ${JSON.stringify(skillPairs)};
        const msgs = document.querySelectorAll('[role="article"], [class*="ephemeral"]');
        const recent = Array.from(msgs).slice(-40).reverse();
-       let cooldown = false;
+       let cooldown = null;
        for (const msg of recent) {
          if (msg.getAttribute && msg.getAttribute('data-bot-ephemeral-dismissed') === 'true') continue;
          const text = nd(msg.textContent);
          // 'doi luot' nguy hiểm hơn: ưu tiên trả về ngay, kể cả khi trong 40 tin
          // gần nhất có cả tin "đang hồi" của một skill khác.
-         if (text.includes('doi luot')) return 'wait-turn';
-         if (text.includes('dang hoi')) cooldown = true;
+         if (text.includes('doi luot')) return { kind: 'wait-turn', skill: null, turns: null };
+         if (text.includes('dang hoi') && !cooldown) {
+           let skill = null;
+           for (const pair of skillPairs) {
+             if (pair[0] && text.includes(pair[0])) { skill = pair[1]; break; }
+           }
+           const turnMatch = text.match(/con\\s+(\\d+)\\s*turn/);
+           cooldown = { kind: 'cooldown', skill, turns: turnMatch ? parseInt(turnMatch[1]) : null };
+         }
        }
-       return cooldown ? 'cooldown' : null;
+       return cooldown;
      })()`);
+  }
+
+  async peekBicanhEphemeralKind() {
+    const detail = await this.peekBicanhEphemeralDetail();
+    return detail ? detail.kind : null;
   }
 
   async checkNoResponse() {
@@ -3914,16 +3951,68 @@ class NpcBot {
     // Spam skill theo danh sách, lặp lại cho đến khi user bấm stop
     this._bicanhSkillIdx = 0;
     let bicanhWaitTurnRetries = 0;
-    while (this.isRunning && this.runId === runId) {
-      let skillName;
+    // Cooldown còn lại theo skill, tính bằng số lượt ĐÃ ĐƯỢC GAME CHẤP NHẬN
+    // (không phải số lần bot bấm). Click bị game báo "đang hồi" thì không
+    // tính là 1 lượt, nên chỉ trừ khi lượt trước được chấp nhận (peek không
+    // thấy tin mới). Nếu cứ bấm lại skill đang hồi thì lượt không tiến,
+    // cooldown không giảm, bot sẽ spam tin hồi chiêu mãi — đúng triệu chứng
+    // ở log 08:47-08:48 (toàn "Còn 1/2 turn", không có "Đợi lượt...").
+    const bicanhCooldownLeft = new Map();
+    let bicanhConsecutiveSkips = 0;
+    const bicanhComboLength = this.bicanhSkillOrder.length > 0 ? this.bicanhSkillOrder.length : this.luanhoiSkillNames.length;
+    const bicanhSkillAt = (idx) => {
       if (this.bicanhSkillOrder.length > 0) {
-        const stt = this.bicanhSkillOrder[this._bicanhSkillIdx % this.bicanhSkillOrder.length];
-        skillName = this.luanhoiSkillNames[stt - 1];
-      } else {
-        skillName = this.luanhoiSkillNames[this._bicanhSkillIdx % this.luanhoiSkillNames.length];
+        const stt = this.bicanhSkillOrder[idx % this.bicanhSkillOrder.length];
+        return this.luanhoiSkillNames[stt - 1];
       }
+      return this.luanhoiSkillNames[idx % this.luanhoiSkillNames.length];
+    };
+    while (this.isRunning && this.runId === runId) {
+      const skillName = bicanhSkillAt(this._bicanhSkillIdx);
       if (!skillName) { this._bicanhSkillIdx++; continue; }
+      // Bỏ qua skill đang hồi chưa đủ lượt chấp nhận, để các skill khác
+      // qua lượt trước và làm cooldown của nó giảm thật, thay vì bấm lại
+      // nó ngay vòng sau và lại bị báo hồi.
+      const bicanhLeft = bicanhCooldownLeft.get(skillName) || 0;
+      if (bicanhLeft > 0) {
+        bicanhConsecutiveSkips++;
+        if (bicanhConsecutiveSkips >= bicanhComboLength) {
+          // Tất cả skill combo đều đang hồi: không có lượt chấp nhận nào
+          // để trừ cooldown, chờ rồi thử lại skill sắp hồi nhất thay vì
+          // quay vòng bỏ qua mãi.
+          let earliest = null;
+          for (const [name, turns] of bicanhCooldownLeft) {
+            if (turns > 0 && (!earliest || turns < earliest[1])) earliest = [name, turns];
+          }
+          this.log(`⏭️ Tất cả skill Bicanh đều đang hồi — chờ ${this.skillRetryWaitMs}ms rồi thử lại "${earliest ? earliest[0] : skillName}"...`);
+          if (earliest) bicanhCooldownLeft.set(earliest[0], 0);
+          bicanhConsecutiveSkips = 0;
+          await this.delay(this.skillRetryWaitMs);
+          continue;
+        }
+        this.log(`⏭️ Bỏ qua "${skillName}" đang hồi còn ${bicanhLeft} lượt — chờ skill khác qua lượt trước...`);
+        this._bicanhSkillIdx++;
+        continue;
+      }
       const result = await this.clickNextBicanhSkill(skillName);
+      bicanhConsecutiveSkips = 0;
+      // Tin mới từ lượt click TRƯỚC đó, đọc được ở đầu clickNext lần này:
+      if (result && result.cooldownDetail) {
+        const detail = result.cooldownDetail;
+        const targetSkill = detail.skill || (this._bicanhSkillIdx > 0 ? bicanhSkillAt(this._bicanhSkillIdx - 1) : null);
+        if (targetSkill && detail.turns) {
+          bicanhCooldownLeft.set(targetSkill, detail.turns);
+          this.log(`⏳ "${targetSkill}" đang hồi còn ${detail.turns} turn — ghi nhớ, sẽ bỏ qua cho tới khi đủ lượt chấp nhận...`);
+        }
+        // Lượt trước bị báo hồi nên KHÔNG trừ cooldown của các skill khác.
+      } else if (result && !result.waitTurn) {
+        // Không có tin mới -> lượt trước (nếu có) được game chấp nhận, trừ 1
+        // lượt hồi cho mọi skill đang chờ.
+        for (const [name, turns] of Array.from(bicanhCooldownLeft)) {
+          if (turns > 1) bicanhCooldownLeft.set(name, turns - 1);
+          else bicanhCooldownLeft.delete(name);
+        }
+      }
       if (result && result.waitTurn) {
         // Tin nhắn "Đợi lượt trước xử lý xong đã!" còn sót từ lượt click trước:
         // skill đó chưa được game tính, nên lùi index về skill đó để click lại,
@@ -4048,19 +4137,23 @@ class NpcBot {
       })()`);
    }
 
-   // Click skill bicanh theo tên. Trả về { clicked, waitTurn }:
+   // Click skill bicanh theo tên. Trả về { clicked, waitTurn, cooldownDetail }:
    // waitTurn = true nghĩa là trước khi click skill này, game còn sót tin nhắn
    // "Đợi lượt trước xử lý xong đã!" — tức skill ở lượt trước chưa được tính,
    // và tin nhắn đó đã được dismiss ở đây. Loop phải lùi về skill trước đó để
    // click lại, KHÔNG được click skill này (xem bicanhLoop).
+   // cooldownDetail là tin
+   // "đang hồi" mới nhất sinh ra từ lượt click TRƯỚC đó (không phải lượt này),
+   // loop dùng nó để ghi nhớ skill đó còn bao nhiêu turn thì hồi.
   async clickNextBicanhSkill(skillName) {
     // Xác định loại tin nhắn ephemeral TRƯỚC khi bấm "Bỏ qua tin nhắn",
     // vì sau khi dismiss thì không còn đọc được nó thuộc trường hợp nào nữa.
-    const ephemeralKind = await this.peekBicanhEphemeralKind();
+    const ephemeralDetail = await this.peekBicanhEphemeralDetail();
     await this.dismissEphemeralMessages();
-    if (ephemeralKind === 'wait-turn') {
-      return { clicked: null, waitTurn: true };
+    if (ephemeralDetail && ephemeralDetail.kind === 'wait-turn') {
+      return { clicked: null, waitTurn: true, cooldownDetail: null };
     }
+    const cooldownDetail = (ephemeralDetail && ephemeralDetail.kind === 'cooldown') ? ephemeralDetail : null;
     const username = this.username || '';
     const nameNoD = skillName.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .replace(/\u0111/g, 'd').replace(/\u0110/g, 'd')
@@ -4109,7 +4202,7 @@ class NpcBot {
        }
        return null;
      })()`);
-    return { clicked, waitTurn: false };
+    return { clicked, waitTurn: false, cooldownDetail };
   }
 }
 
