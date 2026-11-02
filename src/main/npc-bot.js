@@ -3996,6 +3996,17 @@ class NpcBot {
       }
       const result = await this.clickNextBicanhSkill(skillName);
       bicanhConsecutiveSkips = 0;
+      // Tin hồi chiêu đúng là skill sắp bấm này: đã biết đang hồi thì đừng
+      // bấm, ghi nhớ cooldown rồi tiến tới skill khác ngay.
+      if (result && result.skipCurrent && result.cooldownDetail) {
+        const detail = result.cooldownDetail;
+        if (detail.skill && detail.turns) {
+          bicanhCooldownLeft.set(detail.skill, detail.turns);
+          this.log(`⏭️ Bỏ qua "${detail.skill}" đang hồi còn ${detail.turns} turn — đã biết trước khi bấm, không bấm nữa...`);
+        }
+        this._bicanhSkillIdx++;
+        continue;
+      }
       // Tin mới từ lượt click TRƯỚC đó, đọc được ở đầu clickNext lần này:
       if (result && result.cooldownDetail) {
         const detail = result.cooldownDetail;
@@ -4137,7 +4148,7 @@ class NpcBot {
       })()`);
    }
 
-   // Click skill bicanh theo tên. Trả về { clicked, waitTurn, cooldownDetail }:
+   // Click skill bicanh theo tên. Trả về { clicked, waitTurn, cooldownDetail, skipCurrent }:
    // waitTurn = true nghĩa là trước khi click skill này, game còn sót tin nhắn
    // "Đợi lượt trước xử lý xong đã!" — tức skill ở lượt trước chưa được tính,
    // và tin nhắn đó đã được dismiss ở đây. Loop phải lùi về skill trước đó để
@@ -4145,15 +4156,22 @@ class NpcBot {
    // cooldownDetail là tin
    // "đang hồi" mới nhất sinh ra từ lượt click TRƯỚC đó (không phải lượt này),
    // loop dùng nó để ghi nhớ skill đó còn bao nhiêu turn thì hồi.
+   // skipCurrent = true nghĩa là tin hồi chiêu đó đúng là skill sắp bấm này
+   // (vd sau wait-turn lùi về Vạn Kiếm thì peek lại thấy Vạn Kiếm đang hồi):
+   // đã biết nó đang hồi thì ĐỪNG bấm nữa, loop phải tiến tới skill khác
+   // ngay, thay vì bấm rồi mới ghi nhớ như bản trước (log 08:58:04, 08:58:08).
   async clickNextBicanhSkill(skillName) {
     // Xác định loại tin nhắn ephemeral TRƯỚC khi bấm "Bỏ qua tin nhắn",
     // vì sau khi dismiss thì không còn đọc được nó thuộc trường hợp nào nữa.
     const ephemeralDetail = await this.peekBicanhEphemeralDetail();
     await this.dismissEphemeralMessages();
     if (ephemeralDetail && ephemeralDetail.kind === 'wait-turn') {
-      return { clicked: null, waitTurn: true, cooldownDetail: null };
+      return { clicked: null, waitTurn: true, cooldownDetail: null, skipCurrent: false };
     }
     const cooldownDetail = (ephemeralDetail && ephemeralDetail.kind === 'cooldown') ? ephemeralDetail : null;
+    if (cooldownDetail && cooldownDetail.skill === skillName) {
+      return { clicked: null, waitTurn: false, cooldownDetail, skipCurrent: true };
+    }
     const username = this.username || '';
     const nameNoD = skillName.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .replace(/\u0111/g, 'd').replace(/\u0110/g, 'd')
@@ -4202,7 +4220,7 @@ class NpcBot {
        }
        return null;
      })()`);
-    return { clicked, waitTurn: false, cooldownDetail };
+    return { clicked, waitTurn: false, cooldownDetail, skipCurrent: false };
   }
 }
 

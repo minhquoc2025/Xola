@@ -192,11 +192,83 @@ async function testDismissMarksParentArticle() {
   console.log('Bicanh dismiss marks parent article passed');
 }
 
+// 6. Loop Bicanh: clickNext báo skipCurrent (tin hồi chiêu đúng là skill
+// sắp bấm) thì loop phải tiến tới skill khác ngay, không bấm skill đó, và
+// không bấm lại nó cho tới khi đủ lượt chấp nhận.
+async function testBicanhSkipCurrentCooldown() {
+  const bot = new NpcBot({ executeJavaScript: () => 0 }, 1);
+  bot.isRunning = true;
+  bot.runId = 1;
+  bot.bicanhSkillOrder = [29, 26, 23];
+  const logs = [];
+  bot.log = (...args) => logs.push(args.join(' '));
+  bot.delay = async () => {};
+  bot.sendChat = async () => {};
+  bot.waitForBicanhButton = async () => 'battle';
+  bot.checkBicanhCooldown = async () => 0;
+
+  const s29 = bot.luanhoiSkillNames[28];
+  const s26 = bot.luanhoiSkillNames[25];
+  const s23 = bot.luanhoiSkillNames[22];
+  const seen = [];
+  const counts = {};
+  bot.clickNextBicanhSkill = async (skillName) => {
+    seen.push(skillName);
+    counts[skillName] = (counts[skillName] || 0) + 1;
+    // Lần đầu tới s29: đã biết s29 đang hồi 2 turn, không được bấm nó.
+    if (skillName === s29 && counts[s29] === 1) {
+      return { clicked: null, waitTurn: false, cooldownDetail: { kind: 'cooldown', skill: s29, turns: 2 }, skipCurrent: true };
+    }
+    if (skillName === s29 && counts[s29] === 2) bot.isRunning = false;
+    return { clicked: skillName, waitTurn: false, cooldownDetail: null, skipCurrent: false };
+  };
+
+  await bot.bicanhLoop(1);
+
+  // s29 bị bỏ qua ở lần đầu, sau đó s26 + s23 qua lượt thì s29 mới được bấm lại.
+  const expected = [s29, s26, s23, s29];
+  if (JSON.stringify(seen) !== JSON.stringify(expected)) {
+    throw new Error('Bicanh skipCurrent phải tiến skill khác ngay, thực tế: ' + JSON.stringify(seen));
+  }
+  if (!logs.some((line) => line.includes('Bỏ qua') && line.includes(s29) && line.includes('đã biết trước khi bấm'))) {
+    throw new Error('Bicanh skipCurrent phải log rõ là đã biết trước khi bấm, log thực tế: ' + JSON.stringify(logs));
+  }
+  console.log('Bicanh skipCurrent cooldown passed');
+}
+
+// 7. clickNext thật: peek thấy tin hồi chiêu đúng là skill sắp bấm thì
+// không được bấm nút skill đó (mock exec: peek script trả detail, dismiss
+// trả null, click script không được chạy tới nút).
+async function testClickNextSkipsKnownCooldownSkill() {
+  const skillName = 'Kim Đan Phá Sát';
+  let clickScriptRun = false;
+  const bot = new NpcBot({ executeJavaScript: () => 0 }, 1);
+  bot.username = '';
+  bot.peekBicanhEphemeralDetail = async () => ({ kind: 'cooldown', skill: skillName, turns: 2 });
+  bot.dismissEphemeralMessages = async () => {};
+  bot.exec = async (code) => {
+    // Script click skill chứa isOwnedGameMessage; peek/dismiss đã mock ở trên
+    // nên mọi exec còn lại ở đây đều là script click -> ghi nhận là đã chạy.
+    clickScriptRun = true;
+    return null;
+  };
+  const result = await bot.clickNextBicanhSkill(skillName);
+  if (!result || !result.skipCurrent || result.clicked) {
+    throw new Error('clickNext phải trả skipCurrent và không click skill đang hồi, thực tế: ' + JSON.stringify(result));
+  }
+  if (clickScriptRun) {
+    throw new Error('clickNext không được chạy script click khi skill đã biết đang hồi');
+  }
+  console.log('Bicanh clickNext skipCurrent passed');
+}
+
 testBicanhWaitTurnRetriesPreviousSkill()
   .then(testPeekBicanhEphemeralKind)
   .then(testPeekBicanhEphemeralDetail)
   .then(testBicanhCooldownSkip)
   .then(testDismissMarksParentArticle)
+  .then(testBicanhSkipCurrentCooldown)
+  .then(testClickNextSkipsKnownCooldownSkill)
   .catch((error) => {
     console.error(error);
     process.exitCode = 1;
