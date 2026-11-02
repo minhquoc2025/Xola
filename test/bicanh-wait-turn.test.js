@@ -147,14 +147,14 @@ async function testBicanhCooldownSkip() {
 
   await bot.bicanhLoop(1);
 
-  // s29 bị bỏ qua 1 lần giữa s23 và s26, chỉ click lại sau khi s23 + s26
-  // đều được chấp nhận (2 lượt), chứ không phải ngay vòng sau s23.
-  const expected = [s29, s26, s23, s26, s23, s29];
+  // Xoay chuẩn: s29 bị ghi hồi 2 turn, sau s23 (trừ còn 1) thì tới lượt
+  // s29 bot phải CHỜ và bấm lại đúng s29, KHÔNG nhảy tới s26/s23 nữa.
+  const expected = [s29, s26, s23, s29];
   if (JSON.stringify(seen) !== JSON.stringify(expected)) {
-    throw new Error('Bicanh cooldown phải bỏ qua skill chưa hồi, thực tế: ' + JSON.stringify(seen));
+    throw new Error('Bicanh xoay chuẩn phải chờ và bấm lại đúng skill đang hồi, thực tế: ' + JSON.stringify(seen));
   }
-  if (!logs.some((line) => line.includes('Bỏ qua') && line.includes(s29))) {
-    throw new Error('Bicanh cooldown phải log rõ skill bị bỏ qua, log thực tế: ' + JSON.stringify(logs));
+  if (!logs.some((line) => line.includes('đang hồi') && line.includes(s29) && line.includes('không nhảy'))) {
+    throw new Error('Bicanh xoay chuẩn phải log rõ là chờ đúng skill, không nhảy, log thực tế: ' + JSON.stringify(logs));
   }
   console.log('Bicanh cooldown skip passed');
 }
@@ -193,8 +193,8 @@ async function testDismissMarksParentArticle() {
 }
 
 // 6. Loop Bicanh: clickNext báo skipCurrent (tin hồi chiêu đúng là skill
-// sắp bấm) thì loop phải tiến tới skill khác ngay, không bấm skill đó, và
-// không bấm lại nó cho tới khi đủ lượt chấp nhận.
+// sắp bấm) thì loop phải CHỜ và bấm lại đúng skill đó sau khi map trừ
+// về 0, KHÔNG tiến tới skill khác (xoay chuẩn).
 async function testBicanhSkipCurrentCooldown() {
   const bot = new NpcBot({ executeJavaScript: () => 0 }, 1);
   bot.isRunning = true;
@@ -225,17 +225,14 @@ async function testBicanhSkipCurrentCooldown() {
 
   await bot.bicanhLoop(1);
 
-  // s29 bị bỏ qua ở lần đầu (ghi hồi 2 turn), sau đó s26 + s23 qua lượt
-  // thì s29 vẫn bị bỏ qua 1 lần nữa vì lượt của s23 chỉ được trừ ở lượt
-  // bấm tiếp theo, sau bước kiểm tra map — đây là thận trọng có chủ ý:
-  // thà bỏ qua thêm 1 vòng còn hơn bấm lại khi vẫn đang hồi. Sau s26 +
-  // s23 của vòng sau thì s29 mới được bấm lại.
-  const expected = [s29, s26, s23, s26, s23, s29];
+  // Xoay chuẩn: s29 lần đầu đã biết đang hồi 2 turn, bot chờ, map trừ
+  // dần về 0, rồi bấm lại đúng s29, không qua s26/s23 ở giữa.
+  const expected = [s29, s29];
   if (JSON.stringify(seen) !== JSON.stringify(expected)) {
-    throw new Error('Bicanh skipCurrent phải tiến skill khác ngay, thực tế: ' + JSON.stringify(seen));
+    throw new Error('Bicanh skipCurrent xoay chuẩn phải chờ và bấm lại đúng skill, thực tế: ' + JSON.stringify(seen));
   }
-  if (!logs.some((line) => line.includes('Bỏ qua') && line.includes(s29) && line.includes('đã biết trước khi bấm'))) {
-    throw new Error('Bicanh skipCurrent phải log rõ là đã biết trước khi bấm, log thực tế: ' + JSON.stringify(logs));
+  if (!logs.some((line) => line.includes(s29) && line.includes('đã biết trước khi bấm') && line.includes('không nhảy'))) {
+    throw new Error('Bicanh skipCurrent phải log rõ là đã biết trước khi bấm và không nhảy, log thực tế: ' + JSON.stringify(logs));
   }
   console.log('Bicanh skipCurrent cooldown passed');
 }
@@ -421,20 +418,20 @@ async function testBicanhNotFoundDoesNotDecrementCooldown() {
 
   await bot.bicanhLoop(1);
 
-  // s29 (lần 1) -> s26 (ghi s29=2) -> s23 không tìm thấy x2 -> s23 bấm được
-  // -> s29 bị bỏ qua 1 lần (còn 1, chưa về 0) -> s26 -> s23 -> s29 bấm lại.
-  const expected = [s29, s26, s23, s23, s23, s26, s23, s29];
+  // Xoay chuẩn: s29 (lần 1) -> s26 (ghi s29=2) -> s23 không tìm thấy x2
+  // -> s23 bấm được -> tới lượt s29, map còn 1 nên bot CHỜ và bấm lại
+  // đúng s29, không nhảy qua s26/s23 nữa.
+  const expected = [s29, s26, s23, s23, s23, s29];
   if (JSON.stringify(seen) !== JSON.stringify(expected)) {
     throw new Error('Bicanh not-found không được trừ cooldown mỗi lần, thực tế: ' + JSON.stringify(seen));
   }
   console.log('Bicanh not-found does not decrement cooldown passed');
 }
 
-// 13. Chặn bấm lại skill vừa bấm: thứ tự Kim -> Hư, với Vạn đã ghi hồi
-// 1 và Kim đã ghi hồi 2 trước lần bấm Hư, thì sau lần bấm Hư, lượt bỏ qua
-// Kim rồi Vạn không phải là lượt game, nên lần quay lại Hư ngay sau đó
-// phải bị chặn (log 09:32:57-58 bấm Hư 2 lần cách nhau 1 giây), vòng bỏ qua
-// phải đi tới Vạn đã được xóa khỏi map ở nhánh chờ thay vì bấm lại Hư.
+// 13. Xoay chuẩn thay cho chặn vừa bấm: thứ tự Kim -> Hư, với Vạn đã
+// ghi hồi 1 và Kim đã ghi hồi 2 trước lần bấm Hư, thì tới lượt Vạn bot
+// phải CHỜ cho Vạn hết hồi rồi bấm đúng Vạn, không nhảy skill khác, và
+// không bấm lại Hư ở giữa.
 async function testBicanhDoesNotReclickJustUsedSkillAfterSkips() {
   const bot = new NpcBot({ executeJavaScript: () => 0 }, 1);
   bot.isRunning = true;
@@ -469,14 +466,14 @@ async function testBicanhDoesNotReclickJustUsedSkillAfterSkips() {
 
   await bot.bicanhLoop(1);
 
-  // Không được có lần bấm Hư thứ 2 ngay sau lần bấm Hư đầu tiên mà chỉ
-  // có các lượt bỏ qua ở giữa; lần bấm thứ 3 phải là Vạn sau nhánh chờ.
+  // Xoay chuẩn: Kim -> Hư -> Vạn, Vạn hết hồi sau 1 lần chờ thì bấm đúng
+  // Vạn, không có lần bấm Hư thứ 2 chen vào giữa.
   const expected = [s26, s29, s23];
   if (JSON.stringify(seen) !== JSON.stringify(expected)) {
-    throw new Error('Bicanh không được bấm lại skill vừa bấm sau các lượt bỏ qua, thực tế: ' + JSON.stringify(seen));
+    throw new Error('Bicanh xoay chuẩn phải bấm đúng thứ tự Kim -> Hư -> Vạn, thực tế: ' + JSON.stringify(seen));
   }
-  if (!logs.some((line) => line.includes('vừa bấm xong') && line.includes(s29))) {
-    throw new Error('Bicanh phải log rõ là bỏ qua skill vừa bấm, log thực tế: ' + JSON.stringify(logs));
+  if (!logs.some((line) => line.includes('đang hồi') && line.includes(s23) && line.includes('không nhảy'))) {
+    throw new Error('Bicanh xoay chuẩn phải log rõ là chờ đúng Vạn, không nhảy, log thực tế: ' + JSON.stringify(logs));
   }
   console.log('Bicanh does not reclick just used skill after skips passed');
 }
