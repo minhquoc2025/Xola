@@ -430,6 +430,57 @@ async function testBicanhNotFoundDoesNotDecrementCooldown() {
   console.log('Bicanh not-found does not decrement cooldown passed');
 }
 
+// 13. Chặn bấm lại skill vừa bấm: thứ tự Kim -> Hư, với Vạn đã ghi hồi
+// 1 và Kim đã ghi hồi 2 trước lần bấm Hư, thì sau lần bấm Hư, lượt bỏ qua
+// Kim rồi Vạn không phải là lượt game, nên lần quay lại Hư ngay sau đó
+// phải bị chặn (log 09:32:57-58 bấm Hư 2 lần cách nhau 1 giây), vòng bỏ qua
+// phải đi tới Vạn đã được xóa khỏi map ở nhánh chờ thay vì bấm lại Hư.
+async function testBicanhDoesNotReclickJustUsedSkillAfterSkips() {
+  const bot = new NpcBot({ executeJavaScript: () => 0 }, 1);
+  bot.isRunning = true;
+  bot.runId = 1;
+  bot.bicanhSkillOrder = [26, 29, 23];
+  const logs = [];
+  bot.log = (...args) => logs.push(args.join(' '));
+  bot.delay = async () => {};
+  bot.sendChat = async () => {};
+  bot.waitForBicanhButton = async () => 'battle';
+  bot.checkBicanhCooldown = async () => 0;
+
+  const s26 = bot.luanhoiSkillNames[25];
+  const s29 = bot.luanhoiSkillNames[28];
+  const s23 = bot.luanhoiSkillNames[22];
+  const seen = [];
+  const counts = {};
+  bot.clickNextBicanhSkill = async (skillName) => {
+    seen.push(skillName);
+    counts[skillName] = (counts[skillName] || 0) + 1;
+    // Lần bấm Kim ghi Vạn hồi 1; lần bấm Hư ghi Kim hồi 2. Sau đó Kim và
+    // Vạn đều bị bỏ qua theo map, quay lại Hư thì phải bị chặn vừa bấm.
+    if (skillName === s26 && counts[s26] === 1) {
+      return { clicked: skillName, waitTurn: false, wrongPerson: false, cooldownDetail: { kind: 'cooldown', skill: s23, turns: 1 }, skipCurrent: false };
+    }
+    if (skillName === s29 && counts[s29] === 1) {
+      return { clicked: skillName, waitTurn: false, wrongPerson: false, cooldownDetail: { kind: 'cooldown', skill: s26, turns: 2 }, skipCurrent: false };
+    }
+    if (skillName === s23 && counts[s23] === 1) bot.isRunning = false;
+    return { clicked: skillName, waitTurn: false, wrongPerson: false, cooldownDetail: null, skipCurrent: false };
+  };
+
+  await bot.bicanhLoop(1);
+
+  // Không được có lần bấm Hư thứ 2 ngay sau lần bấm Hư đầu tiên mà chỉ
+  // có các lượt bỏ qua ở giữa; lần bấm thứ 3 phải là Vạn sau nhánh chờ.
+  const expected = [s26, s29, s23];
+  if (JSON.stringify(seen) !== JSON.stringify(expected)) {
+    throw new Error('Bicanh không được bấm lại skill vừa bấm sau các lượt bỏ qua, thực tế: ' + JSON.stringify(seen));
+  }
+  if (!logs.some((line) => line.includes('vừa bấm xong') && line.includes(s29))) {
+    throw new Error('Bicanh phải log rõ là bỏ qua skill vừa bấm, log thực tế: ' + JSON.stringify(logs));
+  }
+  console.log('Bicanh does not reclick just used skill after skips passed');
+}
+
 testBicanhWaitTurnRetriesPreviousSkill()
   .then(testPeekBicanhEphemeralKind)
   .then(testPeekBicanhEphemeralDetail)
@@ -442,6 +493,7 @@ testBicanhWaitTurnRetriesPreviousSkill()
   .then(testClickNextWrongPersonDoesNotClick)
   .then(testBicanhDuplicateWaitTurnDoesNotStepBackTwice)
   .then(testBicanhNotFoundDoesNotDecrementCooldown)
+  .then(testBicanhDoesNotReclickJustUsedSkillAfterSkips)
   .catch((error) => {
     console.error(error);
     process.exitCode = 1;
