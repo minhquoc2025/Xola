@@ -4999,7 +4999,7 @@ class NpcBot {
       const needle = ${JSON.stringify(needleNorm)};
       const nd = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\u0111\u0110\u00D0\u00F0]/g, 'd').replace(/[\u01A1\u01A0\u00F8\u00D8]/g, 'o').replace(/[\u01B0\u01AF]/g, 'u').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
       const isVisible = el => el && !el.disabled && el.offsetParent !== null && el.getClientRects().length > 0;
-      const cands = Array.from(document.querySelectorAll('button, [role="button"], [role="menuitem"], [role="option"], [class*="option"], [class*="menuitem"]'))
+      const cands = Array.from(document.querySelectorAll('button, [role="button"], [role="menuitem"], [role="option"], [role="combobox"], [role="listbox"], [class*="option"], [class*="menuitem"], [class*="select"]'))
         .filter(isVisible);
       const scored = [];
       for (const el of cands) {
@@ -5016,6 +5016,39 @@ class NpcBot {
       if (scored.length === 0) return null;
       const top = scored[0];
       top.el.disabled = false;
+      top.el.click();
+      return top.raw;
+    })()`);
+  }
+
+  // V5: bấm theo đúng tên hiển thị trên toàn trang, kể cả khi phần tử đó
+  // không phải <button> (ô select map của Discord là div select, không phải
+  // button, nên vanduClickButton/vanduClickAnywhere cũ không thấy nó — đúng
+  // lỗi test 2026-11-04 16:18: "không mở được danh sách map").
+  // Chỉ khớp khi tên đã chuẩn hoá BẰNG đúng tên cần bấm, nên không bấm nhầm
+  // dòng "Đại Vùng Đang Chọn: Thanh Vân Trấn" trong nội dung tin nhắn.
+  // Bấm phần tử sâu nhất khớp tên; click sẽ nổi bọt lên handler của ô select.
+  async vanduClickExactText(needle) {
+    const needleNorm = this.vanduNormalize(needle);
+    return await this.exec(`(() => {
+      const needle = ${JSON.stringify(needleNorm)};
+      const nd = value => String(value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/[\\u0111\\u0110\\u00D0\\u00F0]/g, 'd').replace(/[\\u01A1\\u01A0\\u00F8\\u00D8]/g, 'o').replace(/[\\u01B0\\u01AF]/g, 'u').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      const isVisible = el => el && !el.disabled && el.offsetParent !== null && el.getClientRects().length > 0;
+      const cands = [];
+      for (const el of document.querySelectorAll('*')) {
+        if (!isVisible(el)) continue;
+        const raw = (el.textContent || '').trim();
+        if (!raw || raw.length > 100) continue;
+        if (nd(raw) !== needle) continue;
+        let depth = 0;
+        let q = el;
+        while (q.parentElement) { depth++; q = q.parentElement; }
+        cands.push({ el, raw, depth });
+      }
+      cands.sort((a, b) => b.depth - a.depth);
+      if (cands.length === 0) return null;
+      const top = cands[0];
+      try { top.el.disabled = false; } catch (e) {}
       top.el.click();
       return top.raw;
     })()`);
@@ -5147,11 +5180,11 @@ class NpcBot {
           if (currentMap && this.vanduNormalize(currentMap) === this.vanduNormalize(targetMap)) {
             this.vanduMapPicked = true;
           } else if (currentMap) {
-            const opened = await this.vanduClickButton(currentMap);
+            const opened = (await this.vanduClickButton(currentMap)) || (await this.vanduClickExactText(currentMap));
             if (opened) {
               this.log(`🗺️ Vân Du: mở danh sách map (đang chọn ${currentMap}, cần ${targetMap})`);
               await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
-              const picked = await this.vanduClickButton(targetMap);
+              const picked = (await this.vanduClickButton(targetMap)) || (await this.vanduClickExactText(targetMap));
               if (picked) {
                 this.vanduMapPicked = true;
                 this.log(`🗺️ Vân Du: đã chọn map ${targetMap} theo cảnh giới ${this.vanduRealm || ''}`);
@@ -5162,11 +5195,11 @@ class NpcBot {
               await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
               continue;
             } else {
-              this.log(`⛔ Vân Du: không mở được danh sách map, dừng để tránh vào sai map. Hãy chọn tay map rồi START lại với list để trống.`);
+              this.log(`⛔ Vân Du: không mở được danh sách map (đang ${currentMap}, cần ${targetMap}), dừng để tránh vào sai map. Hãy chọn tay map rồi START lại với list để trống.`);
               break;
             }
           } else {
-            const picked = await this.vanduClickButton(targetMap);
+            const picked = (await this.vanduClickButton(targetMap)) || (await this.vanduClickExactText(targetMap));
             if (picked) {
               this.vanduMapPicked = true;
               this.log(`🗺️ Vân Du: đã chọn map ${targetMap}`);
@@ -5177,7 +5210,7 @@ class NpcBot {
             break;
           }
         }
-        await this.vanduClickButton('Bắt Đầu Xuất Phát');
+        if (!(await this.vanduClickButton('Bắt Đầu Xuất Phát'))) await this.vanduClickExactText('Bắt Đầu Xuất Phát');
         this.log('🚀 Vân Du: Bắt Đầu Xuất Phát');
         await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
         continue;
