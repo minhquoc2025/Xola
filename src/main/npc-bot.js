@@ -324,7 +324,7 @@ class NpcBot {
     if (config.tuLuyenEndCmd !== undefined) this.tuLuyenEndCmd = config.tuLuyenEndCmd;
     if (config.tuLuyenAfterTarget !== undefined) this.tuLuyenAfterTarget = config.tuLuyenAfterTarget;
     if (config.username !== undefined) this.username = config.username;
-    if (config.userId !== undefined) this.userId = String(config.userId || '').replace(/[^0-9]/g, '');
+    if (config.userId !== undefined) this.userId = this.vanduNormalizeUserId(config.userId);
     if (config.mode !== undefined) this.mode = config.mode;
     if (config.luanhoi !== undefined) this.luanhoi = config.luanhoi;
     if (config.luanhoiTarget !== undefined) this.luanhoiTarget = config.luanhoiTarget;
@@ -408,6 +408,7 @@ class NpcBot {
     if (this.mode === 'vandu') {
       this.log(`=== VÂN DU MODE: ${this.vanduCmd} ===`);
       this.log('=== VÂN DU: chạy ổn định v1, chưa có số lần đi ===');
+      if (this.userId) this.log(`=== VÂN DU: lọc theo User ID ${this.userId} ===`);
       this.vanduLoop(this.runId);
       return;
     }
@@ -4875,24 +4876,68 @@ class NpcBot {
     return m ? Number(m[1]) : null;
   }
 
+  vanduNormalizeUserId(value) {
+    return String(value || '').replace(/[^0-9]/g, '');
+  }
+
   async vanduScanLatest() {
     const username = this.username || '';
+    const userId = this.userId || '';
     return await this.exec(`(() => {
       const username = ${JSON.stringify(username)};
+      const userId = ${JSON.stringify(userId)};
       const nd = value => String(value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/\\u0111/g, 'd').replace(/\\u0110/g, 'd').replace(/\\u01A1/g, 'o').replace(/\\u01A0/g, 'o').replace(/\\u01B0/g, 'u').replace(/\\u01AF/g, 'u').toLowerCase().replace(/\\s+/g, ' ').trim();
       const keywords = ['van du', 'tiet diem', 'mach', 'buff', 'cua', 'thien co', 'tien thuong', 'bat quai', 'trang thai chien truong', 'dien bien', 'tro ve giang ho', 'bat dau xuat phat', 'ky duyen', 'linh ngo', 'doi van', 'mua cuu chuyen', 'bi tich', 'roi di', 'tinh tam', 'mon ho', 'thuong mon', 'canh mon'];
+      const isVisible = el => el && el.offsetParent !== null;
+      const btnTexts = container => Array.from(container.querySelectorAll('button, [role="button"]'))
+        .filter(b => isVisible(b) && (b.textContent || '').trim().length > 0)
+        .map(b => (b.textContent || '').trim());
+      const isVanduText = t => {
+        const n = nd(t);
+        return keywords.some(k => n.includes(k)) || (username && t.includes(username));
+      };
       const articles = Array.from(document.querySelectorAll('[role="article"]'));
-      for (const msg of articles.slice(-15).reverse()) {
-        if (msg.getAttribute('data-bot-ephemeral') === 'true') continue;
-        const text = msg.textContent || '';
-        const ntext = nd(text);
-        if (username && !text.includes(username) && !keywords.some(k => ntext.includes(k))) continue;
-        if (!keywords.some(k => ntext.includes(k)) && !text.includes(username)) continue;
-        const btns = Array.from(msg.querySelectorAll('button, [role="button"]'))
-          .filter(b => b.offsetParent !== null && (b.textContent || '').trim().length > 0)
-          .map(b => (b.textContent || '').trim());
-        if (btns.length === 0) continue;
-        return { msgId: msg.id || '', text, buttons: btns };
+      // V3: 2 lượt quét article — lượt 1 ưu tiên tin nhắn mang User ID của mình
+      // (tránh bấm nhầm card của người khác chơi cùng kênh), lượt 2 quét mọi màn Vân Du.
+      // Quét kiểu cũ chỉ có 1 lượt, và nếu màn bắt đầu không nằm trong article
+      // (Discord Components V2 render nút ngoài article) thì bot quét mãi không thấy,
+      // log đứng im sau Sent: !vandu — đúng triệu chứng test 2026-11-04.
+      const passes = userId ? [true, false] : [false];
+      for (const onlyOwned of passes) {
+        for (const msg of articles.slice(-15).reverse()) {
+          if (msg.getAttribute('data-bot-ephemeral') === 'true') continue;
+          if (onlyOwned && !(msg.innerHTML || '').includes(userId)) continue;
+          const text = msg.textContent || '';
+          if (!isVanduText(text)) continue;
+          const btns = btnTexts(msg);
+          if (btns.length === 0) continue;
+          return { msgId: msg.id || '', text, buttons: btns };
+        }
+      }
+      // V3 fallback: màn bắt đầu (và các màn khác) có nút nằm ngoài article.
+      // Tìm nút Vân Du thấy được ở bất cứ đâu trong trang, rồi lấy container
+      // chứa nó làm màn hình, thay vì chỉ nhìn 15 article cuối.
+      const startNeedles = ['bat dau xuat phat', 'tro ve giang ho', 'tiep tuc tien sau'];
+      const allBtns = Array.from(document.querySelectorAll('button, [role="button"]'))
+        .filter(b => isVisible(b) && (b.textContent || '').trim().length > 0);
+      for (const btn of allBtns) {
+        const n = nd(btn.textContent || '');
+        if (!startNeedles.some(k => n.includes(k))) continue;
+        let container = btn.closest('[role="article"]');
+        if (!container) {
+          let el = btn.parentElement;
+          for (let i = 0; i < 8 && el; i++) {
+            const t = el.textContent || '';
+            if (t.length > 200 && isVanduText(t)) { container = el; break; }
+            el = el.parentElement;
+          }
+        }
+        if (!container) continue;
+        const text = container.textContent || '';
+        if (!isVanduText(text)) continue;
+        const btns = btnTexts(container);
+        if (btns.length === 0) btns.push((btn.textContent || '').trim());
+        return { msgId: container.id || '', text, buttons: btns };
       }
       return null;
     })()`);
@@ -4900,27 +4945,65 @@ class NpcBot {
 
   async vanduClickButton(needle) {
     const needleNorm = this.normalizeMatchText(needle);
-    const username = this.username || '';
-    return await this.exec(`(() => {
+    const userId = this.userId || '';
+    const inArticles = await this.exec(`(() => {
       const needle = ${JSON.stringify(needleNorm)};
-      const username = ${JSON.stringify(username)};
+      const userId = ${JSON.stringify(userId)};
       const nd = value => String(value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/\\u0111/g, 'd').replace(/\\u0110/g, 'd').replace(/\\u01A1/g, 'o').replace(/\\u01A0/g, 'o').replace(/\\u01B0/g, 'u').replace(/\\u01AF/g, 'u').toLowerCase().replace(/\\s+/g, ' ').trim();
       const articles = Array.from(document.querySelectorAll('[role="article"]'));
-      for (const msg of articles.slice(-15).reverse()) {
-        if (msg.getAttribute('data-bot-ephemeral') === 'true') continue;
-        const btns = Array.from(msg.querySelectorAll('button, [role="button"]'));
-        for (const btn of btns) {
-          if (btn.disabled || btn.offsetParent === null) continue;
-          const raw = (btn.textContent || '').trim();
-          if (!raw) continue;
-          if (nd(raw).includes(needle)) {
-            btn.disabled = false;
-            btn.click();
-            return raw;
+      const passes = userId ? [true, false] : [false];
+      for (const onlyOwned of passes) {
+        for (const msg of articles.slice(-15).reverse()) {
+          if (msg.getAttribute('data-bot-ephemeral') === 'true') continue;
+          if (onlyOwned && !(msg.innerHTML || '').includes(userId)) continue;
+          const btns = Array.from(msg.querySelectorAll('button, [role="button"]'));
+          for (const btn of btns) {
+            if (btn.disabled || btn.offsetParent === null) continue;
+            const raw = (btn.textContent || '').trim();
+            if (!raw) continue;
+            if (nd(raw).includes(needle)) {
+              btn.disabled = false;
+              btn.click();
+              return raw;
+            }
           }
         }
       }
       return null;
+    })()`);
+    if (inArticles) return inArticles;
+    return await this.vanduClickAnywhere(needle);
+  }
+
+  // V3: bấm nút/mục chọn ở bất cứ đâu trong trang, không chỉ trong article.
+  // Dùng cho dropdown map của Discord: mục Thiên Sơn Tuyết Lãnh nằm trong
+  // popout select-menu ngoài article, nên vanduClickButton cũ không bao giờ
+  // thấy nó và bot dừng ở "không bấm được map".
+  async vanduClickAnywhere(needle) {
+    const needleNorm = this.normalizeMatchText(needle);
+    return await this.exec(`(() => {
+      const needle = ${JSON.stringify(needleNorm)};
+      const nd = value => String(value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/\\u0111/g, 'd').replace(/\\u0110/g, 'd').replace(/\\u01A1/g, 'o').replace(/\\u01A0/g, 'o').replace(/\\u01B0/g, 'u').replace(/\\u01AF/g, 'u').toLowerCase().replace(/\\s+/g, ' ').trim();
+      const isVisible = el => el && !el.disabled && el.offsetParent !== null && el.getClientRects().length > 0;
+      const cands = Array.from(document.querySelectorAll('button, [role="button"], [role="menuitem"], [role="option"], [class*="option"], [class*="menuitem"]'))
+        .filter(isVisible);
+      const scored = [];
+      for (const el of cands) {
+        const raw = (el.textContent || '').trim();
+        if (!raw || raw.length > 120) continue;
+        if (!nd(raw).includes(needle)) continue;
+        let depth = 0;
+        let p = el;
+        while (p.parentElement) { depth++; p = p.parentElement; }
+        scored.push({ el, raw, depth });
+      }
+      // Mục sâu nhất thắng: tránh bấm nhầm container lớn chứa nhiều nút.
+      scored.sort((a, b) => b.depth - a.depth);
+      if (scored.length === 0) return null;
+      const top = scored[0];
+      top.el.disabled = false;
+      top.el.click();
+      return top.raw;
     })()`);
   }
 
@@ -5000,6 +5083,7 @@ class NpcBot {
     this.vanduOwnedBuffs = {};
     this.vanduMapPicked = false;
     let shopKey = '';
+    let lastUnrecognized = '';
     let shopBought = false;
     let shopBiTich = false;
     let idleScans = 0;
@@ -5014,7 +5098,7 @@ class NpcBot {
       const screen = await this.vanduScanLatest();
       if (!screen) {
         idleScans++;
-        if (idleScans % 15 === 0) this.log('⏳ Vân Du: chưa thấy màn hình game, vẫn chờ...');
+        if (idleScans === 1 || idleScans % 15 === 0) this.log('⏳ Vân Du: chưa thấy màn hình game, vẫn chờ...');
         if (idleScans > 90) {
           this.log('⛔ Vân Du: quá lâu không thấy màn hình game, dừng để tránh thao tác nhầm.');
           break;
@@ -5248,7 +5332,8 @@ class NpcBot {
         continue;
       }
 
-      this.logDebug(`Vân Du: màn hình chưa nhận diện, nút: ${buttons.join(' | ').slice(0, 200)}`);
+      const unrec = buttons.join(' | ').slice(0, 200);
+      if (unrec !== lastUnrecognized) { lastUnrecognized = unrec; this.log(`⚠️ Vân Du: màn hình chưa nhận diện, nút: ${unrec}`); }
       await this.delay(2500);
     }
 

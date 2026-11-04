@@ -13,6 +13,11 @@ window.addEventListener('DOMContentLoaded', () => {
     const savedRealm = localStorage.getItem('vanduRealm') || '';
     if (savedRealm) vanduRealmEl.value = savedRealm;
   }
+  const vanduUserIdEl = document.getElementById('userid-vandu');
+  if (vanduUserIdEl) {
+    const savedUserId = localStorage.getItem('userid-vandu') || '';
+    if (savedUserId) vanduUserIdEl.value = savedUserId;
+  }
 
   window.api.onLogMessage((msg) => {
     appendLog(msg);
@@ -271,10 +276,19 @@ function getVanduConfig() {
     'Nguyên Anh': 'Tây Vực Sa Mạc',
     'Hóa Thần': 'Thiên Sơn Tuyết Lãnh',
   };
+  const vanduUserIdEl = document.getElementById('userid-vandu');
+  const vanduUserId = vanduUserIdEl ? (vanduUserIdEl.value || '').replace(/[^0-9]/g, '') : '';
+  if (vanduUserIdEl) {
+    if (vanduUserId) localStorage.setItem('userid-vandu', vanduUserId);
+    else localStorage.removeItem('userid-vandu');
+  }
   return {
     mode: 'vandu',
     vandu: true,
-    username: (document.getElementById('username-vandu').value || 'Quất Bất Lực').trim(),
+    // V3: Vân Du dùng User ID như các chức năng kia, không dùng tên nữa.
+    // username để rỗng để bot không rơi về lọc theo tên.
+    username: '',
+    userId: vanduUserId,
     vanduCmd: (document.getElementById('vandu-cmd').value || '!vandu').trim(),
     buttonDelayMs: (parseFloat(document.getElementById('vandu-delay').value) || 2) * 1000,
     vanduRealm: vanduRealm,

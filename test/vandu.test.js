@@ -85,4 +85,10 @@ eq(bot.vanduPuzzleDoor('Thổ'), 'Khôn', 'Tho -> Khon');
 eq(bot.vanduSkillCooldown('Băng Phong (2)'), 2, 'cooldown 2');
 eq(bot.vanduSkillCooldown('Băng Phong'), null, 'khong cooldown');
 
+// V3: User ID cho Vân Du (chỉ số, giống các chức năng kia)
+eq(bot.vanduNormalizeUserId('123abc456'), '123456', 'userid chi giu so');
+eq(bot.vanduNormalizeUserId('  987-654 '), '987654', 'userid bo khoang trang/gach');
+bot.updateConfig({ mode: 'vandu', userId: '12a34' });
+eq(bot.userId, '1234', 'updateConfig luu userid da loc');
+
 console.log('Vân Du logic checks passed');
