@@ -1479,10 +1479,21 @@ class NpcBot {
             if ((msg.innerHTML || '').includes(userId)) direct = msg;
           } else if (!username || (msg.textContent || '').includes(username)) direct = msg;
         }
+        // FIX miss battle (2026-11-04): nhánh direct cũ return ngay sau khi
+        // gắn owned cho đúng 1 card reply, nên các message battle nối tiếp
+        // (reply vào card đó, không reply trực tiếp !luanhoi) không bao giờ
+        // được gắn owned → tick quét không thấy battle của mình. Nay không
+        // return nữa: lấy ID của card direct làm hạt giống rồi chạy tiếp vòng
+        // lan truyền theo reply-chain như nhánh anchor thật. Nếu không lấy
+        // được ID của card direct thì giữ hành vi cũ (chỉ 1 card owned).
         if (direct) direct.setAttribute('data-luanhoi-owned', 'true');
-        return;
+        const _directId = direct ? (getId(direct.id) || getId(direct.getAttribute('data-list-item-id')) || getId(direct.getAttribute('data-message-id'))) : '';
+        if (!_directId) return;
+        // Rơi xuống vòng lan truyền bên dưới, dùng ID của card direct làm
+        // hạt giống thay cho anchorId (biến var để vòng dưới đọc được).
+        var _idsFromDirect = new Set([_directId]);
       }
-      const ids = new Set([anchorId]);
+      const ids = (typeof _idsFromDirect !== 'undefined' && _idsFromDirect) ? _idsFromDirect : new Set([anchorId]);
 
       for (let pass = 0; pass < 5; pass++) {
         let changed = false;
