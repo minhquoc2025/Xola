@@ -3061,8 +3061,18 @@ class NpcBot {
     // sau khi game đã báo sang tầng.
     if (!isAdvance) await this.delay(this.rand(2500, 3500));
 
+    // FIX đọc tầng sai sau boss (log 2026-11-04 11:28: boss 20 thắng nhưng
+    // readLuanhoiTier trả về 1, làm mất bước bấm "Tiếp tục leo tháp" rồi kẹt
+    // tick=none): trong 1 lượt, tầng chỉ tăng, không bao giờ tụt — trừ khi thua
+    // cả lượt (đã return ở trên). Nên nếu lần đọc mới tụt so với tầng đã biết
+    // trước trận thì coi là đọc sai, giữ tầng cũ thay vì ghi đè.
+    const _tierBeforeBattle = this.luanhoiCurrentTier || 0;
     let currentTier = await this.readLuanhoiTier();
     if (isAdvance && battleResult.tier > 0) currentTier = battleResult.tier;
+    if (_tierBeforeBattle > 0 && currentTier > 0 && currentTier < _tierBeforeBattle) {
+      this.log(`⚠️ [Sửa tầng] Đọc tầng ra ${currentTier} nhưng trước trận đã ở tầng ${_tierBeforeBattle} — tầng không thể tụt trong 1 lượt, giữ tầng ${_tierBeforeBattle} để không mất nút Tiếp tục boss.`);
+      currentTier = _tierBeforeBattle;
+    }
     this.lastLuanhoiTarget = currentTier;
     if (currentTier > 0) this.luanhoiCurrentTier = currentTier;
     const quickAdvance = isAdvance && currentTier > 0 && currentTier % 10 !== 0;
