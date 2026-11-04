@@ -92,3 +92,8 @@ bot.updateConfig({ mode: 'vandu', userId: '12a34' });
 eq(bot.userId, '1234', 'updateConfig luu userid da loc');
 
 console.log('Vân Du logic checks passed');
+
+// V4: chuẩn hoá mạnh cho Vân Du
+eq(bot.vanduNormalize('🚀 Bắt Đầu Xuất Phát'), 'bat dau xuat phat', 'emoji + Dau -> bat dau xuat phat');
+eq(bot.vanduNormalize('🌿 Thanh Vân Trấn'), 'thanh van tran', 'map name cleaned');
+eq(bot.vanduNormalize('Thiên Sơn Tuyết Lãnh'), 'thien son tuyet lanh', 'map target cleaned');

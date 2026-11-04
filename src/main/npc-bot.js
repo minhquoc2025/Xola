@@ -4625,7 +4625,7 @@ class NpcBot {
   //   vùng trước khi bấm START, bot chỉ bấm Bắt Đầu Xuất Phát.
 
   vanduElementOfDoor(buttonText) {
-    const t = this.normalizeMatchText(buttonText);
+    const t = this.vanduNormalize(buttonText);
     const bracket = String(buttonText || '').match(/\[(Mộc|Hỏa|Thổ|Kim|Thủy)\]/);
     if (bracket) return bracket[1];
     if (t.includes('canh mon')) return 'Hỏa';
@@ -4674,7 +4674,7 @@ class NpcBot {
   }
 
   vanduDoorPriority(buttonText) {
-    const t = this.normalizeMatchText(buttonText);
+    const t = this.vanduNormalize(buttonText);
     const order = ['thuong mon', 'sinh mon', 'canh mon', 'huu mon', 'kinh mon', 'khai mon', 'do mon', 'tu mon'];
     for (let i = 0; i < order.length; i++) {
       if (t.includes(order[i])) return i;
@@ -4704,7 +4704,7 @@ class NpcBot {
     // rồi Cảnh, Hưu, Kinh, Khai, Đỗ; Tử Môn chỉ khi không còn cửa nào khác
     // (trường hợp chỉ có Tử thì trả null như v1 để chờ màn mới).
     const sorted = [...list].sort((a, c) => this.vanduDoorPriority(a) - this.vanduDoorPriority(c));
-    const first = sorted.find(x => !this.normalizeMatchText(x).includes('tu mon'));
+    const first = sorted.find(x => !this.vanduNormalize(x).includes('tu mon'));
     if (first) return first;
     return null;
   }
@@ -4733,7 +4733,7 @@ class NpcBot {
     const re = /['\u201c\u201d\"]([^'\u201c\u201d\"]+)['\u201c\u201d\"]/g;
     let m;
     while ((m = re.exec(raw)) !== null) quoted.push(m[1]);
-    const hay = this.normalizeMatchText(quoted.join(' '));
+    const hay = this.vanduNormalize(quoted.join(' '));
     if (!hay) return null;
     if (hay.includes('thuy') || hay.includes('nuoc')) return 'Thủy';
     if (hay.includes('hoa') || hay.includes('viem') || hay.includes('thieu') || hay.includes('lua')) return 'Hỏa';
@@ -4880,13 +4880,27 @@ class NpcBot {
     return String(value || '').replace(/[^0-9]/g, '');
   }
 
+  // V4: chuẩn hoá mạnh cho Vân Du — ngoài bỏ dấu như normalizeMatchText,
+  // còn map Ð/ð về d, ø về o, và bỏ mọi ký tự không phải chữ/số (emoji, dấu
+  // câu, ký tự đặc biệt trong nút Discord). Nhờ vậy "Bắt Đầu Xuất Phát"
+  // luôn thành "bat dau xuat phat" dù nút dùng biến thể ký tự Đ hay emoji.
+  // Dùng cho mọi so khớp Vân Du, thay vì normalizeMatchText thông thường.
+  vanduNormalize(value) {
+    return String(value || '')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[\u0111\u0110\u00D0\u00F0]/g, 'd')
+      .replace(/[\u01A1\u01A0\u00F8\u00D8]/g, 'o')
+      .replace(/[\u01B0\u01AF]/g, 'u')
+      .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  }
+
   async vanduScanLatest() {
     const username = this.username || '';
     const userId = this.userId || '';
     return await this.exec(`(() => {
       const username = ${JSON.stringify(username)};
       const userId = ${JSON.stringify(userId)};
-      const nd = value => String(value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/\\u0111/g, 'd').replace(/\\u0110/g, 'd').replace(/\\u01A1/g, 'o').replace(/\\u01A0/g, 'o').replace(/\\u01B0/g, 'u').replace(/\\u01AF/g, 'u').toLowerCase().replace(/\\s+/g, ' ').trim();
+      const nd = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\u0111\u0110\u00D0\u00F0]/g, 'd').replace(/[\u01A1\u01A0\u00F8\u00D8]/g, 'o').replace(/[\u01B0\u01AF]/g, 'u').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
       const keywords = ['van du', 'tiet diem', 'mach', 'buff', 'cua', 'thien co', 'tien thuong', 'bat quai', 'trang thai chien truong', 'dien bien', 'tro ve giang ho', 'bat dau xuat phat', 'ky duyen', 'linh ngo', 'doi van', 'mua cuu chuyen', 'bi tich', 'roi di', 'tinh tam', 'mon ho', 'thuong mon', 'canh mon'];
       const isVisible = el => el && el.offsetParent !== null;
       const btnTexts = container => Array.from(container.querySelectorAll('button, [role="button"]'))
@@ -4944,12 +4958,12 @@ class NpcBot {
   }
 
   async vanduClickButton(needle) {
-    const needleNorm = this.normalizeMatchText(needle);
+    const needleNorm = this.vanduNormalize(needle);
     const userId = this.userId || '';
     const inArticles = await this.exec(`(() => {
       const needle = ${JSON.stringify(needleNorm)};
       const userId = ${JSON.stringify(userId)};
-      const nd = value => String(value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/\\u0111/g, 'd').replace(/\\u0110/g, 'd').replace(/\\u01A1/g, 'o').replace(/\\u01A0/g, 'o').replace(/\\u01B0/g, 'u').replace(/\\u01AF/g, 'u').toLowerCase().replace(/\\s+/g, ' ').trim();
+      const nd = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\u0111\u0110\u00D0\u00F0]/g, 'd').replace(/[\u01A1\u01A0\u00F8\u00D8]/g, 'o').replace(/[\u01B0\u01AF]/g, 'u').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
       const articles = Array.from(document.querySelectorAll('[role="article"]'));
       const passes = userId ? [true, false] : [false];
       for (const onlyOwned of passes) {
@@ -4980,10 +4994,10 @@ class NpcBot {
   // popout select-menu ngoài article, nên vanduClickButton cũ không bao giờ
   // thấy nó và bot dừng ở "không bấm được map".
   async vanduClickAnywhere(needle) {
-    const needleNorm = this.normalizeMatchText(needle);
+    const needleNorm = this.vanduNormalize(needle);
     return await this.exec(`(() => {
       const needle = ${JSON.stringify(needleNorm)};
-      const nd = value => String(value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/\\u0111/g, 'd').replace(/\\u0110/g, 'd').replace(/\\u01A1/g, 'o').replace(/\\u01A0/g, 'o').replace(/\\u01B0/g, 'u').replace(/\\u01AF/g, 'u').toLowerCase().replace(/\\s+/g, ' ').trim();
+      const nd = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\u0111\u0110\u00D0\u00F0]/g, 'd').replace(/[\u01A1\u01A0\u00F8\u00D8]/g, 'o').replace(/[\u01B0\u01AF]/g, 'u').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
       const isVisible = el => el && !el.disabled && el.offsetParent !== null && el.getClientRects().length > 0;
       const cands = Array.from(document.querySelectorAll('button, [role="button"], [role="menuitem"], [role="option"], [class*="option"], [class*="menuitem"]'))
         .filter(isVisible);
@@ -5019,15 +5033,15 @@ class NpcBot {
       await this.dismissEphemeralMessages();
       const screen = await this.vanduScanLatest();
       if (!screen) { await this.delay(2000); continue; }
-      const norm = this.normalizeMatchText(screen.text);
-      const btnNorm = screen.buttons.map(b => this.normalizeMatchText(b));
+      const norm = this.vanduNormalize(screen.text);
+      const btnNorm = screen.buttons.map(b => this.vanduNormalize(b));
       if (btnNorm.some(b => b.includes('tro ve giang ho'))) return;
       const isBattle = norm.includes('trang thai chien truong') || norm.includes('dien bien hiep dau') ||
-        this.vanduSkillOrder.some(s => btnNorm.some(b => b.includes(this.normalizeMatchText(s))));
+        this.vanduSkillOrder.some(s => btnNorm.some(b => b.includes(this.vanduNormalize(s))));
       if (!isBattle) return;
       // Hồi máu bằng vật phẩm dưới skill, chỉ khi máu <= 50% và chưa dùng trong trận này.
       const hp = this.vanduPlayerHpPct(screen.text);
-      const itemBtn = screen.buttons.find(b => this.normalizeMatchText(b).includes('cuu chuyen hoan hon dan'));
+      const itemBtn = screen.buttons.find(b => this.vanduNormalize(b).includes('cuu chuyen hoan hon dan'));
       if (!healUsed && hp !== null && hp <= 50 && itemBtn) {
         const clicked = await this.vanduClickButton('Cửu Chuyển Hoàn Hồn Đan');
         if (clicked) {
@@ -5050,7 +5064,7 @@ class NpcBot {
         const skill = this.vanduSkillOrder[this.vanduSkillIdx % this.vanduSkillOrder.length];
         this.vanduSkillIdx++;
         tried++;
-        const btn = screen.buttons.find(x => this.normalizeMatchText(x).includes(this.normalizeMatchText(skill)));
+        const btn = screen.buttons.find(x => this.vanduNormalize(x).includes(this.vanduNormalize(skill)));
         if (!btn) continue;
         const cd = this.vanduSkillCooldown(btn);
         if (cd !== null && cd > 0) continue;
@@ -5058,7 +5072,7 @@ class NpcBot {
         break;
       }
       if (!clicked) {
-        const filler = screen.buttons.find(x => this.normalizeMatchText(x).includes('kiem co ban'));
+        const filler = screen.buttons.find(x => this.vanduNormalize(x).includes('kiem co ban'));
         if (filler) {
           clicked = await this.vanduClickButton('Kiếm Cơ Bản');
           if (clicked) this.log('⚔️ Vân Du: tất cả skill chính đang hồi/thiếu nút, dùng Kiếm Cơ Bản');
@@ -5108,14 +5122,14 @@ class NpcBot {
       }
       idleScans = 0;
       const text = screen.text || '';
-      const norm = this.normalizeMatchText(text);
+      const norm = this.vanduNormalize(text);
       const buttons = screen.buttons || [];
-      const btnNorm = buttons.map(b => this.normalizeMatchText(b));
+      const btnNorm = buttons.map(b => this.vanduNormalize(b));
       const node = this.vanduParseNode(text);
       if (node) this.vanduNode = node;
 
       // Kết thúc chuyến: bấm Trở Về Giang Hồ rồi dừng sạch như STOP.
-      if (btnNorm.some(b => b.includes('tro ve giang ho'))) {
+      if (btnNorm.some(b => b.includes('tro ve giang ho')) || norm.includes('tro ve giang ho')) {
         await this.vanduClickButton('Trở Về Giang Hồ');
         this.log('🏁 Vân Du: hết 3 mạng, đã về Giang Hồ, kết thúc chuyến.');
         await this.stop();
@@ -5123,11 +5137,14 @@ class NpcBot {
       }
 
       // Màn hình bắt đầu: nếu tool đã chọn cảnh giới thì chọn map tương ứng trước, rồi mới bấm xuất phát.
-      if (btnNorm.some(b => b.includes('bat dau xuat phat'))) {
+      // V4: nhận diện màn bắt đầu cả qua nội dung màn hình, không chỉ qua
+      // list nút — test 2026-11-04 list nút có Bắt Đầu nhưng vòng xử lý vẫn
+      // rơi xuống 'chưa nhận diện', nên chỉ tin list nút là không đủ.
+      if (btnNorm.some(b => b.includes('bat dau xuat phat')) || norm.includes('bat dau xuat phat')) {
         const targetMap = this.vanduTargetMap();
         if (targetMap && !this.vanduMapPicked) {
           const currentMap = this.vanduCurrentMap(text);
-          if (currentMap && this.normalizeMatchText(currentMap) === this.normalizeMatchText(targetMap)) {
+          if (currentMap && this.vanduNormalize(currentMap) === this.vanduNormalize(targetMap)) {
             this.vanduMapPicked = true;
           } else if (currentMap) {
             const opened = await this.vanduClickButton(currentMap);
@@ -5221,7 +5238,7 @@ class NpcBot {
       if (/bát quái trận đố|bat quai tran do/i.test(text) || btnNorm.some(x => x.includes('cua ly') || x.includes('cua kham') || x.includes('cua khon') || x.includes('cua chan') || x.includes('cua doai'))) {
         const element = this.vanduPuzzleElement(text);
         const door = element ? this.vanduPuzzleDoor(element) : null;
-        const doorBtn = door ? buttons.find(x => this.normalizeMatchText(x).includes(this.normalizeMatchText('Cửa ' + door))) : null;
+        const doorBtn = door ? buttons.find(x => this.vanduNormalize(x).includes(this.vanduNormalize('Cửa ' + door))) : null;
         if (doorBtn) {
           await this.vanduClickButton(doorBtn);
           this.log(`🧩 Vân Du: đố Bát Quái, thơ hành ${element} -> ${doorBtn}`);
@@ -5271,7 +5288,7 @@ class NpcBot {
           if (!cur) break;
           this.vanduSyncSectCounts(cur.text || '');
           const buffButtons = (cur.buttons || []).filter(b => {
-            const n = this.normalizeMatchText(b);
+            const n = this.vanduNormalize(b);
             return !n.includes('doi van') && !n.includes('roi di');
           });
           const counterSect = this.vanduCounterSectFromText(cur.text || '');
@@ -5302,7 +5319,7 @@ class NpcBot {
 
       // Trận đánh.
       const isBattle = norm.includes('trang thai chien truong') || norm.includes('dien bien hiep dau') ||
-        this.vanduSkillOrder.some(s => btnNorm.some(b => b.includes(this.normalizeMatchText(s))));
+        this.vanduSkillOrder.some(s => btnNorm.some(b => b.includes(this.vanduNormalize(s))));
       if (isBattle) {
         await this.vanduBattleLoop(runId);
         await this.delay(Math.max(1000, this.buttonDelayMs || 2000));
@@ -5333,7 +5350,7 @@ class NpcBot {
       }
 
       const unrec = buttons.join(' | ').slice(0, 200);
-      if (unrec !== lastUnrecognized) { lastUnrecognized = unrec; this.log(`⚠️ Vân Du: màn hình chưa nhận diện, nút: ${unrec}`); }
+      if (unrec !== lastUnrecognized) { lastUnrecognized = unrec; this.log(`⚠️ Vân Du: màn hình chưa nhận diện, nút: ${unrec} | chuẩn hoá: ${btnNorm.join(' | ').slice(0, 200)}`); }
       await this.delay(2500);
     }
 
