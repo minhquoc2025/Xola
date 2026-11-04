@@ -548,6 +548,111 @@ class NpcBot {
     return rewards;
   }
 
+  // Parse bảng thưởng CUỐI lượt Luân Hồi — dạng khác hẳn NPC, nên parseBattleRewards
+  // (dạng "+532 🪙 +235 XP" / "Rơi: ...") không ăn được dạng này:
+  // "Nhận TOÀN BỘ thưởng tích lũy: 2.058.529 4x Đá Sơ Cấp 54x Đá Cao Cấp
+  //  3x mảnh Dây Lưng +440 Điểm Luân Hồi" hoặc dạng ngã xuống
+  // "Nhận 10% thưởng tích lũy: 116.301 7x Đá Cao Cấp +388 Điểm Luân Hồi".
+  // Chỉ gọi 1 lần cho mỗi bảng cuối lượt (bảng đã là TỔNG toàn bộ lượt),
+  // không parse thưởng boss giữa đường để tránh cộng trùng.
+  // result: 'win' (đạt target, Kết Thúc) hoặc 'loss' (ngã xuống).
+  parseLuanhoiRewards(text, result) {
+    if (!text) return [];
+    const raw = String(text);
+    // Chống cộng trùng cùng 1 bảng nếu 2 đường code cùng chạm tới nó.
+    if (this._lhLastRewardParsed === raw) return [];
+    this._lhLastRewardParsed = raw;
+
+    const parseNum = (s) => {
+      if (s == null) return 0;
+      let str = String(s).trim().toUpperCase().replace(/\s/g, '');
+      if (!str) return 0;
+      let mult = 1;
+      const suffix = str.slice(-1);
+      if (suffix === 'K' || suffix === 'M' || suffix === 'B') {
+        mult = suffix === 'K' ? 1000 : suffix === 'M' ? 1000000 : 1000000000;
+        str = str.slice(0, -1);
+      }
+      if (mult > 1) {
+        const num = parseFloat(str.replace(/,/g, '.'));
+        return Number.isFinite(num) ? Math.round(num * mult) : 0;
+      }
+      const num = parseInt(str.replace(/[.,]/g, ''), 10);
+      return Number.isFinite(num) ? num : 0;
+    };
+
+    const rewards = [];
+    let coins = 0;
+    let points = 0;
+    const coinMatch = raw.match(/thưởng tích lũy\s*:?\s*([0-9][0-9.,]*\s*[KMB]?)/i);
+    if (coinMatch) coins = parseNum(coinMatch[1]);
+    const pointMatch = raw.match(/\+([0-9][0-9.,]*)\s*Điểm Luân Hồi/i);
+    if (pointMatch) points = parseNum(pointMatch[1]);
+
+    // Vật phẩm dạng "54x Đá Cao Cấp", "3x mảnh Dây Lưng" — gom theo tên trong
+    // cùng 1 bảng để 1 loại không bị cộng 2 lần nếu bảng nhắc lại nó.
+    const qtyByName = {};
+    // Tên vật phẩm dừng ở: vật phẩm kế ("4x ..."), điểm ("⭐ +440 Điểm...":
+    // giữa tên và dấu + có thể có emoji), hoặc hết bảng.
+    const itemRe = /(\d+)\s*x\s*([^\d+]+?)(?=\s+\d+\s*x|\s*[^\p{L}\p{N}\s]*\s*\+\s*[0-9]|\s*$)/gu;
+    let m;
+    while ((m = itemRe.exec(raw)) !== null) {
+      const qty = parseInt(m[1], 10);
+      const name = m[2].replace(/[^\p{L}\s]/gu, '').replace(/\s+/g, ' ').trim();
+      if (!name || name.length < 2 || !Number.isFinite(qty) || qty <= 0) continue;
+      qtyByName[name] = (qtyByName[name] || 0) + qty;
+    }
+
+    if (coins > 0) {
+      this.stats.coins += coins;
+      rewards.push(`+${coins}🪙`);
+    }
+    if (points > 0) {
+      this.stats.exp += points;
+      rewards.push(`+${points} Điểm Luân Hồi`);
+    }
+    const itemNames = [];
+    for (const [name, qty] of Object.entries(qtyByName)) {
+      if (!this.stats.items.includes(name)) this.stats.items.push(name);
+      this.stats.itemCounts[name] = (this.stats.itemCounts[name] || 0) + qty;
+      itemNames.push(`${name} x${qty}`);
+      rewards.push(`${name} x${qty}`);
+    }
+    if (rewards.length > 0) {
+      this.stats.lastBattle = { coins, exp: points, items: itemNames, result: result || null, npc: 'Luân Hồi Tháp' };
+      this.log(`[Luân Hồi] Thưởng lượt: ${rewards.join(', ')}`);
+    } else {
+      this.log('[Luân Hồi] Không parse được thưởng từ bảng cuối lượt: ' + raw.substring(0, 200));
+    }
+    return rewards;
+  }
+
+  // Đọc bảng "Kết Thúc Luân Hồi Tháp!" vừa xuất hiện sau khi bấm Dừng nhận
+  // thưởng. Game trả bảng này sau vài giây nên quét lại tối đa ~12s, thấy là
+  // dừng ngay; không thấy thì thôi, không chặn việc đếm lượt.
+  async readLuanhoiFinalRewardText() {
+    for (let attempt = 0; attempt < 6; attempt++) {
+      await this.markLuanhoiMessages();
+      const found = await this.exec(`(() => {
+        const msgs = document.querySelectorAll('[role="article"]');
+        const recent = Array.from(msgs).slice(-40).reverse();
+        for (const msg of recent) {
+          if (msg.getAttribute('data-luanhoi-owned') !== 'true') continue;
+          const text = msg.textContent || '';
+          const norm = text.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .replace(/đ/g, 'd').replace(/Đ/g, 'd').toLowerCase();
+          if (norm.includes('ket thuc luan hoi thap') && norm.includes('thuong tich luy')) {
+            return text;
+          }
+        }
+        return null;
+      })()`);
+      if (found) return found;
+      await this.delay(2000);
+    }
+    return null;
+  }
+
   parseTargetNpc(text) {
     // "🏆 Quất Bất Lực thắng NPC 🌙 Hằng Nga Tiên Tử!" or "💀 Quất Bất Lực thua NPC 🔮 Bí Ẩn Chi Linh!"
     const winMatch = text.match(/thắng NPC\s+(.+?)!/);
@@ -2859,11 +2964,16 @@ class NpcBot {
       !/chiến thắng|thắng!/i.test(battleResult.rewardText));
     const isLossFinal = isLoss || (battleResult && battleResult.ended && isTowerEndLoss);
 
+    // Chiến Thắng ở mode Luân Hồi = số lượt đi THÀNH CÔNG (đạt target, Kết Thúc),
+    // không phải số tầng đã thắng: trước đây wins++ mỗi tầng nên 1 lượt leo
+    // vài trăm tầng đã đẩy Chiến Thắng lên vài trăm, trong khi Thất Bại chỉ
+    // đếm theo lượt. Thắng tầng/boss vẫn log, chỉ không cộng vào stats.wins;
+    // stats.wins chỉ +1 ở đường đạt target bên dưới.
+    // Thất Bại vẫn đếm theo lượt (isLossFinal), và bảng thưởng cuối lượt
+    // (ngã xuống) được parse ở đây, mỗi lượt 1 lần.
     if (isWin) {
-      this.stats.wins++;
       this.log('✅ THẮNG BOSS!');
     } else if (isAdvance) {
-      this.stats.wins++;
       // Advance lặp cùng tầng (đã thấy ở BattleTick) thì không log lại,
       // tránh 1 tầng in hàng trăm lần "THẮNG TẦNG" trong cùng 1 giây.
       if (!(battleResult.tier > 0 && battleResult.tier === this._lhLastAdvanceTier)) {
@@ -2872,6 +2982,9 @@ class NpcBot {
     } else if (isLossFinal) {
       this.stats.losses++;
       this.log('❌ THUA BOSS!');
+      if (battleResult && battleResult.rewardText) {
+        this.parseLuanhoiRewards(battleResult.rewardText, 'loss');
+      }
     } else {
       this.log('⚠️ Luân hồi: không xác định được kết quả trận.');
     }
@@ -2951,6 +3064,16 @@ class NpcBot {
         const stopResult = await this.clickContinueOrStop('stop');
         this.log(`[DỪNG] clickContinueOrStop('stop') returned: ${stopResult}`);
         this.luanhoiRunCount++;
+        // Lượt thành công: Chiến Thắng +1 theo lượt, không theo tầng.
+        this.stats.wins++;
+        // Bảng thưởng cuối lượt chỉ xuất hiện sau khi bấm Dừng, đọc nó để
+        // cộng Coins / vật phẩm / Điểm Luân Hồi của lượt này trước khi in stats.
+        const _finalText = await this.readLuanhoiFinalRewardText();
+        if (_finalText) {
+          this.parseLuanhoiRewards(_finalText, 'win');
+        } else {
+          this.log('⚠️ [Luân Hồi] Không thấy bảng Kết Thúc để cộng thưởng lượt này.');
+        }
         const _totalRunsLimit = this.luanhoiTotalRuns || 0;
         this.log(`🏁 Kết thúc lượt Luân Hồi (đạt Tầng Dừng). Đã đi: ${this.luanhoiRunCount}${_totalRunsLimit > 0 ? ' / ' + _totalRunsLimit : ''} lần`);
         if (_totalRunsLimit > 0 && this.luanhoiRunCount >= _totalRunsLimit) {
