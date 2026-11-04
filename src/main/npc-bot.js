@@ -86,6 +86,9 @@ class NpcBot {
     this.spamType = 'hp';
     this.vandu = false;
     this.vanduCmd = '!vandu';
+    this.vanduRealm = '';
+    this.vanduMap = '';
+    this.vanduMapPicked = false;
     this.vanduSkillOrder = ['Phá Giáp', 'Băng Phong', 'Hư Không Đại Na Di', 'Kim Đan Phá Sát', 'Băng Phong', 'Vạn Kiếm Quy Tông'];
     this.vanduSkillIdx = 0;
     this.vanduNode = 0;
@@ -330,6 +333,8 @@ class NpcBot {
     if (config.luanhoiTotalRuns !== undefined) this.luanhoiTotalRuns = config.luanhoiTotalRuns;
     if (config.vandu !== undefined) this.vandu = config.vandu;
     if (config.vanduCmd !== undefined) this.vanduCmd = String(config.vanduCmd || '!vandu');
+    if (config.vanduRealm !== undefined) this.vanduRealm = String(config.vanduRealm || '');
+    if (config.vanduMap !== undefined) this.vanduMap = String(config.vanduMap || '');
     if (config.dianguc !== undefined) this.dianguc = config.dianguc;
     if (config.diangucCmd !== undefined) this.diangucCmd = config.diangucCmd;
     if (config.diangucDelayMs !== undefined) this.diangucDelayMs = config.diangucDelayMs;
@@ -4773,6 +4778,28 @@ class NpcBot {
     }
   }
 
+  vanduMapForRealm(realm) {
+    const maps = {
+      'Luyện Khí': 'Thanh Vân Trấn',
+      'Trúc Cơ': 'Vạn Sơn Liên Mạch',
+      'Kết Đan': 'Đông Hải Tiên Đảo',
+      'Nguyên Anh': 'Tây Vực Sa Mạc',
+      'Hóa Thần': 'Thiên Sơn Tuyết Lãnh',
+    };
+    return maps[String(realm || '').trim()] || '';
+  }
+
+  vanduCurrentMap(text) {
+    const m = String(text || '').match(/Đại Vùng Đang Chọn:\s*([^\n]+)/);
+    if (!m) return '';
+    return m[1].replace(/[^\p{L}\s]/gu, '').replace(/\s+/g, ' ').trim();
+  }
+
+  vanduTargetMap() {
+    if (this.vanduMap) return String(this.vanduMap).trim();
+    return this.vanduMapForRealm(this.vanduRealm);
+  }
+
   vanduParseNode(text) {
     const raw = String(text || '');
     const m = raw.match(/Tiết Điểm\s*(\d+)\s*\/\s*(\d+)/i) || raw.match(/TIẾT ĐIỂM\s*(\d+)\s*\/\s*(\d+)/);
@@ -4878,6 +4905,7 @@ class NpcBot {
     this.vanduCircuit = null;
     this.vanduSectCounts = {};
     this.vanduOwnedBuffs = {};
+    this.vanduMapPicked = false;
     let shopKey = '';
     let shopBought = false;
     let shopBiTich = false;
@@ -4917,10 +4945,46 @@ class NpcBot {
         return;
       }
 
-      // Màn hình bắt đầu: vùng đã chọn trước bởi người chơi, chỉ bấm xuất phát.
+      // Màn hình bắt đầu: nếu tool đã chọn cảnh giới thì chọn map tương ứng trước, rồi mới bấm xuất phát.
       if (btnNorm.some(b => b.includes('bat dau xuat phat'))) {
+        const targetMap = this.vanduTargetMap();
+        if (targetMap && !this.vanduMapPicked) {
+          const currentMap = this.vanduCurrentMap(text);
+          if (currentMap && this.normalizeMatchText(currentMap) === this.normalizeMatchText(targetMap)) {
+            this.vanduMapPicked = true;
+          } else if (currentMap) {
+            const opened = await this.vanduClickButton(currentMap);
+            if (opened) {
+              this.log(`🗺️ Vân Du: mở danh sách map (đang chọn ${currentMap}, cần ${targetMap})`);
+              await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
+              const picked = await this.vanduClickButton(targetMap);
+              if (picked) {
+                this.vanduMapPicked = true;
+                this.log(`🗺️ Vân Du: đã chọn map ${targetMap} theo cảnh giới ${this.vanduRealm || ''}`);
+              } else {
+                this.log(`⛔ Vân Du: không bấm được map ${targetMap} trong danh sách, dừng để tránh vào sai map. Hãy chọn tay map rồi START lại với list để trống.`);
+                break;
+              }
+              await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
+              continue;
+            } else {
+              this.log(`⛔ Vân Du: không mở được danh sách map, dừng để tránh vào sai map. Hãy chọn tay map rồi START lại với list để trống.`);
+              break;
+            }
+          } else {
+            const picked = await this.vanduClickButton(targetMap);
+            if (picked) {
+              this.vanduMapPicked = true;
+              this.log(`🗺️ Vân Du: đã chọn map ${targetMap}`);
+              await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
+              continue;
+            }
+            this.log(`⛔ Vân Du: không thấy map ${targetMap} để bấm, dừng để tránh vào sai map.`);
+            break;
+          }
+        }
         await this.vanduClickButton('Bắt Đầu Xuất Phát');
-        this.log('🚀 Vân Du: Bắt Đầu Xuất Phát (vùng đã chọn trước)');
+        this.log('🚀 Vân Du: Bắt Đầu Xuất Phát');
         await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
         continue;
       }

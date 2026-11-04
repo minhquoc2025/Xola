@@ -8,6 +8,11 @@ window.addEventListener('DOMContentLoaded', () => {
   loadLuanHoiSettings();
   loadOtherUserIds();
   startStatsPolling();
+  const vanduRealmEl = document.getElementById('vandu-realm');
+  if (vanduRealmEl) {
+    const savedRealm = localStorage.getItem('vanduRealm') || '';
+    if (savedRealm) vanduRealmEl.value = savedRealm;
+  }
 
   window.api.onLogMessage((msg) => {
     appendLog(msg);
@@ -253,12 +258,27 @@ function getLuanHoiConfig() {
 }
 
 function getVanduConfig() {
+  const vanduRealmEl = document.getElementById('vandu-realm');
+  const vanduRealm = vanduRealmEl ? (vanduRealmEl.value || '').trim() : '';
+  if (vanduRealmEl) {
+    if (vanduRealm) localStorage.setItem('vanduRealm', vanduRealm);
+    else localStorage.removeItem('vanduRealm');
+  }
+  const VANDU_REALM_MAPS = {
+    'Luyện Khí': 'Thanh Vân Trấn',
+    'Trúc Cơ': 'Vạn Sơn Liên Mạch',
+    'Kết Đan': 'Đông Hải Tiên Đảo',
+    'Nguyên Anh': 'Tây Vực Sa Mạc',
+    'Hóa Thần': 'Thiên Sơn Tuyết Lãnh',
+  };
   return {
     mode: 'vandu',
     vandu: true,
     username: (document.getElementById('username-vandu').value || 'Quất Bất Lực').trim(),
     vanduCmd: (document.getElementById('vandu-cmd').value || '!vandu').trim(),
     buttonDelayMs: (parseFloat(document.getElementById('vandu-delay').value) || 2) * 1000,
+    vanduRealm: vanduRealm,
+    vanduMap: vanduRealm ? (VANDU_REALM_MAPS[vanduRealm] || '') : '',
     skillClickDelayMs: getSkillClickDelayMs(),
   };
 }

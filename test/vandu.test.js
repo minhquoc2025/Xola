@@ -53,4 +53,17 @@ eq(bot.vanduShopAction(1, true, false), 'roi-di', 'shop: already bought this vis
 // HP heuristic
 eq(bot.vanduPlayerHpPct('Khí Huyết: 42%'), 42, 'hp parse');
 
+// Map theo cảnh giới (tool chọn cảnh giới -> bot chọn map tương ứng)
+eq(bot.vanduMapForRealm('Hóa Thần'), 'Thiên Sơn Tuyết Lãnh', 'Hoa Than -> Thien Son');
+eq(bot.vanduMapForRealm('Luyện Khí'), 'Thanh Vân Trấn', 'Luyen Khi -> Thanh Van');
+eq(bot.vanduMapForRealm('Trúc Cơ'), 'Vạn Sơn Liên Mạch', 'Truc Co -> Van Son');
+eq(bot.vanduMapForRealm('Kết Đan'), 'Đông Hải Tiên Đảo', 'Ket Dan -> Dong Hai');
+eq(bot.vanduMapForRealm('Nguyên Anh'), 'Tây Vực Sa Mạc', 'Nguyen Anh -> Tay Vuc');
+eq(bot.vanduMapForRealm('Không có'), '', 'realm lạ -> rỗng');
+eq(bot.vanduCurrentMap('Đại Vùng Đang Chọn: 🌿 Thanh Vân Trấn\nHệ số'), 'Thanh Vân Trấn', 'parse current map');
+bot.updateConfig({ mode: 'vandu', vanduRealm: 'Hóa Thần', vanduMap: 'Thiên Sơn Tuyết Lãnh' });
+eq(bot.vanduTargetMap(), 'Thiên Sơn Tuyết Lãnh', 'target map từ config');
+bot.updateConfig({ mode: 'vandu', vanduRealm: 'Hóa Thần', vanduMap: '' });
+eq(bot.vanduTargetMap(), 'Thiên Sơn Tuyết Lãnh', 'target map suy từ realm khi map rỗng');
+
 console.log('Vân Du logic checks passed');
