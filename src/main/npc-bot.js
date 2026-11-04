@@ -4859,10 +4859,20 @@ class NpcBot {
     return maps[String(realm || '').trim()] || '';
   }
 
+  // V6: chỉ tìm đúng 1 trong 5 tên map đã biết, sau dòng "Đại Vùng Đang Chọn".
+  // Bản cũ lấy cả dòng tới \n, nhưng textContent của Discord không có \n
+  // tách tên map với đoạn mô tả phía sau, nên đọc thành "Thanh Vân TrấnThôn
+  // trấn thanh bình..." — tên sai thì bấm kiểu gì cũng không trúng, đúng lỗi
+  // test 2026-11-04 16:23.
   vanduCurrentMap(text) {
-    const m = String(text || '').match(/Đại Vùng Đang Chọn:\s*([^\n]+)/);
-    if (!m) return '';
-    return m[1].replace(/[^\p{L}\s]/gu, '').replace(/\s+/g, ' ').trim();
+    const raw = String(text || '');
+    const idx = raw.indexOf('Đại Vùng Đang Chọn');
+    const hay = idx >= 0 ? raw.slice(idx) : raw;
+    const maps = ['Thanh Vân Trấn', 'Vạn Sơn Liên Mạch', 'Đông Hải Tiên Đảo', 'Tây Vực Sa Mạc', 'Thiên Sơn Tuyết Lãnh'];
+    for (const map of maps) {
+      if (hay.includes(map)) return map;
+    }
+    return '';
   }
 
   vanduTargetMap() {

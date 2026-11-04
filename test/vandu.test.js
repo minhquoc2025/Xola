@@ -97,3 +97,8 @@ console.log('Vân Du logic checks passed');
 eq(bot.vanduNormalize('🚀 Bắt Đầu Xuất Phát'), 'bat dau xuat phat', 'emoji + Dau -> bat dau xuat phat');
 eq(bot.vanduNormalize('🌿 Thanh Vân Trấn'), 'thanh van tran', 'map name cleaned');
 eq(bot.vanduNormalize('Thiên Sơn Tuyết Lãnh'), 'thien son tuyet lanh', 'map target cleaned');
+
+// V6: đọc map đang chọn, kể cả khi mô tả dính liền không có xuống dòng
+eq(bot.vanduCurrentMap('Đại Vùng Đang Chọn: 🌿 Thanh Vân TrấnThôn trấn thanh bình nơi chân núi Thanh Vân khởi nguồn của mọi hành trình'), 'Thanh Vân Trấn', 'current map dinh mo ta -> Thanh Van');
+eq(bot.vanduCurrentMap('Đại Vùng Đang Chọn: 🌿 Thiên Sơn Tuyết Lãnh\nMô tả'), 'Thiên Sơn Tuyết Lãnh', 'current map Thien Son');
+eq(bot.vanduCurrentMap('không có dòng đại vùng'), '', 'khong co dong -> rong');
