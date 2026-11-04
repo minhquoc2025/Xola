@@ -168,10 +168,10 @@ function loadLuanHoiSettings() {
     const el = document.getElementById("luanhoi-target");
     if (el) el.value = savedTarget;
   }
-  const savedUsername = localStorage.getItem("username-lh");
-  if (savedUsername !== null) {
-    const el = document.getElementById("username-lh");
-    if (el) el.value = savedUsername;
+  const savedUserId = localStorage.getItem("userid-lh");
+  if (savedUserId !== null) {
+    const el = document.getElementById("userid-lh");
+    if (el) el.value = savedUserId;
   }
   const savedCmd = localStorage.getItem("luanhoi-cmd");
   if (savedCmd !== null) {
@@ -184,7 +184,7 @@ function loadLuanHoiSettings() {
     if (el) el.value = savedDelay;
   }
 
-  ["luanhoi-total-runs", "luanhoi-target", "username-lh", "luanhoi-cmd", "button-delay-lh"].forEach(id => {
+  ["luanhoi-total-runs", "luanhoi-target", "userid-lh", "luanhoi-cmd", "button-delay-lh"].forEach(id => {
     const el = document.getElementById(id);
     if (el) {
       el.addEventListener("input", saveLuanHoiSettings);
@@ -200,8 +200,8 @@ function saveLuanHoiSettings() {
   const targetEl = document.getElementById("luanhoi-target");
   if (targetEl) localStorage.setItem("luanhoi-target", targetEl.value);
 
-  const usernameEl = document.getElementById("username-lh");
-  if (usernameEl) localStorage.setItem("username-lh", usernameEl.value);
+  const userIdEl = document.getElementById("userid-lh");
+  if (userIdEl) localStorage.setItem("userid-lh", userIdEl.value);
 
   const cmdEl = document.getElementById("luanhoi-cmd");
   if (cmdEl) localStorage.setItem("luanhoi-cmd", cmdEl.value);
@@ -219,7 +219,8 @@ function getLuanHoiConfig() {
   return {
     mode: "luanhoi",
     luanhoi: true,
-    username: (document.getElementById("username-lh").value || "Quất Bất Lực").trim(),
+    userId: (document.getElementById("userid-lh") ? document.getElementById("userid-lh").value : "").replace(/[^0-9]/g, ""),
+    username: "", // Luân Hồi giờ check theo User ID, không dùng username nữa
     luanhoiTarget: parseInt(document.getElementById("luanhoi-target").value) || 10,
     luanhoiTotalRuns: (!isNaN(totalRunsVal) && totalRunsVal > 0) ? totalRunsVal : 0,
     luanhoiCmd: (document.getElementById("luanhoi-cmd").value || "!luanhoi").trim(),

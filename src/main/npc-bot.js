@@ -64,6 +64,7 @@ class NpcBot {
     this.tuLuyenAfterTarget = true;
     this._tuLuyenActive = false;
     this.username = '';
+    this.userId = '';
     this.mode = 'npc';
     this.luanhoi = false;
     this.luanhoiTarget = 10;
@@ -311,6 +312,7 @@ class NpcBot {
     if (config.tuLuyenEndCmd !== undefined) this.tuLuyenEndCmd = config.tuLuyenEndCmd;
     if (config.tuLuyenAfterTarget !== undefined) this.tuLuyenAfterTarget = config.tuLuyenAfterTarget;
     if (config.username !== undefined) this.username = config.username;
+    if (config.userId !== undefined) this.userId = String(config.userId || '').replace(/[^0-9]/g, '');
     if (config.mode !== undefined) this.mode = config.mode;
     if (config.luanhoi !== undefined) this.luanhoi = config.luanhoi;
     if (config.luanhoiTarget !== undefined) this.luanhoiTarget = config.luanhoiTarget;
@@ -1288,6 +1290,7 @@ class NpcBot {
     const anchorId = await this.exec(`(() => {
       const command = ${JSON.stringify(command)};
       const username = ${JSON.stringify(this.username || '')};
+      const userId = ${JSON.stringify(this.userId || '')};
       const getId = value => {
         const match = String(value || '').match(/(\d{10,30})/);
         return match ? match[1] : '';
@@ -1298,8 +1301,13 @@ class NpcBot {
         const text = msg.textContent || '';
         const hasCommandReply = Array.from(msg.querySelectorAll('[class*="repliedTextPreview"], [class*="repliedMessageClickable"], [class*="reply"]'))
           .some(reply => (reply.textContent || '').includes(command));
-        if (hasCommandReply && (!username || text.includes(username))) directFound = true;
-        if (!text.includes(command) || (username && !text.includes(username))) continue;
+        if (hasCommandReply && ((!userId && !username) || (userId && (msg.innerHTML || '').includes(userId)) || (username && text.includes(username)))) directFound = true;
+        // Neo theo User ID khi đã nhập: tin lệnh của chính mình phải chứa ID đó
+        // trong HTML (avatar/reply preview), thay vì chỉ khớp tên hiển thị.
+        const html = msg.innerHTML || '';
+        if (!text.includes(command)) continue;
+        if (userId && !html.includes(userId) && !(username && text.includes(username))) continue;
+        if (!userId && username && !text.includes(username)) continue;
         msg.setAttribute('data-dianguc-anchor', 'true');
         const values = [msg.id, msg.getAttribute('data-list-item-id'), msg.getAttribute('data-message-id')];
         for (const value of values) {
@@ -3197,6 +3205,24 @@ class NpcBot {
         .toLowerCase();
 
       const username = ${JSON.stringify(username)};
+      const userId = ${JSON.stringify(this.userId || '')};
+      const userNorm = removeVN(username);
+      const userFirst = userNorm.split(' ')[0] || '';
+      // Bám name, không chỉ bám owned: mỗi người có name riêng (Hòa / Quất...).
+      // Chấp nhận: full name, @first (reply preview '@Hòa !luanhoi'), hoặc first + dấu
+      // ('Hòa — Chọn 1 cổng!'). KHÔNG chấp nhận first trần ('hoa' trong 'Hóa Thần',
+      // 'Hỏa Giáp' sau khi bỏ dấu cũng thành 'hoa') — đó là chỗ dễ bấm nhầm nhất.
+      const isOwnName = t => {
+        if (!userNorm) return true;
+        const n = removeVN(t);
+        if (userNorm.includes(' ') && n.includes(userNorm)) return true;
+        if (userFirst && n.includes('@' + userFirst)) return true;
+        if (userFirst && new RegExp(userFirst + '\\s*(—|-|:|,)').test(n)) return true;
+        return false;
+      };
+      // Check theo ID thay vì name khi đã nhập ID: tin phải chứa ID đó trong HTML
+      // (avatar/reply preview/link). Chưa nhập ID thì dùng lại guard name.
+      const okOwn = (msg, rawText) => userId ? (msg.innerHTML || '').includes(userId) : isOwnName(rawText);
       const tierOf = { 'thien': 3, 'huyen': 2, 'linh': 1, 'pham': 0 };
       const tierNames = ['pham', 'linh', 'huyen', 'thien'];
       const rotatedNames = ${JSON.stringify(rotatedNames)};
@@ -3217,6 +3243,7 @@ class NpcBot {
       for (const msg of recent30) {
         const rawText = msg.textContent || '';
         if (msg.getAttribute('data-luanhoi-owned') !== 'true') continue;
+          if (!okOwn(msg, rawText)) continue;
         const text = rawText.toLowerCase();
         const isTowerEnd = /ngã xuống luân hồi tháp|nga xuong luan hoi thap|kết thúc luân hồi tháp|ket thuc luan hoi thap|kết thúc luân hồi|ket thuc luan hoi/.test(text);
         const isWinText = /chiến thắng|thắng!/.test(text);
@@ -3229,6 +3256,7 @@ class NpcBot {
       for (const msg of recent40) {
         const rawText = msg.textContent || '';
         if (msg.getAttribute('data-luanhoi-owned') !== 'true') continue;
+          if (!okOwn(msg, rawText)) continue;
         const btns = msg.querySelectorAll('button, [role="button"]');
         if (btns.length === 0) continue;
         let maxP = -1, bestBtn = null, bestText = '';
@@ -3273,6 +3301,7 @@ class NpcBot {
         for (const msg of recent40) {
           const rawText = msg.textContent || '';
           if (msg.getAttribute('data-luanhoi-owned') !== 'true') continue;
+          if (!okOwn(msg, rawText)) continue;
           let newTier = null;
           const sauM = rawText.match(/sau\\s*t[a\\u1ea7\\u00e2ầ]ng\\s*([0-9]{1,3})/i);
           if (sauM && sauM[1]) {
@@ -3311,6 +3340,7 @@ class NpcBot {
         for (const msg of recent30) {
           const rawText = msg.textContent || '';
           if (msg.getAttribute('data-luanhoi-owned') !== 'true') continue;
+          if (!okOwn(msg, rawText)) continue;
           const text = rawText.toLowerCase();
           const hasWin = /chiến thắng|thắng!/.test(text);
           const hasLoss = /thất bại|bạn đã thua|thua!|ngã xuống luân hồi tháp|nga xuong luan hoi thap|kết thúc luân hồi|ket thuc luan hoi/.test(text);
@@ -3448,6 +3478,7 @@ class NpcBot {
           const rawText = msg.textContent || '';
           const norm = removeVN(rawText);
           if (msg.getAttribute('data-luanhoi-owned') !== 'true') continue;
+          if (!okOwn(msg, rawText)) continue;
           const btns = msg.querySelectorAll('button, [role="button"]');
           for (const btn of btns) {
             if (btn.disabled) continue;
@@ -3875,15 +3906,28 @@ class NpcBot {
     const result = await this.exec(`(() => {
       const which = ${JSON.stringify(which)};
       const username = ${JSON.stringify(username)};
+      const userId = ${JSON.stringify(this.userId || '')};
       const contKeywords = ${JSON.stringify(contKeywords)};
       const stopKeywords = ${JSON.stringify(stopKeywords)};
        const nd = s => s.replace(/:[a-z_0-9]+:/g, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+       const userNd = nd(username);
+       const userFirst = userNd.split(' ')[0] || '';
+       const isOwnName = t => {
+         if (!userNd) return true;
+         const n = nd(t);
+         if (userNd.includes(' ') && n.includes(userNd)) return true;
+         if (userFirst && n.includes('@' + userFirst)) return true;
+         if (userFirst && new RegExp(userFirst + '\\s*(—|-|:|,)').test(n)) return true;
+         return false;
+       };
+       const okOwn = (msg, rawText) => userId ? (msg.innerHTML || '').includes(userId) : isOwnName(rawText);
        const msgs = document.querySelectorAll('[role="article"]');
        const recent = Array.from(msgs).slice(-30).reverse();
 
        const scan = () => {
          for (const msg of recent) {
            if (msg.getAttribute('data-luanhoi-owned') !== 'true') continue;
+           if (!okOwn(msg, msg.textContent || '')) continue;
            const btns = msg.querySelectorAll('button, [role="button"]');
            if (btns.length === 0) continue;
            for (const btn of btns) {
@@ -3943,12 +3987,25 @@ class NpcBot {
 
     return await this.exec(`(() => {
        const username = ${JSON.stringify(username)};
+      const userId = ${JSON.stringify(this.userId || '')};
        const keys = ${JSON.stringify(keys)};
        const nd = s => s.replace(/:[a-z_0-9]+:/g, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+       const userNd = nd(username);
+       const userFirst = userNd.split(' ')[0] || '';
+       const isOwnName = t => {
+         if (!userNd) return true;
+         const n = nd(t);
+         if (userNd.includes(' ') && n.includes(userNd)) return true;
+         if (userFirst && n.includes('@' + userFirst)) return true;
+         if (userFirst && new RegExp(userFirst + '\\s*(—|-|:|,)').test(n)) return true;
+         return false;
+       };
+       const okOwn = (msg, rawText) => userId ? (msg.innerHTML || '').includes(userId) : isOwnName(rawText);
        const msgs = document.querySelectorAll('[role="article"]');
        const recent = Array.from(msgs).slice(-30).reverse();
        for (const msg of recent) {
          if (msg.getAttribute('data-luanhoi-owned') !== 'true') continue;
+         if (!okOwn(msg, msg.textContent || '')) continue;
          const btns = msg.querySelectorAll('button, [role="button"]');
         if (btns.length === 0) continue;
         for (const btn of btns) {
@@ -3976,12 +4033,26 @@ class NpcBot {
       const tierOf = { 'thien': 3, 'huyen': 2, 'linh': 1, 'pham': 0 };
       const tierNames = ['pham', 'linh', 'huyen', 'thien'];
       const username = ${JSON.stringify(username)};
+      const userId = ${JSON.stringify(this.userId || '')};
+      const normT = s => (s || '').replace(/:[a-z_0-9]+:/g, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+      const userNorm = normT(username);
+      const userFirst = userNorm.split(' ')[0] || '';
+      const isOwnName = t => {
+        if (!userNorm) return true;
+        const n = normT(t);
+        if (userNorm.includes(' ') && n.includes(userNorm)) return true;
+        if (userFirst && n.includes('@' + userFirst)) return true;
+        if (userFirst && new RegExp(userFirst + '\\s*(—|-|:|,)').test(n)) return true;
+        return false;
+      };
+       const okOwn = (msg, rawText) => userId ? (msg.innerHTML || '').includes(userId) : isOwnName(rawText);
       const msgs = document.querySelectorAll('[role="article"]');
       const recent = Array.from(msgs).slice(-40).reverse();
 
        for (const msg of recent) {
          const rawText = msg.textContent || '';
          if (msg.getAttribute('data-luanhoi-owned') !== 'true') continue;
+         if (!okOwn(msg, rawText)) continue;
          const btns = msg.querySelectorAll('button, [role="button"]');
         if (btns.length === 0) continue;
         let maxP = -1, bestBtn = null, bestText = '';
