@@ -398,7 +398,9 @@ class NpcBot {
     this.log('=== NPC MODE: Combo skill theo cấu hình Bicanh ===');
     this.log(`=== COMBO: ${this.bicanhSkillOrder.join(' → ')} ===`);
     this._bicanhSkillIdx = 0;
-    if (this.username) {
+    if (this.userId) {
+      this.log(`=== GROUP MODE: Lọc tin nhắn theo User ID ${this.userId} ===`);
+    } else if (this.username) {
       this.log(`=== GROUP MODE: Lọc tin nhắn theo "${this.username}" ===`);
     }
     if (this.autoClimb) {
@@ -1329,6 +1331,7 @@ class NpcBot {
     const anchor = await this.exec(`(() => {
       const command = ${JSON.stringify(command)};
       const username = ${JSON.stringify(this.username || '')};
+      const userId = ${JSON.stringify(this.userId || '')};
       const getId = value => {
         const match = String(value || '').match(/(\\d{10,30})/);
         return match ? match[1] : '';
@@ -1339,8 +1342,11 @@ class NpcBot {
         const text = msg.textContent || '';
         const hasCommandReply = Array.from(msg.querySelectorAll('[class*="repliedTextPreview"], [class*="repliedMessageClickable"], [class*="reply"]'))
           .some(reply => (reply.textContent || '').includes(command));
-        if (hasCommandReply && (!username || text.includes(username))) directFound = true;
-        if (!text.includes(command) || (username && !text.includes(username))) continue;
+        if (hasCommandReply && ((!userId && !username) || (userId && (msg.innerHTML || '').includes(userId)) || (username && text.includes(username)))) directFound = true;
+        const html = msg.innerHTML || '';
+        if (!text.includes(command)) continue;
+        if (userId && !html.includes(userId) && !(username && text.includes(username))) continue;
+        if (!userId && username && !text.includes(username)) continue;
         const values = [msg.id, msg.getAttribute('data-list-item-id'), msg.getAttribute('data-message-id')];
         for (const value of values) {
           const id = getId(value);
@@ -1368,9 +1374,10 @@ class NpcBot {
 
       const command = ${JSON.stringify(this.diangucCmd || '!dianguc')};
       const username = ${JSON.stringify(this.username || '')};
+      const userId = ${JSON.stringify(this.userId || '')};
       // Chỉ giữ card thuộc về user của bot này. Trong group chat nhiều người cùng
       // chơi !dianguc, không lọc sẽ đánh nhầm battle của người khác.
-      const ownedByUser = msg => !username || (msg.textContent || '').includes(username);
+      const ownedByUser = msg => userId ? (msg.innerHTML || '').includes(userId) : (!username || (msg.textContent || '').includes(username));
       const ids = new Set(anchorId ? [anchorId] : []);
       let ownedCount = 0;
 
@@ -1492,8 +1499,10 @@ class NpcBot {
 
   async checkBattleEnd() {
     const username = this.username || '';
+    const userId = this.userId || '';
     const res = await this.exec(`(() => {
       const username = ${JSON.stringify(username)};
+      const userId = ${JSON.stringify(userId)};
       const msgs = document.querySelectorAll('[role="article"]');
       for (const msg of msgs) {
         if (msg.getAttribute('data-bot-ephemeral') === 'true') continue;
@@ -1502,7 +1511,7 @@ class NpcBot {
         const text = rawText.toLowerCase();
         const isResult = text.includes('kết quả trận đấu') || text.includes('battle ended') || text.includes('chiến thắng') || text.includes('thất bại') || text.includes('thắng npc') || text.includes('thua npc') || rawText.includes('✅') || rawText.includes('❌');
         if (!rawText.trim() || !isResult) continue;
-        if (username && !rawText.includes(username)) continue;
+        if (userId ? !(msg.innerHTML || '').includes(userId) : (username && !rawText.includes(username))) continue;
         msg.setAttribute('data-bot-seen', 'true');
         return { text: rawText.substring(0, 8000), username };
       }
@@ -1539,8 +1548,10 @@ class NpcBot {
   // Kiểm tra trận có kết thúc không. advance/win/loss detection đơn giản bằng match + /i.
   async checkLuanhoiBattleEnd() {
     const username = this.username || '';
+    const userId = this.userId || '';
     return await this.exec(`(() => {
       const username = ${JSON.stringify(username)};
+      const userId = ${JSON.stringify(userId)};
       const matchesUserMessage = text => {
         const value = String(text || '');
         if (!username) return true;
@@ -1554,7 +1565,7 @@ class NpcBot {
       const recent = Array.from(msgs).slice(-30);
       for (const msg of recent.reverse()) {
         if (msg.getAttribute('data-bot-ephemeral') === 'true') continue;
-        if (username && !matchesUserMessage(msg.textContent)) continue;
+        if (userId ? !(msg.innerHTML || '').includes(userId) : (username && !matchesUserMessage(msg.textContent))) continue;
         const rawText = msg.textContent || '';
         const text = rawText.toLowerCase();
 
@@ -1648,8 +1659,10 @@ class NpcBot {
   // Chuyên scan message buff tầng MỚI (đã qua tầng). Dùng match + /i đơn giản (như readLuanhoiTier).
   async checkLuanhoiAdvance() {
     const username = this.username || '';
+    const userId = this.userId || '';
     return await this.exec(`(() => {
       const username = ${JSON.stringify(username)};
+      const userId = ${JSON.stringify(userId)};
       const matchesUserMessage = text => {
         const value = String(text || '');
         if (!username) return true;
@@ -1663,7 +1676,7 @@ class NpcBot {
       const msgs = document.querySelectorAll('[role="article"]');
       const recent = Array.from(msgs).slice(-40).reverse();
       for (const msg of recent) {
-        if (username && !matchesUserMessage(msg.textContent)) continue;
+        if (userId ? !(msg.innerHTML || '').includes(userId) : (username && !matchesUserMessage(msg.textContent))) continue;
         const rawText = msg.textContent || '';
         let newTier = null;
         const sauM = rawText.match(/sau\\s*t[a\\u1ea7\\u00e2ầ]ng\\s*([0-9]{1,3})/i);
@@ -1693,10 +1706,12 @@ class NpcBot {
   //#region Auto Farm NPC
   async checkLockedMessage() {
     const username = this.username || '';
+    const userId = this.userId || '';
     return await this.exec(`(() => {
       const maxIdStr = window.botMaxMsgId || '0';
       const maxId = BigInt(maxIdStr);
       const username = ${JSON.stringify(username)};
+      const userId = ${JSON.stringify(userId)};
       const matchesUserMessage = text => {
         const value = String(text || '');
         if (!username) return true;
@@ -1709,7 +1724,7 @@ class NpcBot {
       const msgs = document.querySelectorAll('[role="article"]');
       const recent = Array.from(msgs).slice(-30);
       for (const msg of recent.reverse()) {
-        if (username && !matchesUserMessage(msg.textContent)) continue;
+        if (userId ? !(msg.innerHTML || '').includes(userId) : (username && !matchesUserMessage(msg.textContent))) continue;
         if (msg.id) {
           const parts = msg.id.split('-');
           const idStr = parts[parts.length - 1];
@@ -1787,10 +1802,12 @@ class NpcBot {
 
   async checkCooldownMessage() {
     const username = this.username || '';
+    const userId = this.userId || '';
     return await this.exec(`(() => {
       const maxIdStr = window.botMaxMsgId || '0';
       const maxId = BigInt(maxIdStr);
       const username = ${JSON.stringify(username)};
+      const userId = ${JSON.stringify(userId)};
       const matchesUserMessage = text => {
         const value = String(text || '');
         if (!username) return true;
@@ -1804,7 +1821,7 @@ class NpcBot {
       for (const msg of recent.reverse()) {
         if (msg.getAttribute('data-bot-ephemeral') === 'true') continue;
         if (msg.getAttribute('data-bot-seen') === 'true') continue;
-        if (username && !matchesUserMessage(msg.textContent)) continue;
+        if (userId ? !(msg.innerHTML || '').includes(userId) : (username && !matchesUserMessage(msg.textContent))) continue;
 
         if (msg.id) {
           const parts = msg.id.split('-');
@@ -1957,10 +1974,12 @@ class NpcBot {
 
   async checkAlreadyFighting() {
     const username = this.username || '';
+    const userId = this.userId || '';
     return await this.exec(`(() => {
       const maxIdStr = window.botMaxMsgId || '0';
       const maxId = BigInt(maxIdStr);
       const username = ${JSON.stringify(username)};
+      const userId = ${JSON.stringify(userId)};
       const matchesUserMessage = text => {
         const value = String(text || '');
         if (!username) return true;
@@ -1974,7 +1993,7 @@ class NpcBot {
       for (const msg of recent.reverse()) {
         if (msg.getAttribute('data-bot-ephemeral') === 'true') continue;
         if (msg.getAttribute('data-bot-seen') === 'true') continue;
-        if (username && !matchesUserMessage(msg.textContent)) continue;
+        if (userId ? !(msg.innerHTML || '').includes(userId) : (username && !matchesUserMessage(msg.textContent))) continue;
 
         if (msg.id) {
           const parts = msg.id.split('-');
@@ -2025,6 +2044,7 @@ class NpcBot {
 
   async findBattleButtons() {
     const username = this.username || '';
+    const userId = this.userId || '';
     return await this.exec(`(() => {
       const isOwnedGameMessage = (text, userName, keywords = []) => {
         const rawText = String(text || '');
@@ -2046,13 +2066,15 @@ class NpcBot {
       const maxIdStr = window.botMaxMsgId || '0';
       const maxId = BigInt(maxIdStr);
       const username = ${JSON.stringify(username)};
+      const userId = ${JSON.stringify(userId)};
       let battleMsg = null;
       let battleButtons = [];
 
       const recentMsgs = Array.from(msgs).slice(-30).reverse();
       for (const msg of recentMsgs) {
         if (msg.getAttribute('data-bot-seen') === 'true') continue;
-        if (username && !isOwnedGameMessage(msg.textContent, username, ['npc', 'battle', 'fight', 'đánh'])) continue;
+        if (userId && !(msg.innerHTML || '').includes(userId)) continue;
+        if (!userId && username && !isOwnedGameMessage(msg.textContent, username, ['npc', 'battle', 'fight', 'đánh'])) continue;
 
         if (msg.id) {
           const parts = msg.id.split('-');
@@ -2089,6 +2111,7 @@ class NpcBot {
 
   async clickSkillButton(btnIndex) {
     const username = this.username || '';
+    const userId = this.userId || '';
     return await this.exec(`(() => {
       const isOwnedGameMessage = (text, userName, keywords = []) => {
         const rawText = String(text || '');
@@ -2110,11 +2133,13 @@ class NpcBot {
       const maxIdStr = window.botMaxMsgId || '0';
       const maxId = BigInt(maxIdStr);
       const username = ${JSON.stringify(username)};
+      const userId = ${JSON.stringify(userId)};
       const recentMsgs = Array.from(msgs).slice(-30).reverse();
       let targetMsg = null;
       for (const msg of recentMsgs) {
         if (msg.getAttribute('data-bot-seen') === 'true') continue;
-        if (username && !isOwnedGameMessage(msg.textContent, username, ['npc', 'battle', 'fight', 'đánh'])) continue;
+        if (userId && !(msg.innerHTML || '').includes(userId)) continue;
+        if (!userId && username && !isOwnedGameMessage(msg.textContent, username, ['npc', 'battle', 'fight', 'đánh'])) continue;
         if (msg.id) {
           const parts = msg.id.split('-');
           const idStr = parts[parts.length - 1];
@@ -2255,6 +2280,7 @@ class NpcBot {
       .toLowerCase().replace(/[^a-z0-9]/g, '');
     const nameNoD = normalizeSkill(skillName);
     const username = this.username || '';
+    const userId = this.userId || '';
     const usernameNorm = String(username || '').normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').toLowerCase();
@@ -2263,6 +2289,7 @@ class NpcBot {
 
     return await this.exec(`(() => {
       const usernameNorm = ${JSON.stringify(usernameNorm)};
+      const userId = ${JSON.stringify(userId)};
       const usernameFirst = ${JSON.stringify(usernameFirst)};
       const nameNoD = ${JSON.stringify(nameNoD)};
       const normalizeSkill = value => String(value || '').normalize('NFD')
@@ -2277,7 +2304,7 @@ class NpcBot {
         const rawText = msg.textContent || '';
         const norm = rawText.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\u0111/g,'d').replace(/\u0110/g,'d').toLowerCase();
         // Chỉ tương tác với battle của CHÍNH MÌNH: message phải chứa username
-        if (usernameNorm && !norm.includes(usernameNorm) && !(usernameFirst && norm.includes(usernameFirst))) continue;
+        if (userId ? !(msg.innerHTML || '').includes(userId) : (usernameNorm && !norm.includes(usernameNorm) && !(usernameFirst && norm.includes(usernameFirst)))) continue;
         const btns = msg.querySelectorAll('button[role="button"]');
         const available = Array.from(btns).map(btn => ({
           btn,
@@ -3443,7 +3470,7 @@ class NpcBot {
           // message cooldown của game -> bỏ qua để không kết luận nhầm là hết lượt.
           if (msg.getAttribute('data-bot-ephemeral') === 'true') continue;
           if (msg.getAttribute('data-bot-seen') === 'true') continue;
-          if (username && !matchesUserMessage(msg.textContent)) continue;
+          if (userId ? !(msg.innerHTML || '').includes(userId) : (username && !matchesUserMessage(msg.textContent))) continue;
           if (msg.id) {
             const parts = msg.id.split('-');
             const idStr = parts[parts.length - 1];
@@ -3591,6 +3618,7 @@ class NpcBot {
     await this.markLuanhoiMessages();
     await this.dismissEphemeralMessages();
     const username = this.username || '';
+    const userId = this.userId || '';
     const names = this.luanhoiSkillNames;
     const tierWords = ['pham', 'linh', 'huyen', 'thien'];
 
@@ -3606,6 +3634,7 @@ class NpcBot {
         .replace(/\u01B0/g, 'u').replace(/\u01AF/g, 'u')
         .toLowerCase();
       const username = ${JSON.stringify(username)};
+      const userId = ${JSON.stringify(userId)};
       const name = ${JSON.stringify(name)};
       const nameNoD = removeVN(name);
       const userFullName = removeVN(username);
@@ -3614,7 +3643,7 @@ class NpcBot {
       for (const msg of recent) {
         const rawText = msg.textContent || '';
         const norm = removeVN(rawText);
-        if (!userFullName || !norm.includes(userFullName)) continue;
+        if (userId ? !(msg.innerHTML || '').includes(userId) : (userFullName && !norm.includes(userFullName))) continue;
         const btns = msg.querySelectorAll('button, [role="button"]');
         if (btns.length === 0) continue;
         for (const btn of btns) {
@@ -3647,6 +3676,7 @@ class NpcBot {
         .replace(/\u01B0/g, 'u').replace(/\u01AF/g, 'u')
         .toLowerCase();
       const username = ${JSON.stringify(username)};
+      const userId = ${JSON.stringify(userId)};
       const userFullName = removeVN(username);
       const rotatedNames = ${JSON.stringify(rotatedNames)};
       const namesNoD = rotatedNames.map(n => removeVN(n).replace(/[^a-z0-9]/g, ''));
@@ -3659,7 +3689,7 @@ class NpcBot {
       for (const msg of recent) {
         const rawText = msg.textContent || '';
         const norm = removeVN(rawText);
-        if (!userFullName || !norm.includes(userFullName)) continue;
+        if (userId ? !(msg.innerHTML || '').includes(userId) : (userFullName && !norm.includes(userFullName))) continue;
         const btns = msg.querySelectorAll('button, [role="button"]');
         for (const btn of btns) {
           if (btn.disabled) continue;
@@ -3692,12 +3722,13 @@ class NpcBot {
       const dump = await this.exec(`(() => {
         const nd = s => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'd').replace(/ơ/g, 'o').replace(/Ơ/g, 'o').replace(/ư/g, 'u').replace(/Ư/g, 'u').toLowerCase();
         const username = ${JSON.stringify(username)};
+        const userId = ${JSON.stringify(userId)};
         const userFirstWord = nd(username).split(' ')[0];
         const results = [];
         const msgs = document.querySelectorAll('[role="article"]');
         const recent = Array.from(msgs).slice(-8).reverse();
         for (const msg of recent) {
-          if (userFirstWord && !nd(msg.textContent).includes(userFirstWord)) continue;
+          if (userId ? !(msg.innerHTML || '').includes(userId) : (userFirstWord && !nd(msg.textContent).includes(userFirstWord))) continue;
           const btns = msg.querySelectorAll('button, [role="button"]');
           if (btns.length === 0) continue;
           const labels = [];
@@ -4463,6 +4494,7 @@ class NpcBot {
       return { clicked: null, waitTurn: false, wrongPerson: false, cooldownDetail, skipCurrent: true };
     }
     const username = this.username || '';
+    const userId = this.userId || '';
     const nameNoD = skillName.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
       .replace(/\u0111/g, 'd').replace(/\u0110/g, 'd')
       .replace(/\u01A1/g, 'o').replace(/\u01A0/g, 'o')
@@ -4487,13 +4519,15 @@ class NpcBot {
          return gameKeywords.some(keyword => keyword && normalizedText.includes(keyword));
        };
        const username = ${JSON.stringify(username)};
+       const userId = ${JSON.stringify(userId)};
        const nameNoD = ${JSON.stringify(nameNoD)};
        const msgs = document.querySelectorAll('[role="article"]');
        const recent = Array.from(msgs).slice(-40).reverse();
        for (const msg of recent) {
          const rawText = msg.textContent || '';
          const norm = rawText.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\u0111/g,'d').replace(/\u0110/g,'d').toLowerCase();
-         if (username && !isOwnedGameMessage(rawText, username, ['bicanh', 'bi cảnh', 'bí cảnh', 'thap', 'tầng', 'leo tầng', 'fight', 'battle', 'đánh'])) continue;
+         if (userId && !(msg.innerHTML || '').includes(userId)) continue;
+         if (!userId && username && !isOwnedGameMessage(rawText, username, ['bicanh', 'bi cảnh', 'bí cảnh', 'thap', 'tầng', 'leo tầng', 'fight', 'battle', 'đánh'])) continue;
          const btns = msg.querySelectorAll('button, [role="button"]');
          if (btns.length === 0) continue;
          for (const btn of btns) {

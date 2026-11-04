@@ -6,6 +6,7 @@ window.addEventListener('DOMContentLoaded', () => {
   initWebview();
   loadLogs();
   loadLuanHoiSettings();
+  loadOtherUserIds();
   startStatsPolling();
 
   window.api.onLogMessage((msg) => {
@@ -141,7 +142,8 @@ function getNpcConfig() {
   const comboArray = normalizeSkillOrder(configuredOrder);
   return {
     mode: 'npc',
-    username: (document.getElementById('username').value || '').trim(),
+    userId: (document.getElementById('userid') ? document.getElementById('userid').value : '').replace(/[^0-9]/g, ''),
+    username: '', // NPC giờ check theo User ID, không dùng username nữa
     npcNumber: parseInt(document.getElementById('npc-number').value) || 1,
     totalBattles: parseInt(document.getElementById('total-battles').value) || 5,
     cooldownMs: (parseInt(document.getElementById('cooldown-seconds').value) || 120) * 1000,
@@ -193,6 +195,20 @@ function loadLuanHoiSettings() {
   });
 }
 
+// Các tab còn lại trước đây không lưu username (chỉ có giá trị mặc định trong
+// HTML), nên đổi sang User ID thì phải lưu ID lại, không thì mỗi lần mở app
+// lại phải nhập lại. Dùng cùng 1 key = id của ô nhập, giống userid-lh.
+function loadOtherUserIds() {
+  ["userid", "userid-bicanh", "userid-dianguc", "userid-upgrade"].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const saved = localStorage.getItem(id);
+    if (saved !== null) el.value = saved;
+    el.addEventListener("input", () => localStorage.setItem(id, el.value));
+    el.addEventListener("change", () => localStorage.setItem(id, el.value));
+  });
+}
+
 function saveLuanHoiSettings() {
   const totalRunsEl = document.getElementById("luanhoi-total-runs");
   if (totalRunsEl) localStorage.setItem("luanhoi-total-runs", totalRunsEl.value);
@@ -235,7 +251,8 @@ function getLuanHoiConfig() {
 function getBicanhConfig() {
   return {
     mode: 'bicanh',
-    username: (document.getElementById('username-bicanh').value || 'Quất Bất Lực').trim(),
+    userId: (document.getElementById('userid-bicanh') ? document.getElementById('userid-bicanh').value : '').replace(/[^0-9]/g, ''),
+    username: '', // Bicanh giờ check theo User ID, không dùng username nữa
     bicanhCmd: (document.getElementById('bicanh-cmd').value || '!bicanh').trim(),
     bicanhSkillOrder: normalizeSkillOrder(localStorage.getItem('bicanhSkillOrder') || ''),
     skillClickDelayMs: getSkillClickDelayMs(),
@@ -257,11 +274,12 @@ function getUpgradeConfig() {
   const delaySec = delayEl ? (parseFloat(delayEl.value) || 2) : 2;
   const countEl = document.getElementById('spam-count');
   const countVal = countEl ? (parseInt(countEl.value) || 10) : 10;
-  const usernameEl = document.getElementById('username-upgrade');
+  const userIdEl = document.getElementById('userid-upgrade');
   const cmd = SPAM_CMDS[type] || SPAM_CMDS.hp;
   return {
     mode: 'upgrade',
-    username: ((usernameEl && usernameEl.value) || 'Quất Bất Lực').trim(),
+    userId: ((userIdEl && userIdEl.value) || '').replace(/[^0-9]/g, ''),
+    username: '', // Upgrade/Spam giờ dùng User ID, không dùng username nữa
     upgradeType: Object.prototype.hasOwnProperty.call(SPAM_CMDS, type) ? type : 'hp',
     upgradeCmd: cmd,
     upgradeDelayMs: Math.min(60000, Math.max(100, Math.round(delaySec * 1000))),
@@ -290,7 +308,8 @@ function getDiangucConfig() {
   return {
     mode: 'dianguc',
     dianguc: true,
-    username: (document.getElementById('username-dianguc').value || 'Quất Bất Lực').trim(),
+    userId: (document.getElementById('userid-dianguc') ? document.getElementById('userid-dianguc').value : '').replace(/[^0-9]/g, ''),
+    username: '', // Địa Ngục giờ check theo User ID, không dùng username nữa
     diangucCmd: (document.getElementById('dianguc-cmd').value || '!dianguc').trim(),
     luanhoiSkillNames: resolvedSkills,
     diangucDelayMs: 2000,
