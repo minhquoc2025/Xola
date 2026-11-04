@@ -1459,13 +1459,25 @@ class NpcBot {
         let direct = null;
         const command = ${JSON.stringify(this.luanhoiCmd || '!luanhoi')};
         const username = ${JSON.stringify(this.username || '')};
+        // FIX người chơi chen ngang (2026-11-04: Quất !luanhoi sau Hòa làm
+        // bot kẹt tầng 5): nhánh direct cũ không lọc theo người chơi — khi
+        // username rỗng (chế độ User ID) thì card reply !luanhoi của BẤT KỲ
+        // ai cũng đủ điều kiện, và vòng lặp ghi đè nên card mới nhất (của
+        // người chen ngang) thành owned duy nhất, card của mình bị loại khỏi
+        // scan → tick=none. Nay bắt buộc: khi đã nhập User ID thì HTML của
+        // card phải chứa đúng ID đó (giống captureLuanhoiAnchor), chỉ khi
+        // không có ID mới dùng lại lọc theo tên cũ.
+        const userId = ${JSON.stringify(this.userId || '')};
         for (const msg of articles) {
           const hasOwnedReply = Array.from(msg.querySelectorAll('[class*="repliedTextPreview"], [class*="repliedMessageClickable"], [class*="reply"]'))
             .some(reply => {
               const replyText = reply.textContent || '';
               return replyText.includes(command);
             });
-          if (hasOwnedReply && (!username || (msg.textContent || '').includes(username))) direct = msg;
+          if (!hasOwnedReply) continue;
+          if (userId) {
+            if ((msg.innerHTML || '').includes(userId)) direct = msg;
+          } else if (!username || (msg.textContent || '').includes(username)) direct = msg;
         }
         if (direct) direct.setAttribute('data-luanhoi-owned', 'true');
         return;
