@@ -66,4 +66,23 @@ eq(bot.vanduTargetMap(), 'Thiên Sơn Tuyết Lãnh', 'target map từ config');
 bot.updateConfig({ mode: 'vandu', vanduRealm: 'Hóa Thần', vanduMap: '' });
 eq(bot.vanduTargetMap(), 'Thiên Sơn Tuyết Lãnh', 'target map suy từ realm khi map rỗng');
 
+// V2: cửa khi chưa có mạch Thương > Sinh, tie-break Thương > Đỗ
+eq(bot.vanduChooseDoor(['Tử Môn', 'Hưu Môn', 'Sinh Môn'], null), 'Sinh Môn', 'no circuit: Thuong vang, Sinh truoc Huu');
+eq(bot.vanduChooseDoor(['Đỗ Môn', 'Thương Môn'], { type: 'sinh', last: 'Thủy' }), 'Thương Môn', 'circuit tie Moc: Thuong truoc Do');
+eq(bot.vanduChooseDoor(['Khai Môn', 'Kinh Môn'], { type: 'khac', last: 'Hỏa' }), 'Kinh Môn', 'circuit tie Kim: Kinh truoc Khai (chua chot rieng)');
+// V2: bảng khắc chế
+eq(bot.vanduCounterSectFromText('đã chém gục [Hư Ảo] Băng Tuyết Dạ Báo'), 'Ma', 'Hu Ao -> Ma');
+eq(bot.vanduCounterSectFromText('quái [Cuồng Bạo] X'), 'Khí', 'Cuong Bao -> Khi');
+eq(bot.vanduCounterSectFromText('quái lạ không tên'), null, 'quai la -> null');
+eq(bot.vanduChooseBuff(['[Ma] Độc Cô Bảo Môn [Ma Tông - Lam]', '[Ma] Ma Hóa Cuồng Nộ [Ma Tông - Tím (Cực Phẩm)]', '[Khí] Kim Cang [Khí Tông - Vàng (Thần Thoại)]'], { Ma: 1, Khí: 0 }, {}, true, 'Ma').buttonText, '[Ma] Ma Hóa Cuồng Nộ [Ma Tông - Tím (Cực Phẩm)]', 'counter Ma: Tim thang Lam, thang vang Khi');
+// V2: đố Bát Quái
+eq(bot.vanduPuzzleElement('Thơ: "Hỏa viêm bùng sáng giữa trời đêm, xích diễm quang minh thiêu rụi tà chướng"'), 'Hỏa', 'tho Hoa');
+eq(bot.vanduPuzzleElement('Tiếng nước róc rách: "Thủy lưu vạn trượng hùng hùng dũng lũ, âm hàn nhu thuận"'), 'Thủy', 'tho Thuy');
+eq(bot.vanduPuzzleDoor('Hỏa'), 'Ly', 'Hoa -> Ly');
+eq(bot.vanduPuzzleDoor('Thủy'), 'Khảm', 'Thuy -> Kham');
+eq(bot.vanduPuzzleDoor('Thổ'), 'Khôn', 'Tho -> Khon');
+// V2: cooldown skill
+eq(bot.vanduSkillCooldown('Băng Phong (2)'), 2, 'cooldown 2');
+eq(bot.vanduSkillCooldown('Băng Phong'), null, 'khong cooldown');
+
 console.log('Vân Du logic checks passed');

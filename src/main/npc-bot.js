@@ -4672,25 +4672,84 @@ class NpcBot {
     return { type, elements: known, last: known[known.length - 1] };
   }
 
+  vanduDoorPriority(buttonText) {
+    const t = this.normalizeMatchText(buttonText);
+    const order = ['thuong mon', 'sinh mon', 'canh mon', 'huu mon', 'kinh mon', 'khai mon', 'do mon', 'tu mon'];
+    for (let i = 0; i < order.length; i++) {
+      if (t.includes(order[i])) return i;
+    }
+    return 99;
+  }
+
   vanduChooseDoor(buttons, circuit) {
     const list = (buttons || []).filter(Boolean);
     if (circuit) {
       const next = this.vanduNextElement(circuit.type, circuit.last);
       if (next) {
-        const hit = list.find(b => this.vanduElementOfDoor(b) === next);
-        if (hit) return hit;
+        const hits = list.filter(b => this.vanduElementOfDoor(b) === next);
+        if (hits.length === 1) return hits[0];
+        if (hits.length > 1) {
+          // Cùng 1 hành mà có 2 tên cửa (Thương/Đỗ cho Mộc, Kinh/Khai cho Kim,
+          // Sinh/Tử cho Thổ): chọn theo thứ tự ưu tiên, không theo thứ tự nút Discord.
+          // Đã chốt: Thương trước Đỗ. Kinh trước Khai và Sinh trước Tử là thứ tự
+          // ưu tiên chung, chưa có mẫu cả 2 cùng xuất hiện để chốt riêng cho Kim/Thổ.
+          hits.sort((a, c) => this.vanduDoorPriority(a) - this.vanduDoorPriority(c));
+          return hits[0];
+        }
       }
     }
     // Không mạch, hoặc mạch không có cửa đúng trong 3 lựa chọn: ưu tiên
-    // Thương (Thượng) rồi Cảnh, rồi cửa nào cũng được trừ Tử Môn.
-    const norm = b => this.normalizeMatchText(b);
-    const thuong = list.find(b => norm(b).includes('thuong mon'));
-    if (thuong) return thuong;
-    const canh = list.find(b => norm(b).includes('canh mon'));
-    if (canh) return canh;
-    const other = list.find(b => !norm(b).includes('tu mon'));
-    if (other) return other;
+    // Thương rồi Sinh (anh chốt 2026-11-04, thay Cảnh ở vị trí thứ 2 của v1),
+    // rồi Cảnh, Hưu, Kinh, Khai, Đỗ; Tử Môn chỉ khi không còn cửa nào khác
+    // (trường hợp chỉ có Tử thì trả null như v1 để chờ màn mới).
+    const sorted = [...list].sort((a, c) => this.vanduDoorPriority(a) - this.vanduDoorPriority(c));
+    const first = sorted.find(x => !this.normalizeMatchText(x).includes('tu mon'));
+    if (first) return first;
     return null;
+  }
+
+  vanduCounterSectFromText(text) {
+    const raw = String(text || '');
+    if (raw.includes('Hư Ảo') || raw.includes('Hư Ảnh')) return 'Ma';
+    if (raw.includes('Cuồng Thể')) return 'Thuật';
+    if (raw.includes('Cuồng Bạo')) return 'Khí';
+    if (raw.includes('Huyết Tế') || raw.includes('Huyết Ma')) return 'Kiếm';
+    return null;
+  }
+
+  vanduBuffRarity(buttonText) {
+    const raw = String(buttonText || '');
+    if (/Vàng|Thần Thoại/.test(raw)) return 4;
+    if (/Tím|Cực Phẩm/.test(raw)) return 3;
+    if (/Lam|Hiếm/.test(raw)) return 2;
+    if (/Lục|Phổ Thông/.test(raw)) return 1;
+    return 0;
+  }
+
+  vanduPuzzleElement(text) {
+    const raw = String(text || '');
+    const quoted = [];
+    const re = /['\u201c\u201d\"]([^'\u201c\u201d\"]+)['\u201c\u201d\"]/g;
+    let m;
+    while ((m = re.exec(raw)) !== null) quoted.push(m[1]);
+    const hay = this.normalizeMatchText(quoted.join(' '));
+    if (!hay) return null;
+    if (hay.includes('thuy') || hay.includes('nuoc')) return 'Thủy';
+    if (hay.includes('hoa') || hay.includes('viem') || hay.includes('thieu') || hay.includes('lua')) return 'Hỏa';
+    if (hay.includes('moc') || hay.includes('cay') || hay.includes('rung')) return 'Mộc';
+    if (hay.includes('kim') || hay.includes('thiet') || hay.includes('kiem')) return 'Kim';
+    if (hay.includes('tho') || hay.includes('dat')) return 'Thổ';
+    return null;
+  }
+
+  vanduPuzzleDoor(element) {
+    const map = { 'Hỏa': 'Ly', 'Thủy': 'Khảm', 'Mộc': 'Chấn', 'Kim': 'Đoài', 'Thổ': 'Khôn' };
+    return map[element] || null;
+  }
+
+  vanduSkillCooldown(buttonText) {
+    const m = String(buttonText || '').match(/\((\d+)\)\s*$/);
+    return m ? Number(m[1]) : null;
   }
 
   vanduParseBuffCard(buttonText) {
@@ -4714,9 +4773,19 @@ class NpcBot {
     return null;
   }
 
-  vanduChooseBuff(cards, sectCounts, ownedNames, allowReroll) {
+  vanduChooseBuff(cards, sectCounts, ownedNames, allowReroll, counterSect) {
     const parsed = (cards || []).map(c => this.vanduParseBuffCard(c)).filter(c => c.name);
     if (parsed.length === 0) return null;
+    // (0) Luật anh chốt 2026-11-04: buff theo bảng khắc chế quái đứng trước
+    // vàng và trùng. Trong cùng tông khắc chế, lấy độ hiếm cao hơn trước
+    // (mẫu tiết 6: Ma Tím thắng Ma Lam). Không có buff khắc chế thì về luật cũ.
+    if (counterSect) {
+      const counter = parsed.filter(c => c.sect === counterSect);
+      if (counter.length > 0) {
+        counter.sort((a, c) => this.vanduBuffRarity(c.raw) - this.vanduBuffRarity(a.raw));
+        return { action: 'pick', buttonText: counter[0].raw };
+      }
+    }
     const countOf = c => (c.sect && sectCounts[c.sect] !== undefined ? sectCounts[c.sect] : 0);
     // (a) tông gần mở Lĩnh Vực nhất: còn 1 thẻ nữa là tới ngưỡng 3/5/8.
     const domain = parsed.filter(c => {
@@ -4885,13 +4954,37 @@ class NpcBot {
           continue;
         }
       }
-      const skill = this.vanduSkillOrder[this.vanduSkillIdx % this.vanduSkillOrder.length];
-      this.vanduSkillIdx++;
-      const clicked = await this.vanduClickButton(skill);
+      // V2: không bấm skill đang hồi (nút ghi (2), (1)...), không bấm skill
+      // không có nút (ví dụ Vạn Kiếm Quy Tông không có ở battle Vân Du).
+      // Duyệt theo thứ tự từ vị trí hiện tại, lấy skill đầu tiên có nút và
+      // không hồi; nếu tất cả đều hồi/không có nút thì dùng Kiếm Cơ Bản làm
+      // filler, nếu không có cả filler thì chờ quét lại chứ không bấm bừa.
+      // Thứ tự preset tay của anh vẫn chưa được nói rõ, nên thứ tự cố định
+      // v1 được giữ nguyên, chỉ thêm bỏ qua hồi/thiếu nút.
+      let clicked = null;
+      let tried = 0;
+      while (tried < this.vanduSkillOrder.length) {
+        const skill = this.vanduSkillOrder[this.vanduSkillIdx % this.vanduSkillOrder.length];
+        this.vanduSkillIdx++;
+        tried++;
+        const btn = screen.buttons.find(x => this.normalizeMatchText(x).includes(this.normalizeMatchText(skill)));
+        if (!btn) continue;
+        const cd = this.vanduSkillCooldown(btn);
+        if (cd !== null && cd > 0) continue;
+        clicked = await this.vanduClickButton(skill);
+        break;
+      }
+      if (!clicked) {
+        const filler = screen.buttons.find(x => this.normalizeMatchText(x).includes('kiem co ban'));
+        if (filler) {
+          clicked = await this.vanduClickButton('Kiếm Cơ Bản');
+          if (clicked) this.log('⚔️ Vân Du: tất cả skill chính đang hồi/thiếu nút, dùng Kiếm Cơ Bản');
+        }
+      }
       if (clicked) {
         this.log(`⚔️ Vân Du: ${clicked}`);
       } else {
-        this.logDebug(`Vân Du: không thấy skill "${skill}", chờ quét lại`);
+        this.logDebug('Vân Du: không có skill nào bấm được lúc này, chờ quét lại');
       }
       await this.delay(Math.max(500, this.skillClickDelayMs || 1000));
     }
@@ -4996,6 +5089,66 @@ class NpcBot {
       if (correctMatch && this.vanduCircuit) this.vanduCircuit = { type: this.vanduCircuit.type, elements: [...(this.vanduCircuit.elements || []), correctMatch[1]], last: correctMatch[1] };
       if (/HOÀN MỸ|thông trọn vẹn mạch/i.test(text)) this.vanduCircuit = null;
 
+      // Bảng Tiếp Tục Tiến Sâu: sau thua boss (về checkpoint) và sau giải đố
+      // đúng (sang chặng kế) đều dùng nút này. V1 Vân Du chưa xử lý nên kẹt.
+      if (btnNorm.some(x => x.includes('tiep tuc tien sau'))) {
+        await this.vanduClickButton('Tiếp Tục Tiến Sâu');
+        this.log('➡️ Vân Du: Tiếp Tục Tiến Sâu');
+        await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
+        continue;
+      }
+
+      // Lôi Kiếp Tôi Thể: mất 20% HP lấy buff cực phẩm (anh chốt ở tiết 11,
+      // lúc HP 100%; ngưỡng HP nào thì đổi sang phương án an toàn chưa chốt,
+      // nên v2 bấm Lôi Kiếp như mẫu đã thấy và ghi log HP lúc bấm).
+      if (btnNorm.some(x => x.includes('loi kiep toi the'))) {
+        await this.vanduClickButton('Lôi Kiếp Tôi Thể');
+        this.log('⚡ Vân Du: Lôi Kiếp Tôi Thể (đánh cược lấy buff)');
+        await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
+        continue;
+      }
+
+      // Kỳ Ngộ: ưu tiên ô xanh lá, ở màn đã thấy là Dâng hương.
+      if (btnNorm.some(x => x.includes('dang huong'))) {
+        await this.vanduClickButton('Dâng hương');
+        this.log('🙏 Vân Du: Kỳ Ngộ, chọn Dâng hương');
+        await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
+        continue;
+      }
+
+      // Cổ Thạch Hòm: ưu tiên Phá Phong Ấn (50% thưởng / 50% bẫy quái),
+      // thay vì Rời đi như fallback v1. Chỉ khi không có Phá Phong Ấn mà có
+      // Vận Năng Linh Thước thì mới mở an toàn bằng Linh Thước.
+      if (btnNorm.some(x => x.includes('pha phong an'))) {
+        await this.vanduClickButton('Phá Phong Ấn');
+        this.log('📦 Vân Du: Cổ Thạch Hòm, chọn Phá Phong Ấn');
+        await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
+        continue;
+      }
+      if (btnNorm.some(x => x.includes('van nang linh thuoc')) && /cổ thạch hòm|co thach hom|hòm/i.test(text)) {
+        await this.vanduClickButton('Vận Năng Linh Thước');
+        this.log('📦 Vân Du: Cổ Thạch Hòm, mở bằng Vận Năng Linh Thước');
+        await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
+        continue;
+      }
+
+      // Đố Bát Quái: đọc thơ trong ngoặc kép, map hành -> cửa. Không đoán
+      // được hành hoặc không thấy cửa đó thì dừng để tránh mở sai cửa.
+      if (/bát quái trận đố|bat quai tran do/i.test(text) || btnNorm.some(x => x.includes('cua ly') || x.includes('cua kham') || x.includes('cua khon') || x.includes('cua chan') || x.includes('cua doai'))) {
+        const element = this.vanduPuzzleElement(text);
+        const door = element ? this.vanduPuzzleDoor(element) : null;
+        const doorBtn = door ? buttons.find(x => this.normalizeMatchText(x).includes(this.normalizeMatchText('Cửa ' + door))) : null;
+        if (doorBtn) {
+          await this.vanduClickButton(doorBtn);
+          this.log(`🧩 Vân Du: đố Bát Quái, thơ hành ${element} -> ${doorBtn}`);
+        } else {
+          this.log(`⛔ Vân Du: đố Bát Quái, không đoán được hành/cửa từ thơ (hành: ${element || '?'}) , dừng để tránh mở sai cửa.`);
+          break;
+        }
+        await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
+        continue;
+      }
+
       // Shop Tiên Thương (mở khi chọn Cảnh Môn).
       const isShop = btnNorm.some(b => b.includes('mua cuu chuyen')) || norm.includes('tien thuong');
       if (isShop) {
@@ -5037,7 +5190,8 @@ class NpcBot {
             const n = this.normalizeMatchText(b);
             return !n.includes('doi van') && !n.includes('roi di');
           });
-          const choice = this.vanduChooseBuff(buffButtons, this.vanduSectCounts, this.vanduOwnedBuffs, rerolls < 2);
+          const counterSect = this.vanduCounterSectFromText(cur.text || '');
+          const choice = this.vanduChooseBuff(buffButtons, this.vanduSectCounts, this.vanduOwnedBuffs, rerolls < 2, counterSect);
           if (!choice) break;
           if (choice.action === 'reroll') {
             const clicked = await this.vanduClickButton('Đổi Vận');
