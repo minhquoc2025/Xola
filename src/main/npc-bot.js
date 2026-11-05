@@ -89,6 +89,8 @@ class NpcBot {
     this.vanduRealm = '';
     this.vanduMap = '';
     this.vanduMapPicked = false;
+    // V15: đây chỉ là mặc định khi chưa có cấu hình; thứ tự thật lấy từ
+    // config.vanduSkillNames (ô cấu hình chung bicanhSkillOrder) qua updateConfig.
     this.vanduSkillOrder = ['Phá Giáp', 'Băng Phong', 'Hư Không Đại Na Di', 'Kim Đan Phá Sát', 'Băng Phong', 'Vạn Kiếm Quy Tông'];
     this.vanduSkillIdx = 0;
     this.vanduNode = 0;
@@ -335,6 +337,9 @@ class NpcBot {
     if (config.vanduCmd !== undefined) this.vanduCmd = String(config.vanduCmd || '!vandu');
     if (config.vanduRealm !== undefined) this.vanduRealm = String(config.vanduRealm || '');
     if (config.vanduMap !== undefined) this.vanduMap = String(config.vanduMap || '');
+    // V15: thứ tự skill Vân Du lấy từ cấu hình chung (bicanhSkillOrder qua
+    // renderer) như Luân Hồi, không chọn cứng nữa. Rỗng thì giữ mặc định.
+    if (config.vanduSkillNames !== undefined && Array.isArray(config.vanduSkillNames) && config.vanduSkillNames.length > 0) this.vanduSkillOrder = config.vanduSkillNames;
     if (config.dianguc !== undefined) this.dianguc = config.dianguc;
     if (config.diangucCmd !== undefined) this.diangucCmd = config.diangucCmd;
     if (config.diangucDelayMs !== undefined) this.diangucDelayMs = config.diangucDelayMs;
@@ -5187,7 +5192,8 @@ class NpcBot {
   }
 
   async vanduBattleLoop(runId) {
-    this.log('⚔️ Vân Du: vào trận');
+    // V15: log luôn thứ tự đang dùng để anh kiểm tra cấu hình có vào bot không.
+    this.log(`⚔️ Vân Du: vào trận (thứ tự: ${this.vanduSkillOrder.join(' -> ')})`);
     let healUsed = false;
     const startedAt = Date.now();
     while (this.isRunning && this.runId === runId) {
@@ -5221,8 +5227,9 @@ class NpcBot {
       // Duyệt theo thứ tự từ vị trí hiện tại, lấy skill đầu tiên có nút và
       // không hồi; nếu tất cả đều hồi/không có nút thì dùng Kiếm Cơ Bản làm
       // filler, nếu không có cả filler thì chờ quét lại chứ không bấm bừa.
-      // Thứ tự preset tay của anh vẫn chưa được nói rõ, nên thứ tự cố định
-      // v1 được giữ nguyên, chỉ thêm bỏ qua hồi/thiếu nút.
+      // V15: thứ tự duyệt là thứ tự từ cấu hình chung (vanduSkillNames),
+      // không còn là thứ tự cứng v1 nữa; thứ tự cứng v1 chỉ là mặc định
+      // khi chưa có cấu hình.
       let clicked = null;
       let tried = 0;
       while (tried < this.vanduSkillOrder.length) {

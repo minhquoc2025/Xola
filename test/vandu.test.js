@@ -192,3 +192,12 @@ eq(bot.vanduChooseBuff(['[Thuật] T'], {}, {}, true).buttonText, '[Thuật] T',
 eq(bot.vanduParseBuffCard('Thái Ất Thuật Vàng').sect, 'Thuật', 'V14: ten co chu Thuat -> tong Thuat');
 eq(bot.vanduBuffRarity('[Thuật] T 🟡'), 4, 'V14: emoji vang -> 4');
 eq(bot.vanduChooseBuff(['Thái Ất Thuật 🟡'], {}, {}, true).buttonText, 'Thái Ất Thuật 🟡', 'V14: Thuat vang emoji -> chon ngay');
+
+// V15 (2026-11-05): thứ tự skill Vân Du lấy từ cấu hình chung (29,26,23),
+// không chọn cứng nữa; rỗng thì giữ mặc định cũ.
+const bot2 = new NpcBot({ executeJavaScript() {} }, 1);
+eq(bot2.vanduSkillOrder, ['Phá Giáp', 'Băng Phong', 'Hư Không Đại Na Di', 'Kim Đan Phá Sát', 'Băng Phong', 'Vạn Kiếm Quy Tông'], 'V15: mac dinh khi chua co cau hinh');
+bot2.updateConfig({ vanduSkillNames: ['Hư Không Đại Na Di', 'Kim Đan Phá Sát', 'Vạn Kiếm Quy Tông'] });
+eq(bot2.vanduSkillOrder, ['Hư Không Đại Na Di', 'Kim Đan Phá Sát', 'Vạn Kiếm Quy Tông'], 'V15: cau hinh 29,26,23 -> thu tu theo cau hinh');
+bot2.updateConfig({ vanduSkillNames: [] });
+eq(bot2.vanduSkillOrder, ['Hư Không Đại Na Di', 'Kim Đan Phá Sát', 'Vạn Kiếm Quy Tông'], 'V15: cau hinh rong -> giu thu tu cu, khong ve mac dinh');

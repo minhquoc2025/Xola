@@ -282,6 +282,11 @@ function getVanduConfig() {
     if (vanduUserId) localStorage.setItem('userid-vandu', vanduUserId);
     else localStorage.removeItem('userid-vandu');
   }
+  // V15: Vân Du lấy thứ tự skill từ cùng ô cấu hình chung (bicanhSkillOrder,
+  // vd 29,26,23) như Luân Hồi, không chọn cứng trong code nữa. Rỗng thì bot
+  // giữ thứ tự mặc định cũ.
+  const vanduConfiguredOrder = localStorage.getItem("bicanhSkillOrder") || "";
+  const vanduSkills = resolveSkillNames(vanduConfiguredOrder);
   return {
     mode: 'vandu',
     vandu: true,
@@ -293,6 +298,7 @@ function getVanduConfig() {
     buttonDelayMs: (parseFloat(document.getElementById('vandu-delay').value) || 2) * 1000,
     vanduRealm: vanduRealm,
     vanduMap: vanduRealm ? (VANDU_REALM_MAPS[vanduRealm] || '') : '',
+    vanduSkillNames: vanduSkills,
     skillClickDelayMs: getSkillClickDelayMs(),
   };
 }
