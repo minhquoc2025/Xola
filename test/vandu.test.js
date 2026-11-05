@@ -312,3 +312,8 @@ botV24.vanduTripCount = 1; botV24.vanduTotalTrips = 5;
 eq(botV24.vanduShouldRestartTrips(), true, 'V24: 1/5 -> chay tiep');
 botV24.vanduTripCount = 5; botV24.vanduTotalTrips = 5;
 eq(botV24.vanduShouldRestartTrips(), false, 'V24: 5/5 -> dung');
+
+// V25 (2026-11-05, man Tiet 11/36 Ky Ngo That Thai Ho Diep): gap bang
+// nay thi bam Tinh toa giao cam, khong bam Bat buom. Kiem tra nhan dien nut.
+eq(botV24.vanduNormalize('🧘 Tĩnh tọa giao cảm (Tốn 15% HP)').includes('tinh toa giao cam'), true, 'V25: nhan dien nut Tinh toa giao cam');
+eq(botV24.vanduNormalize('🦋 Bắt bướm').includes('tinh toa giao cam'), false, 'V25: nut Bat buom khong nham voi Tinh toa');

@@ -5666,6 +5666,23 @@ class NpcBot {
         continue;
       }
 
+      // Kỳ Ngộ — Thất Thái Hồ Điệp (v25, anh chốt 2026-11-05, màn Tiết
+      // 11/36): bảng này có 2 nút, "Tĩnh tọa giao cảm (Tốn 15% HP)" và
+      // "Bắt bướm". Anh dặn gặp bảng này thì luôn bấm Tĩnh tọa giao cảm.
+      // Đặt TRƯỚC handler Kỳ Ngộ chung (v19) vì màn này cũng chứa chữ
+      // "KỲ NGỘ" nhưng không có nút xanh lá cũng không có nút Dâng hương
+      // — để handler chung xử lý thì nó bấm hụt rồi quét lại màn cũ mãi.
+      // Nhận diện bằng chính nút cần bấm (chuẩn hoá bỏ emoji/dấu, hậu tố
+      // "Tốn 15% HP" không ảnh hưởng vì so khớp theo chuỗi con). Không
+      // chốt ngưỡng HP ở đây: màn mẫu HP 88% (bấm xong còn ~73%), nếu
+      // anh muốn HP thấp thì đổi sang Bắt bướm thì nói mình thêm ngưỡng.
+      if (btnNorm.some(x => x.includes('tinh toa giao cam'))) {
+        await this.vanduClickButton('Tĩnh tọa giao cảm');
+        this.log('🦋 Vân Du: Kỳ Ngộ Thất Thái Hồ Điệp, chọn Tĩnh tọa giao cảm (tốn 15% HP)');
+        await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
+        continue;
+      }
+
       // Kỳ Ngộ (v19, anh chốt 2026-11-05): cứ nút XANH LÁ mà chọn. Trước
       // đây bot bấm theo chữ "Dâng hương" (vì ở màn đã thấy thì ô xanh lá
       // là Dâng hương), giờ bấm theo màu cho chắc, vì chữ có thể khác
