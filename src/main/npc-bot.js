@@ -4702,8 +4702,12 @@ class NpcBot {
         if (hits.length > 1) {
           // Cùng 1 hành mà có 2 tên cửa (Thương/Đỗ cho Mộc, Kinh/Khai cho Kim,
           // Sinh/Tử cho Thổ): chọn theo thứ tự ưu tiên, không theo thứ tự nút Discord.
-          // Đã chốt: Thương trước Đỗ. Kinh trước Khai và Sinh trước Tử là thứ tự
-          // ưu tiên chung, chưa có mẫu cả 2 cùng xuất hiện để chốt riêng cho Kim/Thổ.
+          // Đã chốt: Thương trước Đỗ. Sinh trước Tử đã chốt riêng 2026-11-05:
+          // Thổ có 2 cửa Sinh/Tử, Sinh là cửa ưu tiên, không có Sinh thì chọn
+          // Tử — áp dụng cho cả mạch Sinh (Hỏa sinh Thổ) và mạch Khắc
+          // (Mộc khắc Thổ); khi chỉ có 1 cửa Thổ thì cửa đó được chọn ở nhánh
+          // hits.length === 1 phía trên. Kinh trước Khai vẫn là thứ tự ưu tiên
+          // chung, chưa chốt riêng cho Kim.
           hits.sort((a, c) => this.vanduDoorPriority(a) - this.vanduDoorPriority(c));
           return hits[0];
         }

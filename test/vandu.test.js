@@ -116,3 +116,10 @@ eq(bot.vanduChooseDoor(['Cảnh Môn', 'Kinh Môn'], null), 'Cảnh Môn', 'no c
 eq(bot.vanduChooseDoor(['Cảnh Môn', 'Thương Môn', 'Tử Môn'], null), 'Thương Môn', 'no circuit: man Tiet 11, Thuong thang');
 eq(bot.vanduChooseDoor(['Khai Môn', 'Hưu Môn'], null), 'Hưu Môn', 'no circuit: duoi sau Kinh, Huu truoc Khai');
 eq(bot.vanduChooseDoor(['Đỗ Môn', 'Khai Môn'], null), 'Khai Môn', 'no circuit: duoi sau Kinh, Khai truoc Do');
+
+// V9 (2026-11-05): Thổ có 2 cửa Sinh/Tử — Sinh trước, không có Sinh thì Tử,
+// cho cả mạch Sinh (Hỏa->Thổ) và mạch Khắc (Mộc->Thổ)
+eq(bot.vanduChooseDoor(['Tử Môn', 'Cảnh Môn', 'Kinh Môn'], { type: 'sinh', last: 'Hỏa' }), 'Tử Môn', 'sinh Hoa->Tho, chi co Tu -> Tu');
+eq(bot.vanduChooseDoor(['Tử Môn', 'Cảnh Môn', 'Kinh Môn'], { type: 'khac', last: 'Mộc' }), 'Tử Môn', 'khac Moc->Tho, chi co Tu -> Tu');
+eq(bot.vanduChooseDoor(['Sinh Môn', 'Tử Môn', 'Cảnh Môn'], { type: 'sinh', last: 'Hỏa' }), 'Sinh Môn', 'sinh Hoa->Tho, co ca Sinh/Tu -> Sinh');
+eq(bot.vanduChooseDoor(['Sinh Môn', 'Tử Môn', 'Cảnh Môn'], { type: 'khac', last: 'Mộc' }), 'Sinh Môn', 'khac Moc->Tho, co ca Sinh/Tu -> Sinh');
