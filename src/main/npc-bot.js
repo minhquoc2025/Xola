@@ -4793,45 +4793,58 @@ class NpcBot {
     return null;
   }
 
+  // V10: đọc số lượt Đổi Vận còn lại trên bảng (vd "Đổi Vận (2 lượt)",
+  // "Đổi Vận (4 lượt)"). Game có khi cho 2, có khi cho 4 lượt, nên không được
+  // đếm cứng 2 như trước. Không đọc được thì trả null để bên gọi dùng giới
+  // hạn dự phòng (tối đa 4) thay vì đoán.
+  vanduRerollRemaining(text, buttons) {
+    const hay = [...(buttons || []), String(text || '')].join(' ');
+    const m = hay.match(/Đổi Vận[^0-9]*(\d+)\s*lượt/);
+    return m ? Number(m[1]) : null;
+  }
+
   vanduChooseBuff(cards, sectCounts, ownedNames, allowReroll, counterSect) {
     const parsed = (cards || []).map(c => this.vanduParseBuffCard(c)).filter(c => c.name);
     if (parsed.length === 0) return null;
-    // (0) Luật anh chốt 2026-11-04: buff theo bảng khắc chế quái đứng trước
-    // vàng và trùng. Trong cùng tông khắc chế, lấy độ hiếm cao hơn trước
-    // (mẫu tiết 6: Ma Tím thắng Ma Lam). Không có buff khắc chế thì về luật cũ.
+    const countOf = c => (c.sect && sectCounts[c.sect] !== undefined ? sectCounts[c.sect] : 0);
+    const byRarity = (a, b) => (this.vanduBuffRarity(b.raw) - this.vanduBuffRarity(a.raw)) || (countOf(b) - countOf(a));
+    // (0) Luật anh chốt 2026-11-04, giữ nguyên: buff theo bảng khắc chế quái
+    // đứng trước vàng và trùng. Trong cùng tông khắc chế, vàng/tím trước
+    // (mẫu tiết 6: Ma Tím thắng Ma Lam, và thắng cả Khí Vàng).
     if (counterSect) {
       const counter = parsed.filter(c => c.sect === counterSect);
       if (counter.length > 0) {
-        counter.sort((a, c) => this.vanduBuffRarity(c.raw) - this.vanduBuffRarity(a.raw));
+        counter.sort(byRarity);
         return { action: 'pick', buttonText: counter[0].raw };
       }
     }
-    const countOf = c => (c.sect && sectCounts[c.sect] !== undefined ? sectCounts[c.sect] : 0);
-    // (a) tông gần mở Lĩnh Vực nhất: còn 1 thẻ nữa là tới ngưỡng 3/5/8.
-    const domain = parsed.filter(c => {
-      const next = this.vanduNextDomainThreshold(countOf(c));
-      return next !== null && countOf(c) + 1 === next;
-    });
-    if (domain.length > 0) {
-      domain.sort((a, b) => (countOf(b) - countOf(a)) || (b.gold - a.gold));
-      return { action: 'pick', buttonText: domain[0].raw };
+    // (1) V10 (anh chốt 2026-11-05): không có buff khắc chế thì lấy Thuật
+    // luôn, KHÔNG bấm Đổi để tìm khắc chế. Vd quái Hư Ảo cần Ma, bảng không
+    // có Ma mà có Thuật thì chọn Thuật ngay. Trong Thuật cũng vàng/tím trước.
+    const thuat = parsed.filter(c => c.sect === 'Thuật');
+    if (thuat.length > 0) {
+      thuat.sort(byRarity);
+      return { action: 'pick', buttonText: thuat[0].raw };
     }
-    // (b) buff vàng (Thần Thoại).
-    const gold = parsed.filter(c => c.gold);
-    if (gold.length > 0) {
-      gold.sort((a, b) => countOf(b) - countOf(a));
-      return { action: 'pick', buttonText: gold[0].raw };
-    }
-    // (c) không có (a) hay (b) thì Đổi Vận, tối đa 2 lần mỗi màn hình (bên gọi đếm).
+    // (2) V10: không có cả khắc chế lẫn Thuật thì mới bấm Đổi Vận để tìm.
+    // allowReroll ở đây là "game còn cho đổi trên bảng này" do bên gọi đọc
+    // từ nút Đổi Vận, không phải đếm cứng 2 nữa.
     if (allowReroll) return { action: 'reroll' };
-    // (d) buff trùng để nâng bậc, rồi tới tông có nhiều nhất, rồi thẻ đầu tiên.
-    const dup = parsed.filter(c => ownedNames[c.name]);
+    // (3) V10: đã hết lượt đổi thì mới chọn những buff còn lại — vàng/tím
+    // trước (độ hiếm cao trước), rồi tới tông đang có nhiều nhất (gần mở
+    // Lĩnh Vực nhất cũng nằm trong tiêu chí này khi hiếm bằng nhau), rồi
+    // tới buff trùng để nâng bậc. Luật Lĩnh Vực gần ngưỡng cũ không còn
+    // chen trước Thuật hay trước Đổi nữa.
+    const remaining = [...parsed].sort(byRarity);
+    const dup = remaining.filter(c => ownedNames[c.name]);
+    if (remaining[0] && this.vanduBuffRarity(remaining[0].raw) >= 3) {
+      return { action: 'pick', buttonText: remaining[0].raw };
+    }
     if (dup.length > 0) {
-      dup.sort((a, b) => countOf(b) - countOf(a));
+      dup.sort(byRarity);
       return { action: 'pick', buttonText: dup[0].raw };
     }
-    const sorted = [...parsed].sort((a, b) => countOf(b) - countOf(a));
-    return { action: 'pick', buttonText: sorted[0].raw };
+    return { action: 'pick', buttonText: remaining[0].raw };
   }
 
   vanduShopAction(danCount, boughtThisVisit, biTichDoneThisVisit) {
@@ -5354,13 +5367,20 @@ class NpcBot {
             return !n.includes('doi van') && !n.includes('roi di');
           });
           const counterSect = this.vanduCounterSectFromText(cur.text || '');
-          const choice = this.vanduChooseBuff(buffButtons, this.vanduSectCounts, this.vanduOwnedBuffs, rerolls < 2, counterSect);
+          // V10: lượt Đổi Vận đọc từ bảng, không đếm cứng 2. Game có khi
+          // cho 2, có khi cho 4 lượt. Không có nút Đổi Vận thì hết lượt.
+          // Không đọc được số thì dự phòng tối đa 4 lượt mỗi bảng.
+          const hasRerollBtn = (cur.buttons || []).some(b => this.vanduNormalize(b).includes('doi van'));
+          const remaining = this.vanduRerollRemaining(cur.text || '', cur.buttons || []);
+          const allowReroll = hasRerollBtn && (remaining !== null ? remaining > 0 : rerolls < 4);
+          const choice = this.vanduChooseBuff(buffButtons, this.vanduSectCounts, this.vanduOwnedBuffs, allowReroll, counterSect);
           if (!choice) break;
           if (choice.action === 'reroll') {
             const clicked = await this.vanduClickButton('Đổi Vận');
             if (!clicked) break;
             rerolls++;
-            this.log(`🔄 Vân Du: Đổi Vận lần ${rerolls}/2`);
+            if (remaining !== null) this.log(`🔄 Vân Du: Đổi Vận (bảng báo còn ${remaining} lượt trước khi bấm)`);
+            else this.log(`🔄 Vân Du: Đổi Vận lần ${rerolls} (không đọc được số lượt, tối đa 4)`);
             await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
             continue;
           }

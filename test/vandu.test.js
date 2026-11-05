@@ -41,11 +41,24 @@ eq(bot.vanduParseCircuit('Mạch Tương Sinh: [Mộc] → [Hỏa] → [?] → [
 eq(bot.vanduParseCircuit('Mạch Tương Khắc, định vị khởi đầu tại hành Thổ'), { type: 'khac', elements: ['Thổ'], last: 'Thổ' }, 'parse khac start');
 
 // Buff choice: domain first, then gold, then reroll, then duplicate.
-eq(bot.vanduChooseBuff(['[Thuật] Thái Ất [Thuật Tông - Lam]', '[Kiếm] Kiếm X [Kiếm Tông - Lam]'], { Thuật: 2, Kiếm: 0 }, {}, true).action, 'pick', 'domain candidate picked');
-eq(bot.vanduChooseBuff(['[Thuật] Thái Ất [Thuật Tông - Lam]', '[Kiếm] Kiếm X [Kiếm Tông - Lam]'], { Thuật: 2, Kiếm: 0 }, {}, true).buttonText, '[Thuật] Thái Ất [Thuật Tông - Lam]', 'domain candidate is Thuật');
-eq(bot.vanduChooseBuff(['[Kiếm] A [Kiếm Tông - Lam]', '[Khí] B [Khí Tông - Vàng (Thần Thoại)]'], { Kiếm: 0, Khí: 0 }, {}, true).buttonText, '[Khí] B [Khí Tông - Vàng (Thần Thoại)]', 'gold picked');
-eq(bot.vanduChooseBuff(['[Kiếm] A [Kiếm Tông - Lam]'], { Kiếm: 0 }, {}, true), { action: 'reroll' }, 'no domain/gold -> reroll');
-eq(bot.vanduChooseBuff(['[Kiếm] A [Kiếm Tông - Lam]'], { Kiếm: 0 }, { A: true }, false).buttonText, '[Kiếm] A [Kiếm Tông - Lam]', 'no reroll left -> duplicate picked');
+// V10: Thuật fallback, vàng chỉ ở bước còn lại (sau khi hết lượt đổi)
+eq(bot.vanduChooseBuff(['[Thuật] Thái Ất [Thuật Tông - Lam]', '[Kiếm] Kiếm X [Kiếm Tông - Lam]'], { Thuật: 2, Kiếm: 0 }, {}, true).action, 'pick', 'V10: co Thuat -> pick, khong doi');
+eq(bot.vanduChooseBuff(['[Thuật] Thái Ất [Thuật Tông - Lam]', '[Kiếm] Kiếm X [Kiếm Tông - Lam]'], { Thuật: 2, Kiếm: 0 }, {}, true).buttonText, '[Thuật] Thái Ất [Thuật Tông - Lam]', 'V10: Thuat duoc chon');
+eq(bot.vanduChooseBuff(['[Kiếm] A [Kiếm Tông - Lam]', '[Khí] B [Khí Tông - Vàng (Thần Thoại)]'], { Kiếm: 0, Khí: 0 }, {}, true), { action: 'reroll' }, 'V10: khong counter/Thuat, con luot doi -> doi, khong lay vang ngay');
+eq(bot.vanduChooseBuff(['[Kiếm] A [Kiếm Tông - Lam]', '[Khí] B [Khí Tông - Vàng (Thần Thoại)]'], { Kiếm: 0, Khí: 0 }, {}, false).buttonText, '[Khí] B [Khí Tông - Vàng (Thần Thoại)]', 'V10: het luot doi -> vang con lai truoc');
+eq(bot.vanduChooseBuff(['[Kiếm] A [Kiếm Tông - Lam]'], { Kiếm: 0 }, {}, true), { action: 'reroll' }, 'V10: khong counter/Thuat -> reroll');
+eq(bot.vanduChooseBuff(['[Kiếm] A [Kiếm Tông - Lam]'], { Kiếm: 0 }, { A: true }, false).buttonText, '[Kiếm] A [Kiếm Tông - Lam]', 'V10: het luot doi -> chon con lai');
+// V10: ví dụ anh đưa — quái Hư Ảo cần Ma, bảng không có Ma mà có Thuật thì chọn Thuật, không đổi
+eq(bot.vanduChooseBuff(['[Thuật] T [Thuật Tông - Lam]', '[Kiếm] Y [Kiếm Tông - Vàng (Thần Thoại)]'], {}, {}, true, 'Ma').buttonText, '[Thuật] T [Thuật Tông - Lam]', 'V10: can Ma, khong Ma co Thuat -> Thuat, khong doi, khong lay vang Kiem');
+// V10: khắc chế thắng cả Thuật vàng (luật cũ tiết 6 giữ nguyên)
+eq(bot.vanduChooseBuff(['[Ma] M [Ma Tông - Lam]', '[Thuật] T [Thuật Tông - Vàng (Thần Thoại)]'], {}, {}, true, 'Ma').buttonText, '[Ma] M [Ma Tông - Lam]', 'V10: counter Ma thang Thuat vang');
+// V10: trong Thuật, tím trước lam
+eq(bot.vanduChooseBuff(['[Thuật] A [Thuật Tông - Lam]', '[Thuật] B [Thuật Tông - Tím (Cực Phẩm)]'], {}, {}, true).buttonText, '[Thuật] B [Thuật Tông - Tím (Cực Phẩm)]', 'V10: trong Thuat, tim truoc lam');
+// V10: đọc số lượt Đổi Vận trên bảng (2 hoặc 4, không đếm cứng)
+eq(bot.vanduRerollRemaining('Đổi Vận (4 lượt)', ['Đổi Vận (4 lượt)']), 4, 'doi van 4 luot');
+eq(bot.vanduRerollRemaining('Đổi Vận (2 lượt)', []), 2, 'doi van 2 luot');
+eq(bot.vanduRerollRemaining('Đổi Vận (0 lượt)', []), 0, 'doi van 0 luot');
+eq(bot.vanduRerollRemaining('không có nút đổi', []), null, 'khong doc duoc -> null');
 
 // Shop
 eq(bot.vanduShopAction(3, false, false), 'bi-tich', 'shop: 3 dan -> Bi Tich');
