@@ -261,3 +261,8 @@ eq(botV17.vanduIsBuffCard('!vandu'), false, 'V20: nut rac lenh khong phai the bu
 eq(botV17.vanduIsBuffCard('Xỏ lá ba que'), false, 'V20: nut rac danh hieu khong phai the buff');
 eq(botV17.vanduIsBuffCard('[Ma] 🖤 Ma Hóa Cuồng Nộ'), true, 'V20: the Ma that');
 eq(botV17.vanduIsBuffCard('[Thuật] Tụ Khí Hoàn'), true, 'V20: the Thuat that');
+
+// V21 (2026-11-05, man Tiet 8/36 Ky Duyen Mon): gap bang cuoc Ngan Luong
+// thi bam nut an toan, khong cuoc tat tay. Kiem tra nhan dien nut.
+eq(botV17.vanduNormalize('🚶 Bỏ qua đi tiếp an toàn').includes('bo qua di tiep an toan'), true, 'V21: nhan dien nut an toan Ky Duyen Mon');
+eq(botV17.vanduNormalize('🎰 CẢ ĐỘ TẤT TAY (x2.5 hoặc mất sạch)').includes('bo qua di tiep an toan'), false, 'V21: nut cuoc khong nham voi nut an toan');

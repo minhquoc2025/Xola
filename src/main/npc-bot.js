@@ -5573,6 +5573,21 @@ class NpcBot {
         continue;
       }
 
+      // Kỳ Duyên Môn — Cửa Vàng (v21, anh chốt 2026-11-05, màn Tiết 8/36):
+      // Bàn Cờ Vận Mệnh cược Ngân Lượng (x2.5 hoặc mất sạch). Anh dặn gặp
+      // bảng này thì luôn bấm "Bỏ qua đi tiếp an toàn", không cược tất
+      // tay dù đang có bao nhiêu Ngân Lượng. Nhận diện bằng chính nút an
+      // toàn (chuẩn nhất, vì nút cược có thể đổi chữ theo màn nhưng nút
+      // an toàn là nút bot cần bấm). Chỉ bấm nút an toàn, không chạm nút
+      // cược. Mạch đang chạy (vd Khắc neo Mộc ở màn này) được giữ nguyên
+      // qua nút này, không reset như khi thua boss.
+      if (btnNorm.some(x => x.includes('bo qua di tiep an toan'))) {
+        await this.vanduClickButton('Bỏ qua đi tiếp an toàn');
+        this.log('🎰 Vân Du: Kỳ Duyên Môn (Cửa Vàng), bỏ qua đi tiếp an toàn, không cược tất tay');
+        await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
+        continue;
+      }
+
       // Cổ Thạch Hòm: ưu tiên Phá Phong Ấn (50% thưởng / 50% bẫy quái),
       // thay vì Rời đi như fallback v1. Chỉ khi không có Phá Phong Ấn mà có
       // Vận Năng Linh Thước thì mới mở an toàn bằng Linh Thước.
