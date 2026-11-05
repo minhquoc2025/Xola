@@ -5155,6 +5155,106 @@ class NpcBot {
     return await this.vanduClickAnywhere(needle);
   }
 
+  // V19: kiểm tra 1 chuỗi màu nền có phải xanh lá Discord không, để test
+  // được mà không cần trình duyệt. Xanh lá thành công của Discord là
+  // #23a55a = rgb(35,165,90): kênh G cao rõ rệt so với R và B. Đỏ
+  // (218,55,60), tím blurple (88,101,242) và xám (78,80,88) đều không đạt
+  // vì kênh cao nhất không phải G, hoặc G không vượt đủ. Nút trong suốt
+  // (alpha 0) không tính là xanh.
+  vanduIsGreenColor(bg) {
+    const m = String(bg || '').match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?/);
+    if (!m) return false;
+    if (m[4] !== undefined && Number(m[4]) < 0.5) return false;
+    const r = Number(m[1]);
+    const g = Number(m[2]);
+    const b = Number(m[3]);
+    return g > 120 && g > r + 30 && g > b + 30;
+  }
+
+  // V19 (anh chốt 2026-11-05): Kỳ Ngộ thì bấm nút XANH LÁ, không bấm theo
+  // chữ Dâng hương nữa (ô xanh lá mới là đáp án đúng; chữ có thể đổi
+  // theo màn nhưng màu thì không). Chỉ quét nút trong màn Vân Du của
+  // mình (article mang User ID trước, rồi mọi article Vân Du), rồi mới
+  // quét toàn trang trong container Vân Du — không bấm bừa nút xanh ở
+  // chỗ khác của Discord. Không thấy nút xanh thì trả null để bên gọi
+  // fallback về Dâng hương.
+  async vanduClickGreenButton() {
+    const userId = this.userId || '';
+    const greenJs = `(() => {
+      const userId = ${JSON.stringify(userId)};
+      const isGreen = bg => {
+        const m = String(bg || '').match(/rgba?\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*,\\s*(\\d+)(?:\\s*,\\s*([\\d.]+))?/);
+        if (!m) return false;
+        if (m[4] !== undefined && Number(m[4]) < 0.5) return false;
+        const r = Number(m[1]), g = Number(m[2]), b = Number(m[3]);
+        return g > 120 && g > r + 30 && g > b + 30;
+      };
+      const isVisible = el => el && el.offsetParent !== null;
+      const tryBtns = btns => {
+        for (const btn of btns) {
+          if (btn.disabled || !isVisible(btn)) continue;
+          const raw = (btn.textContent || '').trim();
+          if (!raw) continue;
+          let bg = '';
+          try { bg = getComputedStyle(btn).backgroundColor || ''; } catch (e) {}
+          if (!isGreen(bg)) continue;
+          btn.disabled = false;
+          btn.click();
+          return raw;
+        }
+        return null;
+      };
+      const articles = Array.from(document.querySelectorAll('[role="article"]'));
+      const passes = userId ? [true, false] : [false];
+      for (const onlyOwned of passes) {
+        for (const msg of articles.slice(-15).reverse()) {
+          if (msg.getAttribute('data-bot-ephemeral') === 'true') continue;
+          if (onlyOwned && !(msg.innerHTML || '').includes(userId)) continue;
+          const hit = tryBtns(Array.from(msg.querySelectorAll('button, [role="button"]')));
+          if (hit) return hit;
+        }
+      }
+      return null;
+    })()`;
+    const inArticles = await this.exec(greenJs);
+    if (inArticles) return inArticles;
+    // Fallback: nút xanh nằm ngoài article (Components V2) nhưng trong
+    // container có chữ Vân Du.
+    const anywhere = await this.exec(`(() => {
+      const isGreen = bg => {
+        const m = String(bg || '').match(/rgba?\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*,\\s*(\\d+)(?:\\s*,\\s*([\\d.]+))?/);
+        if (!m) return false;
+        if (m[4] !== undefined && Number(m[4]) < 0.5) return false;
+        const r = Number(m[1]), g = Number(m[2]), b = Number(m[3]);
+        return g > 120 && g > r + 30 && g > b + 30;
+      };
+      const isVisible = el => el && el.offsetParent !== null;
+      const nd = value => String(value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/[\\u0111\\u0110\\u00D0\\u00F0]/g, 'd').replace(/[\\u01A1\\u01A0\\u00F8\\u00D8]/g, 'o').replace(/[\\u01B0\\u01AF]/g, 'u').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      const keywords = ['van du', 'tiet diem', 'ky ngo', 'ho phap', 'dang huong'];
+      const allBtns = Array.from(document.querySelectorAll('button, [role="button"]'))
+        .filter(b => isVisible(b) && (b.textContent || '').trim().length > 0);
+      for (const btn of allBtns) {
+        if (btn.disabled) continue;
+        let bg = '';
+        try { bg = getComputedStyle(btn).backgroundColor || ''; } catch (e) {}
+        if (!isGreen(bg)) continue;
+        let el = btn.parentElement;
+        for (let i = 0; i < 8 && el; i++) {
+          const t = el.textContent || '';
+          if (t.length > 100 && keywords.some(k => nd(t).includes(k))) {
+            const raw = (btn.textContent || '').trim();
+            btn.disabled = false;
+            btn.click();
+            return raw;
+          }
+          el = el.parentElement;
+        }
+      }
+      return null;
+    })()`);
+    return anywhere || null;
+  }
+
   // V3: bấm nút/mục chọn ở bất cứ đâu trong trang, không chỉ trong article.
   // Dùng cho dropdown map của Discord: mục Thiên Sơn Tuyết Lãnh nằm trong
   // popout select-menu ngoài article, nên vanduClickButton cũ không bao giờ
@@ -5431,10 +5531,20 @@ class NpcBot {
         continue;
       }
 
-      // Kỳ Ngộ: ưu tiên ô xanh lá, ở màn đã thấy là Dâng hương.
-      if (btnNorm.some(x => x.includes('dang huong'))) {
-        await this.vanduClickButton('Dâng hương');
-        this.log('🙏 Vân Du: Kỳ Ngộ, chọn Dâng hương');
+      // Kỳ Ngộ (v19, anh chốt 2026-11-05): cứ nút XANH LÁ mà chọn. Trước
+      // đây bot bấm theo chữ "Dâng hương" (vì ở màn đã thấy thì ô xanh lá
+      // là Dâng hương), giờ bấm theo màu cho chắc, vì chữ có thể khác
+      // theo màn. Nhận diện màn Kỳ Ngộ bằng tiêu đề (Kỳ Ngộ / Hộ Pháp)
+      // hoặc có nút Dâng hương. Không tìm được nút xanh (vd Discord đổi
+      // cách tô màu) thì fallback về Dâng hương như cũ, không đứng im.
+      if (btnNorm.some(x => x.includes('dang huong')) || norm.includes('ky ngo') || norm.includes('ho phap')) {
+        const green = await this.vanduClickGreenButton();
+        if (green) {
+          this.log(`🙏 Vân Du: Kỳ Ngộ, chọn nút xanh lá "${green}"`);
+        } else {
+          await this.vanduClickButton('Dâng hương');
+          this.log('🙏 Vân Du: Kỳ Ngộ, không thấy nút xanh lá, fallback Dâng hương');
+        }
         await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
         continue;
       }

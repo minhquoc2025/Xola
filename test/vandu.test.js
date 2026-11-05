@@ -241,3 +241,12 @@ eq(botV17.vanduChooseBuff(['[Vận] V [Vận Mệnh - Tím (Cực Phẩm)]', '[T
 eq(bot.vanduChooseDoor(['Đỗ Môn', 'Hưu Môn'], null), 'Đỗ Môn', 'V18: no circuit: Do truoc Huu');
 eq(bot.vanduChooseDoor(['Hưu Môn', 'Tử Môn'], null), 'Hưu Môn', 'V18: no circuit: Huu truoc Tu');
 eq(bot.vanduChooseDoor(['Tử Môn', 'Đỗ Môn', 'Hưu Môn'], null), 'Đỗ Môn', 'V18: no circuit: Do thang ca Huu va Tu');
+
+// V19 (2026-11-05): Ky Ngo bam nut xanh la — nhan dien mau nen Discord.
+eq(botV17.vanduIsGreenColor('rgb(35, 165, 90)'), true, 'V19: xanh la Discord #23a55a');
+eq(botV17.vanduIsGreenColor('rgba(35, 165, 90, 1)'), true, 'V19: xanh la rgba');
+eq(botV17.vanduIsGreenColor('rgb(218, 55, 60)'), false, 'V19: do khong phai xanh');
+eq(botV17.vanduIsGreenColor('rgb(88, 101, 242)'), false, 'V19: tim blurple khong phai xanh');
+eq(botV17.vanduIsGreenColor('rgb(78, 80, 88)'), false, 'V19: xam khong phai xanh');
+eq(botV17.vanduIsGreenColor('rgba(35, 165, 90, 0)'), false, 'V19: trong suot khong tinh');
+eq(botV17.vanduIsGreenColor(''), false, 'V19: khong co mau -> false');
