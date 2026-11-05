@@ -96,6 +96,9 @@ class NpcBot {
     this.vanduNode = 0;
     this.vanduDanCount = 0;
     this.vanduCircuit = null;
+    // V22: msgId của màn cuối cùng đã dùng để đặt/gộp mạch, để phân biệt
+    // màn mới (tin tiến độ game) với màn cũ quét lại (giữ mạch dài hơn).
+    this.vanduCircuitMsgId = null;
     // V16: Số lần đi, khởi tạo 0, chỉ tăng khi bấm Trở Về Giang Hồ.
     this.vanduTripCount = 0;
     // V17: số lượt buff đã lấy theo bảng khắc chế trong chuyến này (chỉ
@@ -4675,7 +4678,11 @@ class NpcBot {
 
   vanduParseCircuit(text) {
     const raw = String(text || '');
-    const type = /Mạch Tương Khắc/.test(raw) ? 'khac' : (/Mạch Tương Sinh/.test(raw) ? 'sinh' : null);
+    // V22: loại mạch đọc từ chữ đã chuẩn hoá (bỏ dấu, thường hoá) để
+    // nhận cả "TƯƠNG KHẮC" viết hoa hay "Mạch này là TƯƠNG KHẮC" (màn
+    // Tiết 10/36), chứ không chỉ "Mạch Tương Khắc" đúng dạng như trước.
+    const norm = this.vanduNormalize(raw);
+    const type = norm.includes('tuong khac') ? 'khac' : (norm.includes('tuong sinh') ? 'sinh' : null);
     if (!type) return null;
     // V20 (màn Tiết 2/36, 2026-11-05): game ghi rõ "Chưa khai mở — Hãy
     // chọn một Môn Hộ để định vị Thiên Cơ!" thì mạch KHÔNG tồn tại, dù
@@ -4683,28 +4690,38 @@ class NpcBot {
     // mạch cũ, thay vì hiểu nhầm là màn cũ ít tiến độ rồi giữ nguyên
     // (đó là gốc lỗi bot khăng khăng "cần Kim" trong khi game chưa mở
     // mạch, rồi đứng im vì không có cửa Kim).
-    if (/Chưa khai mở/i.test(raw) || this.vanduNormalize(raw).includes('chua khai mo')) {
+    if (/Chưa khai mở/i.test(raw) || norm.includes('chua khai mo')) {
       return { type, elements: [], last: null, notOpened: true };
     }
     const elements = ['Mộc', 'Hỏa', 'Thổ', 'Kim', 'Thủy'];
+    const canon = s => elements.find(e => e.toLowerCase() === String(s || '').trim().toLowerCase()) || null;
     // Dòng tiến độ dạng "Mạch Tương Sinh: [Mộc] → [Hỏa] → [?] ..." — lấy các hành
     // đã biết trước dấu [?] đầu tiên; nếu không có dòng đó thì lấy hành khởi đầu.
+    // V22 (màn Tiết 10/36): hành đã xong game ghi "[✓ Mộc]" (có dấu tick)
+    // và neo mạch ghi "MỘC" viết hoa — cả hai đều phải nhận ra Mộc, nên
+    // tuốt dấu tick/ký hiệu đầu và so không phân biệt hoa/thường.
     const progressMatch = raw.match(/Mạch Tương (?:Sinh|Khắc)[^\\n]*?((?:\[[^\]]+\]\s*(?:→|->)\s*)*\[[^\]]+\])/);
     let known = [];
+    let fromProgress = false;
     if (progressMatch) {
       const parts = progressMatch[1].match(/\[([^\]]+)\]/g) || [];
       for (const part of parts) {
-        const el = part.replace(/[\[\]]/g, '').trim();
-        if (elements.includes(el)) known.push(el);
+        const cleaned = part.replace(/[\[\]]/g, '').replace(/^[✓✔✅★\s*]+/, '').trim();
+        const el = canon(cleaned);
+        if (el) known.push(el);
         else break;
       }
+      if (known.length > 0) fromProgress = true;
     }
     if (known.length === 0) {
-      const startMatch = raw.match(/định vị khởi đầu tại hành\s*(Mộc|Hỏa|Thổ|Kim|Thủy)/);
-      if (startMatch) known = [startMatch[1]];
+      const startMatch = raw.match(/định vị khởi đầu tại hành\s*(Mộc|Hỏa|Thổ|Kim|Thủy)/i);
+      if (startMatch) {
+        const el = canon(startMatch[1]);
+        if (el) known = [el];
+      }
     }
-    if (known.length === 0) return { type, elements: [], last: null };
-    return { type, elements: known, last: known[known.length - 1] };
+    if (known.length === 0) return { type, elements: [], last: null, fromProgress: false };
+    return { type, elements: known, last: known[known.length - 1], fromProgress };
   }
 
   // Thứ tự cửa khi không có mạch (v18, anh chốt 2026-11-05): Thương ->
@@ -4747,7 +4764,7 @@ class NpcBot {
   // khi bot đã tự tiến tới [Kim, Mộc] là màn cũ, phải giữ [Kim, Mộc]. Chỉ
   // nhận màn mới khi: chưa có mạch, đổi loại mạch, hoặc tiến độ dài hơn
   // hoặc bằng mạch đang giữ.
-  vanduMergeCircuit(current, parsed) {
+  vanduMergeCircuit(current, parsed, newMsgId) {
     if (!parsed) return current;
     // V20: parsed báo notOpened (game nói rõ chưa mở mạch) thì xóa mạch
     // bot đang giữ, kể cả khi bot đã tự tiến. Khác với parsed null (màn
@@ -4755,6 +4772,15 @@ class NpcBot {
     if (parsed.notOpened) return null;
     if (!current) return parsed;
     if (parsed.type !== current.type) return parsed;
+    // V22 (màn Tiết 10/36): game ghi rõ tiến độ mới (dòng tiến độ có tick
+    // hoặc neo đơn) trên MÀN MỚI (msgId khác màn đã dùng để đặt mạch)
+    // thì tin game, kể cả khi ngắn hơn mạch bot đang giữ. Bot tự tiến
+    // có thể lệch (vd game neo Mộc 1/5 mà bot tưởng đã tới Thủy), và
+    // chỉ màn mới mới sửa được lệch đó. Màn cũ quét lại (cùng msgId)
+    // thì giữ dài hơn như v11, để không tụt vì game chưa kịp cập nhật.
+    const stored = this.vanduCircuitMsgId;
+    const isFresh = !!(newMsgId && stored && newMsgId !== stored);
+    if (isFresh && (parsed.fromProgress || (parsed.elements || []).length === 1)) return parsed;
     if ((parsed.elements || []).length >= (current.elements || []).length) return parsed;
     return current;
   }
@@ -5418,6 +5444,9 @@ class NpcBot {
     this.vanduNode = 0;
     this.vanduDanCount = 0;
     this.vanduCircuit = null;
+    // V22: reset luôn msgId mạch theo chuyến, để màn đầu chuyến nào cũng
+    // được tính là mới (không so với msgId chuyến trước).
+    this.vanduCircuitMsgId = null;
     // V16: cố tình KHÔNG reset vanduTripCount ở đây. Vân Du dừng sau mỗi
     // chuyến nên nếu reset mỗi lần START thì đếm mãi vẫn là 1. Chỉ về 0
     // khi bấm Reset Stats (xem resetStats) hoặc khởi động lại tool.
@@ -5524,9 +5553,11 @@ class NpcBot {
 
       // Cập nhật mạch từ mọi màn hình có ghi mạch, và xóa mạch khi hoàn thành.
       // V11: gộp bằng vanduMergeCircuit để màn hình cũ (chỉ ghi neo mạch)
-      // không làm tụt mạch bot đã tự tiến sau cú bấm đúng.
+      // không làm tụt mạch bot đã tự tiến sau cú bấm đúng. V22: truyền
+      // msgId để màn mới được tin tiến độ game (sửa lệch tự tiến).
       const parsedCircuit = this.vanduParseCircuit(text);
-      if (parsedCircuit) this.vanduCircuit = this.vanduMergeCircuit(this.vanduCircuit, parsedCircuit);
+      if (parsedCircuit) this.vanduCircuit = this.vanduMergeCircuit(this.vanduCircuit, parsedCircuit, screen.msgId);
+      if (screen.msgId) this.vanduCircuitMsgId = screen.msgId;
       const correctMatch = text.match(/bước đúng huyền cơ mang hành\s*(Mộc|Hỏa|Thổ|Kim|Thủy)/);
       if (correctMatch && this.vanduCircuit && correctMatch[1] !== this.vanduCircuit.last) this.vanduCircuit = { type: this.vanduCircuit.type, elements: [...(this.vanduCircuit.elements || []), correctMatch[1]], last: correctMatch[1] };
       // V12 (log 2026-11-05 08:29): chỉ xóa mạch khi đúng câu hoàn thành

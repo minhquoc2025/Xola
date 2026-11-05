@@ -37,8 +37,8 @@ eq(bot.vanduChooseDoor(['Tử Môn', 'Thượng Môn', 'Kinh Môn'], null), 'Th�
 eq(bot.vanduChooseDoor(['Tử Môn'], null), 'Tử Môn', 'V18: no circuit: chi co Tu -> Tu la lua chon cuoi, bam luon thay vi dung im');
 
 // Circuit parsing
-eq(bot.vanduParseCircuit('Mạch Tương Sinh: [Mộc] → [Hỏa] → [?] → [?]'), { type: 'sinh', elements: ['Mộc', 'Hỏa'], last: 'Hỏa' }, 'parse sinh progress');
-eq(bot.vanduParseCircuit('Mạch Tương Khắc, định vị khởi đầu tại hành Thổ'), { type: 'khac', elements: ['Thổ'], last: 'Thổ' }, 'parse khac start');
+eq(bot.vanduParseCircuit('Mạch Tương Sinh: [Mộc] → [Hỏa] → [?] → [?]'), { type: 'sinh', elements: ['Mộc', 'Hỏa'], last: 'Hỏa', fromProgress: true }, 'parse sinh progress');
+eq(bot.vanduParseCircuit('Mạch Tương Khắc, định vị khởi đầu tại hành Thổ'), { type: 'khac', elements: ['Thổ'], last: 'Thổ', fromProgress: false }, 'parse khac start');
 
 // Buff choice: domain first, then gold, then reroll, then duplicate.
 // V13 thay V10 ở đây: Thuật lam (không vàng/tím) mà còn lượt đổi thì Đổi, hết lượt mới chọn.
@@ -266,3 +266,14 @@ eq(botV17.vanduIsBuffCard('[Thuật] Tụ Khí Hoàn'), true, 'V20: the Thuat th
 // thi bam nut an toan, khong cuoc tat tay. Kiem tra nhan dien nut.
 eq(botV17.vanduNormalize('🚶 Bỏ qua đi tiếp an toàn').includes('bo qua di tiep an toan'), true, 'V21: nhan dien nut an toan Ky Duyen Mon');
 eq(botV17.vanduNormalize('🎰 CẢ ĐỘ TẤT TAY (x2.5 hoặc mất sạch)').includes('bo qua di tiep an toan'), false, 'V21: nut cuoc khong nham voi nut an toan');
+
+// V22 (2026-11-05, man Tiet 10/36): Khac neo Moc 1/5, cua Sinh la Tho, bot phai chon Sinh.
+eq(botV17.vanduParseCircuit('Mạch Tương Khắc: [✓ Mộc] → [? ❓] → [? ❓] → [? ❓] → [? ❓](Tiến độ: 1/5)'), { type: 'khac', elements: ['Mộc'], last: 'Mộc', fromProgress: true }, 'V22: parse tick Moc');
+eq(botV17.vanduParseCircuit('Mạch này là TƯƠNG KHẮC, định vị khởi đầu tại hành MỘC.'), { type: 'khac', elements: ['Mộc'], last: 'Mộc', fromProgress: false }, 'V22: parse neo viet hoa');
+botV17.vanduCircuitMsgId = 'M1';
+eq(botV17.vanduMergeCircuit({ type: 'khac', elements: ['Mộc', 'Thổ', 'Thủy'], last: 'Thủy' }, { type: 'khac', elements: ['Mộc'], last: 'Mộc', fromProgress: true }, 'M2'), { type: 'khac', elements: ['Mộc'], last: 'Mộc', fromProgress: true }, 'V22: man moi tin game, sua lech ve Moc');
+eq(botV17.vanduMergeCircuit({ type: 'khac', elements: ['Mộc', 'Thổ'], last: 'Thổ' }, { type: 'khac', elements: ['Mộc'], last: 'Mộc', fromProgress: true }, 'M1'), { type: 'khac', elements: ['Mộc', 'Thổ'], last: 'Thổ' }, 'V22: man cu quet lai giu mach dai (v11)');
+botV17.vanduCircuitMsgId = 'M1';
+eq(botV17.vanduMergeCircuit({ type: 'khac', elements: ['Mộc', 'Thổ'], last: 'Thổ' }, { type: 'khac', elements: ['Kim'], last: 'Kim', fromProgress: false }, 'M2'), { type: 'khac', elements: ['Kim'], last: 'Kim', fromProgress: false }, 'V22: man moi neo don la mach moi');
+eq(botV17.vanduMergeCircuit({ type: 'khac', elements: ['Mộc', 'Thổ'], last: 'Thổ' }, { type: 'khac', elements: [], last: null, fromProgress: false }, 'M2'), { type: 'khac', elements: ['Mộc', 'Thổ'], last: 'Thổ' }, 'V22: man moi khong co thong tin mach -> giu nguyen');
+eq(botV17.vanduChooseDoor(['Sinh Môn', 'Hưu Môn', 'Khai Môn'], { type: 'khac', elements: ['Mộc'], last: 'Mộc' }), 'Sinh Môn', 'V22: Khac sau Moc can Tho -> Sinh Mon');
