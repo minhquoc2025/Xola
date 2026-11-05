@@ -580,7 +580,8 @@ async function updateStats() {
 
     // Top row stats - Target shows battle progress
     if (status.mode === 'vandu') {
-      document.getElementById('stat-total').textContent = `🌿 Vân Du: Tiết ${status.vanduNode || 0} | Đan ${status.vanduDanCount || 0}/3`;
+      // V16: hiện Số lần đi (tăng khi bấm Trở Về Giang Hồ, giữ qua các lần START).
+      document.getElementById('stat-total').textContent = `🌿 Vân Du: Tiết ${status.vanduNode || 0} | Đan ${status.vanduDanCount || 0}/3 | Đã đi: ${status.vanduTripCount || 0} lần`;
     } else if (status.mode === 'dianguc') {
       document.getElementById('stat-total').textContent = `Tầng ${status.diangucFloor || 0}, bước ${status.diangucStep || 0}`;
     } else if (status.mode === 'bicanh') {

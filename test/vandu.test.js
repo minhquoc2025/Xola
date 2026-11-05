@@ -201,3 +201,12 @@ bot2.updateConfig({ vanduSkillNames: ['Hư Không Đại Na Di', 'Kim Đan Phá 
 eq(bot2.vanduSkillOrder, ['Hư Không Đại Na Di', 'Kim Đan Phá Sát', 'Vạn Kiếm Quy Tông'], 'V15: cau hinh 29,26,23 -> thu tu theo cau hinh');
 bot2.updateConfig({ vanduSkillNames: [] });
 eq(bot2.vanduSkillOrder, ['Hư Không Đại Na Di', 'Kim Đan Phá Sát', 'Vạn Kiếm Quy Tông'], 'V15: cau hinh rong -> giu thu tu cu, khong ve mac dinh');
+
+// V16 (2026-11-05): Số lần đi — bấm Trở Về Giang Hồ là hết 1 chuyến.
+const bot3 = new NpcBot({ executeJavaScript() {} }, 1);
+eq(bot3.vanduTripCount, 0, 'V16: khoi tao 0 chuyen');
+eq(bot3.vanduCountTrip(), 1, 'V16: chuyen 1');
+eq(bot3.vanduCountTrip(), 2, 'V16: chuyen 2');
+eq(bot3.vanduTripCount, 2, 'V16: giu qua cac lan goi (khong reset o vanduLoop)');
+bot3.resetStats();
+eq(bot3.vanduTripCount, 0, 'V16: Reset Stats ve 0');

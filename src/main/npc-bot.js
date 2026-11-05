@@ -96,6 +96,8 @@ class NpcBot {
     this.vanduNode = 0;
     this.vanduDanCount = 0;
     this.vanduCircuit = null;
+    // V16: Số lần đi, khởi tạo 0, chỉ tăng khi bấm Trở Về Giang Hồ.
+    this.vanduTripCount = 0;
     this.vanduSectCounts = {};
     this.vanduOwnedBuffs = {};
     this.dianguc = false;
@@ -479,6 +481,16 @@ class NpcBot {
 
   resetStats() {
     this.stats = { wins: 0, losses: 0, coins: 0, exp: 0, items: [], itemCounts: {}, targetNpc: null, lastBattle: null };
+    // V16: Reset Stats cũng về 0 Số lần đi Vân Du (cách duy nhất để về 0
+    // ngoài khởi động lại tool, vì vanduLoop không reset nó).
+    this.vanduTripCount = 0;
+  }
+
+  // V16: hết 1 chuyến Vân Du = bấm Trở Về Giang Hồ (anh chốt 2026-11-05).
+  // Tách thành hàm riêng để test được mà không cần Discord.
+  vanduCountTrip() {
+    this.vanduTripCount = (this.vanduTripCount || 0) + 1;
+    return this.vanduTripCount;
   }
 
   parseBattleRewards(text) {
@@ -774,6 +786,7 @@ class NpcBot {
       tuLuyenActive: this._tuLuyenActive,
       vanduNode: this.vanduNode,
       vanduDanCount: this.vanduDanCount,
+      vanduTripCount: this.vanduTripCount,
       vanduCircuit: this.vanduCircuit,
       diangucFloor: this.diangucFloor,
       diangucStep: this.diangucStep,
@@ -5265,6 +5278,9 @@ class NpcBot {
     this.vanduNode = 0;
     this.vanduDanCount = 0;
     this.vanduCircuit = null;
+    // V16: cố tình KHÔNG reset vanduTripCount ở đây. Vân Du dừng sau mỗi
+    // chuyến nên nếu reset mỗi lần START thì đếm mãi vẫn là 1. Chỉ về 0
+    // khi bấm Reset Stats (xem resetStats) hoặc khởi động lại tool.
     this.vanduSectCounts = {};
     this.vanduOwnedBuffs = {};
     this.vanduMapPicked = false;
@@ -5301,9 +5317,17 @@ class NpcBot {
       if (node) this.vanduNode = node;
 
       // Kết thúc chuyến: bấm Trở Về Giang Hồ rồi dừng sạch như STOP.
+      // V16: cú bấm này tính là hết 1 lần đi (anh chốt 2026-11-05). Chỉ
+      // đếm khi bấm thành công; bấm không được thì vẫn dừng như cũ nhưng
+      // không đếm, vì chuyến chưa thực sự kết thúc bằng cú bấm đó.
       if (btnNorm.some(b => b.includes('tro ve giang ho')) || norm.includes('tro ve giang ho')) {
-        await this.vanduClickButton('Trở Về Giang Hồ');
-        this.log('🏁 Vân Du: hết 3 mạng, đã về Giang Hồ, kết thúc chuyến.');
+        const clicked = await this.vanduClickButton('Trở Về Giang Hồ');
+        if (clicked) {
+          const trips = this.vanduCountTrip();
+          this.log(`🏁 Vân Du: đã về Giang Hồ, hết chuyến số ${trips}.`);
+        } else {
+          this.log('⚠️ Vân Du: thấy nút Trở Về Giang Hồ nhưng bấm không được, dừng mà không tính chuyến này.');
+        }
         await this.stop();
         return;
       }
