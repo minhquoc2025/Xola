@@ -4776,10 +4776,11 @@ class NpcBot {
 
   vanduBuffRarity(buttonText) {
     const raw = String(buttonText || '');
-    if (/Vàng|Thần Thoại/.test(raw)) return 4;
-    if (/Tím|Cực Phẩm/.test(raw)) return 3;
-    if (/Lam|Hiếm/.test(raw)) return 2;
-    if (/Lục|Phổ Thông/.test(raw)) return 1;
+    // V14: vàng/tím có thể chỉ thể hiện bằng emoji màu, không có chữ.
+    if (/Vàng|Thần Thoại|Hoàng Kim|🟡|🟨/.test(raw)) return 4;
+    if (/Tím|Cực Phẩm|🟣|🟪/.test(raw)) return 3;
+    if (/Lam|Hiếm|🔵|🟦/.test(raw)) return 2;
+    if (/Lục|Phổ Thông|🟢|🟩/.test(raw)) return 1;
     return 0;
   }
 
@@ -4817,6 +4818,17 @@ class NpcBot {
     else if (/Thuật Tông/.test(raw) || /\[ *Thuật/.test(raw)) sect = 'Thuật';
     else if (/Ma Tông/.test(raw) || /\[ *Ma/.test(raw)) sect = 'Ma';
     else if (/Vận Mệnh/.test(raw) || /\[ *Vận/.test(raw)) sect = 'Vận';
+    // V14: dự phòng khi nút không ghi Tông/khung — nếu trong tên chỉ có
+    // chữ của 1 tông thì lấy tông đó. Đây là nguyên nhân nghi ngờ nhất của
+    // lỗi "Thuật vàng mà bot không chọn mà Đổi": nút Thuật vàng không đúng
+    // dạng Tông/khung nên trước đây không được tính là Thuật.
+    if (!sect) {
+      if (/Thuật/.test(raw)) sect = 'Thuật';
+      else if (/Kiếm/.test(raw)) sect = 'Kiếm';
+      else if (/Khí/.test(raw)) sect = 'Khí';
+      else if (/Ma/.test(raw)) sect = 'Ma';
+      else if (/Vận/.test(raw)) sect = 'Vận';
+    }
     const gold = /Vàng|Thần Thoại/.test(raw);
     const name = raw.replace(/\[[^\]]*\]/g, '').replace(/\([^)]*\)/g, '').replace(/\s+/g, ' ').trim();
     return { raw, name, sect, gold };
@@ -4837,14 +4849,41 @@ class NpcBot {
   vanduRerollRemaining(text, buttons) {
     const hay = [...(buttons || []), String(text || '')].join(' ');
     const m = hay.match(/Đổi Vận[^0-9]*(\d+)\s*lượt/);
-    return m ? Number(m[1]) : null;
+    if (m) return Number(m[1]);
+    // V14: nút "Hết Lượt Đổi Vận" nghĩa là 0 lượt, không phải "không đọc
+    // được". Trước đây nó trả null nên bên gọi rơi về dự phòng rerolls<4
+    // và tưởng vẫn còn lượt, dẫn tới đứng im ở bảng hết lượt.
+    if (/Hết Lượt Đổi Vận/.test(hay)) return 0;
+    return null;
   }
 
-  vanduChooseBuff(cards, sectCounts, ownedNames, allowReroll, counterSect) {
-    const parsed = (cards || []).map(c => this.vanduParseBuffCard(c)).filter(c => c.name);
+  // V14: độ hiếm thật nằm trong phần mô tả của bảng, không nằm trên nút.
+  // Nút chỉ ghi "[Ma] Ma Tôn Giáng Thế", còn "Vàng (Thần Thoại)" nằm ở
+  // dòng mô tả "2. [Ma] Ma Tôn Giáng Thế [Ma Tông • Vàng (Thần Thoại)]".
+  // Hàm này đọc các độ hiếm trong mô tả theo thứ tự xuất hiện (thứ tự
+  // này khớp thứ tự nút trong ảnh thật), trả về mảng cùng thứ tự với
+  // buttons. Không khớp số lượng thì trả null để bên gọi coi là không biết.
+  vanduBuffRarities(boardText, buttons) {
+    const text = String(boardText || '');
+    const found = [];
+    const re = /•\s*(Vàng|Tím|Lam|Lục)/g;
+    let m;
+    while ((m = re.exec(text)) !== null) found.push(this.vanduBuffRarity(m[1]));
+    if (found.length === 0 || found.length !== (buttons || []).length) return null;
+    return found;
+  }
+
+  vanduChooseBuff(cards, sectCounts, ownedNames, allowReroll, counterSect, cardRarities) {
+    const parsed = (cards || []).map((c, i) => {
+      const card = this.vanduParseBuffCard(c);
+      // Độ hiếm ưu tiên lấy từ mô tả bảng (cardRarities) vì nút không ghi;
+      // không có thì mới đọc từ chữ trên nút như trước.
+      card.rarity = (cardRarities && cardRarities[i] !== undefined) ? cardRarities[i] : this.vanduBuffRarity(c);
+      return card;
+    }).filter(c => c.name);
     if (parsed.length === 0) return null;
     const countOf = c => (c.sect && sectCounts[c.sect] !== undefined ? sectCounts[c.sect] : 0);
-    const byRarity = (a, b) => (this.vanduBuffRarity(b.raw) - this.vanduBuffRarity(a.raw)) || (countOf(b) - countOf(a));
+    const byRarity = (a, b) => (b.rarity - a.rarity) || (countOf(b) - countOf(a));
     const counter = counterSect ? parsed.filter(c => c.sect === counterSect) : [];
     const thuat = parsed.filter(c => c.sect === 'Thuật');
     // Nhóm buff muốn lấy: khắc chế + Thuật (trùng nhau khi khắc chế là Thuật
@@ -4859,7 +4898,11 @@ class NpcBot {
     // Khí Vàng thì vẫn Đổi, vì Ma (cái cần) không vàng/tím; nếu anh ý là
     // "cả bảng không có vàng/tím nào" thì đổi điều kiện này thành parsed.
     if (wanted.length > 0) {
-      const hasGood = wanted.some(c => this.vanduBuffRarity(c.raw) >= 3);
+      // V14: độ hiếm 0 = không đọc được (nút không ghi độ hiếm, mô tả
+      // không gán được) thì KHÔNG coi là thấp. Chỉ Đổi khi biết chắc toàn
+      // lam/lục (1-2). Đổi đi 1 buff vàng chỉ vì không đọc được chữ vàng
+      // là sai đắt hơn chọn nhầm 1 buff lam.
+      const hasGood = wanted.some(c => c.rarity >= 3 || c.rarity === 0);
       if (!hasGood && allowReroll) return { action: 'reroll' };
       // Hết lượt đổi (hoặc đã có vàng/tím) thì chọn: khắc chế trước
       // (luật cũ: khắc chế thắng vàng, mẫu tiết 6), rồi tới Thuật, trong
@@ -4884,7 +4927,7 @@ class NpcBot {
     // trước Thuật hay trước Đổi nữa.
     const remaining = [...parsed].sort(byRarity);
     const dup = remaining.filter(c => ownedNames[c.name]);
-    if (remaining[0] && this.vanduBuffRarity(remaining[0].raw) >= 3) {
+    if (remaining[0] && remaining[0].rarity >= 3) {
       return { action: 'pick', buttonText: remaining[0].raw };
     }
     if (dup.length > 0) {
@@ -5411,6 +5454,7 @@ class NpcBot {
       if (isBuff) {
         this.vanduSyncSectCounts(text);
         let rerolls = 0;
+        let rerollBlocked = false;
         let picked = false;
         while (this.isRunning && this.runId === runId && !picked) {
           const cur = await this.vanduScanLatest();
@@ -5421,17 +5465,42 @@ class NpcBot {
             return !n.includes('doi van') && !n.includes('roi di');
           });
           const counterSect = this.vanduCounterSectFromText(cur.text || '');
+          // V14: độ hiếm đọc từ mô tả bảng (vanduBuffRarities), vì nút
+          // không ghi độ hiếm. Không gán được thì cardRarities là null và
+          // chooseBuff đọc từ chữ trên nút như trước.
+          const cardRarities = this.vanduBuffRarities(cur.text || '', buffButtons);
+          // V14: nút Đổi thật là nút có chữ Đổi Vận mà KHÔNG phải "Hết
+          // Lượt Đổi Vận". Nút hết lượt trước đây bị tính là còn lượt vì
+          // chứa chữ "doi van", dẫn tới bấm hoài vào nút tắt rồi đứng im.
+          const doiVanBtn = (cur.buttons || []).find(b => {
+            const n = this.vanduNormalize(b);
+            return n.includes('doi van') && !n.includes('het luot');
+          });
           // V10: lượt Đổi Vận đọc từ bảng, không đếm cứng 2. Game có khi
           // cho 2, có khi cho 4 lượt. Không có nút Đổi Vận thì hết lượt.
           // Không đọc được số thì dự phòng tối đa 4 lượt mỗi bảng.
-          const hasRerollBtn = (cur.buttons || []).some(b => this.vanduNormalize(b).includes('doi van'));
           const remaining = this.vanduRerollRemaining(cur.text || '', cur.buttons || []);
-          const allowReroll = hasRerollBtn && (remaining !== null ? remaining > 0 : rerolls < 4);
-          const choice = this.vanduChooseBuff(buffButtons, this.vanduSectCounts, this.vanduOwnedBuffs, allowReroll, counterSect);
+          const allowReroll = !rerollBlocked && !!doiVanBtn && (remaining !== null ? remaining > 0 : rerolls < 4);
+          const choice = this.vanduChooseBuff(buffButtons, this.vanduSectCounts, this.vanduOwnedBuffs, allowReroll, counterSect, cardRarities);
           if (!choice) break;
           if (choice.action === 'reroll') {
-            const clicked = await this.vanduClickButton('Đổi Vận');
-            if (!clicked) break;
+            // Ghi rõ bảng đang có gì để lần sau chẩn đoán được vì sao Đổi
+            // (vd Ma Vàng mà vẫn Đổi thì phải thấy ngay trong log).
+            const desc = buffButtons.map((b, i) => {
+              const c = this.vanduParseBuffCard(b);
+              const r = cardRarities && cardRarities[i] !== undefined ? cardRarities[i] : this.vanduBuffRarity(b);
+              return `${c.name || b}(${c.sect || '?'}:${r})`;
+            }).join(', ');
+            this.log(`🔄 Vân Du: Đổi Vận, bảng đang có: ${desc}`);
+            const clicked = await this.vanduClickButton(doiVanBtn);
+            if (!clicked) {
+              // V14: bấm Đổi không được (nút tắt/hết lượt) thì chọn buff
+              // còn lại ngay trong vòng này, không thoát ra để vòng ngoài
+              // quét lại màn cũ với rerolls reset về 0 rồi đứng im.
+              this.log('⛔ Vân Du: bấm Đổi Vận không được, chuyển sang chọn buff còn lại');
+              rerollBlocked = true;
+              continue;
+            }
             rerolls++;
             if (remaining !== null) this.log(`🔄 Vân Du: Đổi Vận (bảng báo còn ${remaining} lượt trước khi bấm)`);
             else this.log(`🔄 Vân Du: Đổi Vận lần ${rerolls} (không đọc được số lượt, tối đa 4)`);

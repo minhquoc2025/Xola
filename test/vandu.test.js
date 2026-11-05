@@ -170,3 +170,25 @@ eq(bot.vanduChooseBuff(['[Ma] M [Ma Tông - Tím (Cực Phẩm)]', '[Kiếm] K [
 eq(bot.vanduChooseBuff(['[Ma] M [Ma Tông - Lam]', '[Khí] K [Khí Tông - Vàng (Thần Thoại)]'], {}, {}, true, 'Ma'), { action: 'reroll' }, 'V13: Ma lam + Khi vang khac tong, con luot doi -> doi (vang/tim tinh trong nhom muon lay)');
 eq(bot.vanduChooseBuff(['[Ma] M [Ma Tông - Lam]', '[Khí] K [Khí Tông - Vàng (Thần Thoại)]'], {}, {}, false, 'Ma').buttonText, '[Ma] M [Ma Tông - Lam]', 'V13: Ma lam + Khi vang, het luot doi -> chon Ma lam truoc vang khac tong');
 eq(bot.vanduChooseBuff(['[Ma] M [Ma Tông - Lam]', '[Thuật] T [Thuật Tông - Vàng (Thần Thoại)]'], {}, {}, true, 'Ma').buttonText, '[Ma] M [Ma Tông - Lam]', 'V13: khac che thang Thuat vang (luat cu giu nguyen)');
+
+// V14 (ảnh 2026-11-05, Tiết 1/36): nút KHÔNG ghi độ hiếm, độ hiếm chỉ ở mô tả.
+// Quái Hư Ảo -> khắc chế Ma, bảng có Ma Vàng, hết lượt Đổi -> phải chọn Ma Vàng, không đứng im.
+const shotText = 'CHIẾN THẮNG VANG DỘI! Đạo hữu đã chém gục [Tiên Tiêu Hư Ảo] Băng Tuyết Dạ Báo! '
+  + '1. [Vận] Đại Đạo Đồng Quy [Vận Mệnh • Vàng (Thần Thoại)] '
+  + '2. [Ma] Ma Tôn Giáng Thế [Ma Tông • Vàng (Thần Thoại)] '
+  + '3. [Kiếm] Bạt Kiếm Thuật [Kiếm Tông • Lục (Phổ Thông)] '
+  + '4. [Ma] Tuyệt Đối Tập Kích [Ma Tông • Lam (Hiếm)]';
+const shotButtons = ['[Vận] Đại Đạo Đồng Quy', '[Ma] Ma Tôn Giáng Thế', '[Kiếm] Bạt Kiếm Thuật', '[Ma] Tuyệt Đối Tập Kích'];
+eq(bot.vanduBuffRarities(shotText, shotButtons), [4, 4, 1, 2], 'V14: doc do hiem tu mo ta theo thu tu nut');
+eq(bot.vanduCounterSectFromText(shotText), 'Ma', 'V14: quai Hu Ao -> Ma');
+eq(bot.vanduChooseBuff(shotButtons, {}, {}, false, 'Ma', bot.vanduBuffRarities(shotText, shotButtons)).buttonText, '[Ma] Ma Tôn Giáng Thế', 'V14: bang anh, het luot -> chon Ma Vang, khong doi, khong dung im');
+eq(bot.vanduChooseBuff(shotButtons, {}, {}, true, 'Ma', bot.vanduBuffRarities(shotText, shotButtons)).buttonText, '[Ma] Ma Tôn Giáng Thế', 'V14: bang anh, con luot nhung da co Ma Vang -> chon ngay, khong doi');
+// V14: nút "Hết Lượt Đổi Vận" là 0 lượt, không phải không đọc được.
+eq(bot.vanduRerollRemaining('Hết Lượt Đổi Vận', ['Hết Lượt Đổi Vận']), 0, 'V14: Het Luot Doi Van -> 0');
+eq(bot.vanduRerollRemaining('Đổi Vận (2 lượt)', []), 2, 'V14: Doi Van 2 luot van doc duoc');
+// V14: độ hiếm không đọc được thì không coi là thấp để Đổi (an toàn hơn Đổi mất buff vàng).
+eq(bot.vanduChooseBuff(['[Thuật] T'], {}, {}, true).buttonText, '[Thuật] T', 'V14: Thuat khong ro do hiem, con luot -> chon, khong doi');
+// V14: tông Thuật không đúng dạng Tông/khung vẫn nhận, vàng bằng emoji vẫn nhận.
+eq(bot.vanduParseBuffCard('Thái Ất Thuật Vàng').sect, 'Thuật', 'V14: ten co chu Thuat -> tong Thuat');
+eq(bot.vanduBuffRarity('[Thuật] T 🟡'), 4, 'V14: emoji vang -> 4');
+eq(bot.vanduChooseBuff(['Thái Ất Thuật 🟡'], {}, {}, true).buttonText, 'Thái Ất Thuật 🟡', 'V14: Thuat vang emoji -> chon ngay');
