@@ -250,3 +250,14 @@ eq(botV17.vanduIsGreenColor('rgb(88, 101, 242)'), false, 'V19: tim blurple khong
 eq(botV17.vanduIsGreenColor('rgb(78, 80, 88)'), false, 'V19: xam khong phai xanh');
 eq(botV17.vanduIsGreenColor('rgba(35, 165, 90, 0)'), false, 'V19: trong suot khong tinh');
 eq(botV17.vanduIsGreenColor(''), false, 'V19: khong co mau -> false');
+
+// V20 (2026-11-05, man Tiet 2/36): game bao "Chua khai mo" thi mach khong ton tai.
+eq(botV17.vanduParseCircuit('Trận Đồ Ngũ Hành\nMạch Tương Sinh: ❓ Chưa khai mở — Hãy chọn một Môn Hộ để định vị Thiên Cơ!'), { type: 'sinh', elements: [], last: null, notOpened: true }, 'V20: parse Chua khai mo');
+eq(botV17.vanduMergeCircuit({ type: 'sinh', elements: ['Hỏa', 'Thổ'], last: 'Thổ' }, { type: 'sinh', elements: [], last: null, notOpened: true }), null, 'V20: merge Chua khai mo -> xoa mach cu');
+eq(botV17.vanduMergeCircuit({ type: 'sinh', elements: ['Hỏa'], last: 'Hỏa' }, null), { type: 'sinh', elements: ['Hỏa'], last: 'Hỏa' }, 'V20: merge man khong nhac mach -> giu nguyen');
+eq(botV17.vanduChooseDoor(['Cảnh Môn [Hỏa]', 'Sinh Môn [Thổ]', 'Đỗ Môn [Mộc]'], null), 'Sinh Môn [Thổ]', 'V20: man Tiet 2 chua mo mach -> uu tien Sinh (Thuong vang)');
+eq(botV17.vanduIsBuffCard('Hòa'), false, 'V20: nut rac ten nguoi choi khong phai the buff');
+eq(botV17.vanduIsBuffCard('!vandu'), false, 'V20: nut rac lenh khong phai the buff');
+eq(botV17.vanduIsBuffCard('Xỏ lá ba que'), false, 'V20: nut rac danh hieu khong phai the buff');
+eq(botV17.vanduIsBuffCard('[Ma] 🖤 Ma Hóa Cuồng Nộ'), true, 'V20: the Ma that');
+eq(botV17.vanduIsBuffCard('[Thuật] Tụ Khí Hoàn'), true, 'V20: the Thuat that');

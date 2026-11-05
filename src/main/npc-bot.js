@@ -417,7 +417,7 @@ class NpcBot {
     }
     if (this.mode === 'vandu') {
       this.log(`=== VÂN DU MODE: ${this.vanduCmd} ===`);
-      this.log('=== VÂN DU: chạy ổn định v1, chưa có số lần đi ===');
+      this.log('=== VÂN DU: Số lần đi tính khi bấm Trở Về Giang Hồ ===');
       if (this.userId) this.log(`=== VÂN DU: lọc theo User ID ${this.userId} ===`);
       this.vanduLoop(this.runId);
       return;
@@ -4627,7 +4627,7 @@ class NpcBot {
     return { clicked, waitTurn: false, wrongPerson: false, cooldownDetail, skipCurrent: false };
   }
 
-  // ================= VÂN DU (v1, chạy ổn định, chưa có số lần đi) =================
+  // ================= VÂN DU =================
   // Luật đã chốt với người chơi, không tự bịa thêm:
   // - Cửa: có mạch thì theo mạch Sinh/Khắc; không mạch thì Thương (nút game ghi
   //   Thượng Môn) rồi Cảnh, không có 2 cửa đó thì cửa nào cũng được trừ Tử Môn.
@@ -4677,6 +4677,15 @@ class NpcBot {
     const raw = String(text || '');
     const type = /Mạch Tương Khắc/.test(raw) ? 'khac' : (/Mạch Tương Sinh/.test(raw) ? 'sinh' : null);
     if (!type) return null;
+    // V20 (màn Tiết 2/36, 2026-11-05): game ghi rõ "Chưa khai mở — Hãy
+    // chọn một Môn Hộ để định vị Thiên Cơ!" thì mạch KHÔNG tồn tại, dù
+    // bot trước đó có tự tiến tới đâu. Trả cờ notOpened để hàm gộp xóa
+    // mạch cũ, thay vì hiểu nhầm là màn cũ ít tiến độ rồi giữ nguyên
+    // (đó là gốc lỗi bot khăng khăng "cần Kim" trong khi game chưa mở
+    // mạch, rồi đứng im vì không có cửa Kim).
+    if (/Chưa khai mở/i.test(raw) || this.vanduNormalize(raw).includes('chua khai mo')) {
+      return { type, elements: [], last: null, notOpened: true };
+    }
     const elements = ['Mộc', 'Hỏa', 'Thổ', 'Kim', 'Thủy'];
     // Dòng tiến độ dạng "Mạch Tương Sinh: [Mộc] → [Hỏa] → [?] ..." — lấy các hành
     // đã biết trước dấu [?] đầu tiên; nếu không có dòng đó thì lấy hành khởi đầu.
@@ -4698,13 +4707,12 @@ class NpcBot {
     return { type, elements: known, last: known[known.length - 1] };
   }
 
-  // V8 (anh chốt 2026-11-05, màn Tiết 11 đã thông suốt 2 mạch nên không còn
-  // mạch để đi theo): khi không có mạch, ưu tiên Thương -> Sinh -> Cảnh ->
-  // Kinh. Đuôi sau Kinh giữ nguyên thứ tự cũ (Hưu -> Khai -> Đỗ, Tử cuối)
-  // vì anh chưa nói tới đuôi; nếu đuôi muốn khác thì đổi tiếp một dòng này.
-  // Thứ tự này dùng cho 2 việc: cửa đầu tiên khi mới vô mạch, và tie-break
-  // khi một hành có 2 cửa (Kinh trước Khai, Thương trước Đỗ, Sinh trước Tử
-  // vẫn giữ nguyên như cũ). V11: nó KHÔNG dùng làm fallback khi đã vô mạch.
+  // Thứ tự cửa khi không có mạch (v18, anh chốt 2026-11-05): Thương ->
+  // Sinh -> Cảnh -> Kinh -> Khai -> Đỗ -> Hưu -> Tử. Dùng cho 2 việc:
+  // cửa đầu tiên khi mới vô mạch (kể cả khi game báo "Chưa khai mở",
+  // xem vanduParseCircuit v20), và tie-break khi một hành có 2 cửa
+  // (Kinh trước Khai, Thương trước Đỗ, Sinh trước Tử). V11: nó KHÔNG
+  // dùng làm fallback khi đã vô mạch.
   vanduDoorPriority(buttonText) {
     const t = this.vanduNormalize(buttonText);
     // V18 (anh chốt 2026-11-05): Thương -> Sinh -> Cảnh -> Kinh -> Khai
@@ -4741,6 +4749,10 @@ class NpcBot {
   // hoặc bằng mạch đang giữ.
   vanduMergeCircuit(current, parsed) {
     if (!parsed) return current;
+    // V20: parsed báo notOpened (game nói rõ chưa mở mạch) thì xóa mạch
+    // bot đang giữ, kể cả khi bot đã tự tiến. Khác với parsed null (màn
+    // không nhắc tới mạch, vd màn đánh nhau/shop) thì giữ nguyên.
+    if (parsed.notOpened) return null;
     if (!current) return parsed;
     if (parsed.type !== current.type) return parsed;
     if ((parsed.elements || []).length >= (current.elements || []).length) return parsed;
@@ -4853,6 +4865,18 @@ class NpcBot {
     const gold = /Vàng|Thần Thoại/.test(raw);
     const name = raw.replace(/\[[^\]]*\]/g, '').replace(/\([^)]*\)/g, '').replace(/\s+/g, ' ').trim();
     return { raw, name, sect, gold };
+  }
+
+  // V20 (log 09:29:13, 2026-11-05): bảng buff lẫn nút rác không phải thẻ
+  // (tên người chơi "Hòa", lệnh "!vandu", "Xỏ lá ba que") vì vòng buff
+  // trước đây chỉ loại Đổi Vận/Rời đi. Nút rác không có tông (parse ra
+  // sect null) nên phải loại khỏi danh sách buff trước khi chọn và trước
+  // khi đọc độ hiếm, không thì log bẩn và trường hợp xấu bot có thể bấm
+  // nhầm nút rác ở bước "còn lại". Thẻ thật luôn có khung tông ([Ma],
+  // [Thuật]...) nên lọc này không loại thẻ thật.
+  vanduIsBuffCard(buttonText) {
+    const card = this.vanduParseBuffCard(buttonText);
+    return !!card.sect && !!card.name;
   }
 
   vanduNextDomainThreshold(count) {
@@ -5622,7 +5646,7 @@ class NpcBot {
           this.vanduSyncSectCounts(cur.text || '');
           const buffButtons = (cur.buttons || []).filter(b => {
             const n = this.vanduNormalize(b);
-            return !n.includes('doi van') && !n.includes('roi di');
+            return !n.includes('doi van') && !n.includes('roi di') && this.vanduIsBuffCard(b);
           });
           const counterSect = this.vanduCounterSectFromText(cur.text || '');
           // V14: độ hiếm đọc từ mô tả bảng (vanduBuffRarities), vì nút
