@@ -4707,7 +4707,10 @@ class NpcBot {
   // vẫn giữ nguyên như cũ). V11: nó KHÔNG dùng làm fallback khi đã vô mạch.
   vanduDoorPriority(buttonText) {
     const t = this.vanduNormalize(buttonText);
-    const order = ['thuong mon', 'sinh mon', 'canh mon', 'kinh mon', 'huu mon', 'khai mon', 'do mon', 'tu mon'];
+    // V18 (anh chốt 2026-11-05): Thương -> Sinh -> Cảnh -> Kinh -> Khai
+    // -> Đỗ -> Hưu -> Tử. Khác v8 ở 3 vị trí cuối: Khai lên trước Đỗ,
+    // Hưu xuống sau Đỗ. Kinh trước Khai và Sinh trước Tử giữ nguyên.
+    const order = ['thuong mon', 'sinh mon', 'canh mon', 'kinh mon', 'khai mon', 'do mon', 'huu mon', 'tu mon'];
     for (let i = 0; i < order.length; i++) {
       if (t.includes(order[i])) return i;
     }
@@ -4759,25 +4762,22 @@ class NpcBot {
         if (hits.length > 1) {
           // Cùng 1 hành mà có 2 tên cửa (Thương/Đỗ cho Mộc, Kinh/Khai cho Kim,
           // Sinh/Tử cho Thổ): chọn theo thứ tự ưu tiên, không theo thứ tự nút Discord.
-          // Đã chốt: Thương trước Đỗ. Sinh trước Tử đã chốt riêng 2026-11-05:
-          // Thổ có 2 cửa Sinh/Tử, Sinh là cửa ưu tiên, không có Sinh thì chọn
-          // Tử — áp dụng cho cả mạch Sinh (Hỏa sinh Thổ) và mạch Khắc
-          // (Mộc khắc Thổ); khi chỉ có 1 cửa Thổ thì cửa đó được chọn ở nhánh
-          // hits.length === 1 phía trên. Kinh trước Khai vẫn là thứ tự ưu tiên
-          // chung, chưa chốt riêng cho Kim.
+          // Đã chốt (v18, thứ tự đầy đủ 2026-11-05): Thương trước Đỗ, Kinh
+          // trước Khai, Sinh trước Tử (áp dụng cho cả mạch Sinh Hỏa sinh Thổ
+          // và mạch Khắc Mộc khắc Thổ; khi chỉ có 1 cửa Thổ thì cửa đó được
+          // chọn ở nhánh hits.length === 1 phía trên).
           hits.sort((a, c) => this.vanduDoorPriority(a) - this.vanduDoorPriority(c));
           return hits[0];
         }
       }
       return null;
     }
-    // Chưa có mạch: cửa đầu tiên khi vô mạch, ưu tiên Thương rồi Sinh
-    // (anh chốt 2026-11-04, thay Cảnh ở vị trí thứ 2 của v1), rồi Cảnh,
-    // Kinh, Hưu, Khai, Đỗ; Tử Môn chỉ khi không còn cửa nào khác
-    // (trường hợp chỉ có Tử thì trả null như v1 để chờ màn mới).
+    // Chưa có mạch: cửa đầu tiên khi vô mạch (cũng là lúc "bắt đầu chuỗi
+    // mạch" anh nói 2026-11-05), theo thứ tự v18. Tử Môn là lựa chọn cuối
+    // cùng: chỉ bấm Tử khi không còn cửa nào khác, thay vì trả null đứng
+    // im như v1 (đứng im thì màn không đổi, bot quét lại mãi).
     const sorted = [...list].sort((a, c) => this.vanduDoorPriority(a) - this.vanduDoorPriority(c));
-    const first = sorted.find(x => !this.vanduNormalize(x).includes('tu mon'));
-    if (first) return first;
+    if (sorted.length > 0) return sorted[0];
     return null;
   }
 

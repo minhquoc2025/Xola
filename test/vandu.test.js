@@ -34,7 +34,7 @@ eq(bot.vanduChooseDoor(['Thượng Môn', 'Cảnh Môn', 'Kinh Môn'], { type: '
 eq(bot.vanduChooseDoor(['Thượng Môn', 'Tử Môn', 'Hưu Môn'], { type: 'khac', last: 'Thổ' }), 'Hưu Môn', 'khac after Thổ picks Hưu');
 eq(bot.vanduChooseDoor(['Tử Môn', 'Kinh Môn', 'Đỗ Môn'], null), 'Kinh Môn', 'no circuit: no Thương/Cảnh, not Tử');
 eq(bot.vanduChooseDoor(['Tử Môn', 'Thượng Môn', 'Kinh Môn'], null), 'Thượng Môn', 'no circuit: Thương first');
-eq(bot.vanduChooseDoor(['Tử Môn'], null), null, 'no circuit: only Tử -> no pick');
+eq(bot.vanduChooseDoor(['Tử Môn'], null), 'Tử Môn', 'V18: no circuit: chi co Tu -> Tu la lua chon cuoi, bam luon thay vi dung im');
 
 // Circuit parsing
 eq(bot.vanduParseCircuit('Mạch Tương Sinh: [Mộc] → [Hỏa] → [?] → [?]'), { type: 'sinh', elements: ['Mộc', 'Hỏa'], last: 'Hỏa' }, 'parse sinh progress');
@@ -88,7 +88,7 @@ eq(bot.vanduTargetMap(), 'Thiên Sơn Tuyết Lãnh', 'target map suy từ realm
 // V2: cửa khi chưa có mạch Thương > Sinh, tie-break Thương > Đỗ
 eq(bot.vanduChooseDoor(['Tử Môn', 'Hưu Môn', 'Sinh Môn'], null), 'Sinh Môn', 'no circuit: Thuong vang, Sinh truoc Huu');
 eq(bot.vanduChooseDoor(['Đỗ Môn', 'Thương Môn'], { type: 'sinh', last: 'Thủy' }), 'Thương Môn', 'circuit tie Moc: Thuong truoc Do');
-eq(bot.vanduChooseDoor(['Khai Môn', 'Kinh Môn'], { type: 'khac', last: 'Hỏa' }), 'Kinh Môn', 'circuit tie Kim: Kinh truoc Khai (chua chot rieng)');
+eq(bot.vanduChooseDoor(['Khai Môn', 'Kinh Môn'], { type: 'khac', last: 'Hỏa' }), 'Kinh Môn', 'circuit tie Kim: Kinh truoc Khai (da chot v18)');
 // V2: bảng khắc chế
 // V7 (bảng 2026-11-05): Cường Thể / Huyền Giáp -> Thuật
 eq(bot.vanduCounterSectFromText('quái [Cường Thể] X'), 'Thuật', 'Cuong The -> Thuat');
@@ -130,7 +130,7 @@ eq(bot.vanduCurrentMap('không có dòng đại vùng'), '', 'khong co dong -> r
 eq(bot.vanduChooseDoor(['Hưu Môn', 'Kinh Môn'], null), 'Kinh Môn', 'no circuit: Kinh truoc Huu (bang moi)');
 eq(bot.vanduChooseDoor(['Cảnh Môn', 'Kinh Môn'], null), 'Cảnh Môn', 'no circuit: Canh truoc Kinh');
 eq(bot.vanduChooseDoor(['Cảnh Môn', 'Thương Môn', 'Tử Môn'], null), 'Thương Môn', 'no circuit: man Tiet 11, Thuong thang');
-eq(bot.vanduChooseDoor(['Khai Môn', 'Hưu Môn'], null), 'Hưu Môn', 'no circuit: duoi sau Kinh, Huu truoc Khai');
+eq(bot.vanduChooseDoor(['Khai Môn', 'Hưu Môn'], null), 'Khai Môn', 'V18: no circuit: Khai truoc Huu (thu tu moi)');
 eq(bot.vanduChooseDoor(['Đỗ Môn', 'Khai Môn'], null), 'Khai Môn', 'no circuit: duoi sau Kinh, Khai truoc Do');
 
 // V9 (2026-11-05): Thổ có 2 cửa Sinh/Tử — Sinh trước, không có Sinh thì Tử,
@@ -236,3 +236,8 @@ eq(botV17.vanduChooseBuff(['[Ma] M [Ma Tông - Vàng (Thần Thoại)]', '[Thu�
 eq(botV17.vanduChooseBuff(['[Thuật] T [Thuật Tông - Vàng (Thần Thoại)]', '[Ma] M [Ma Tông - Lam]'], { Thuật: 5 }, {}, false, 'Ma', null, 0).buttonText, '[Ma] M [Ma Tông - Lam]', 'V17: Thuat du 5 -> Thuat Vang khong phai chi tieu, lay Ma Lam khac che');
 eq(botV17.vanduChooseBuff(['[Ma] M [Ma Tông - Lam]', '[Thuật] T [Thuật Tông - Lam]', '[Kiếm] K [Kiếm Tông - Lam]'], { Thuật: 0 }, { 'K': 1 }, true, 'Ma').buttonText, '[Kiếm] K [Kiếm Tông - Lam]', 'V17: chi tieu toan lam + co trung -> lay trung truoc khi doi');
 eq(botV17.vanduChooseBuff(['[Vận] V [Vận Mệnh - Tím (Cực Phẩm)]', '[Thuật] T [Thuật Tông - Lam]'], { Thuật: 0, Vận: 0 }, {}, true, 'Ma'), { action: 'reroll' }, 'V17: Van tim khong phai chi tieu (Van can vang) -> doi, khong lay Van Tim');
+
+// V18 (2026-11-05): thu tu cua moi Thuong -> Sinh -> Canh -> Kinh -> Khai -> Do -> Huu -> Tu.
+eq(bot.vanduChooseDoor(['Đỗ Môn', 'Hưu Môn'], null), 'Đỗ Môn', 'V18: no circuit: Do truoc Huu');
+eq(bot.vanduChooseDoor(['Hưu Môn', 'Tử Môn'], null), 'Hưu Môn', 'V18: no circuit: Huu truoc Tu');
+eq(bot.vanduChooseDoor(['Tử Môn', 'Đỗ Môn', 'Hưu Môn'], null), 'Đỗ Môn', 'V18: no circuit: Do thang ca Huu va Tu');
