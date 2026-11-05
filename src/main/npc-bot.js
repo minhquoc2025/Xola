@@ -5447,6 +5447,18 @@ class NpcBot {
     return null;
   }
 
+  // V34: Kỳ Ngộ Độc Kiếm Tiên Tàn hồn (ảnh Tiết 11/36, anh chốt
+  // 2026-11-05): 3 nút — xanh "Cứu mạng tiền bối", đỏ "Thừa cơ đoạt
+  // kiếm", xám "Trầm mặc rời đi". Anh dặn chọn ô xanh "Cứu mạng tiền
+  // bối". Luật chung (v19) bấm nút xanh lá cũng trúng nút này, nhưng
+  // luật chữ chắc hơn luật màu (màu đọc từ style nút, có thể lệch) nên
+  // làm handler riêng theo đúng chữ, đặt trước handler chung.
+  vanduKyNgoRescueButton(norm, btnNorm) {
+    if (!this.vanduIsKyNgoScreen(norm, btnNorm)) return null;
+    if ((btnNorm || []).some(x => x === 'cuu mang tien boi')) return 'Cứu mạng tiền bối';
+    return null;
+  }
+
   // V27: chỉ bấm nút xanh TRONG ĐÚNG màn đang xử lý (article có msgId
   // mà vòng chính vừa quét được). Bản cũ quét 15 article gần nhất rồi
   // fallback toàn trang — khi màn Kỳ Ngộ đã xử lý xong (nút tắt) hoặc
@@ -5891,6 +5903,18 @@ class NpcBot {
       if (skipBtn) {
         await this.vanduClickButton(skipBtn);
         this.log('⏭️ Vân Du: Kỳ Ngộ đánh cược, bấm Bỏ qua, không cược');
+        await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
+        continue;
+      }
+
+      // Kỳ Ngộ Độc Kiếm Tiên — Cứu mạng tiền bối (v34, anh chốt 2026-11-05,
+      // ảnh Tiết 11/36): luôn chọn ô xanh "Cứu mạng tiền bối", không đoạt
+      // kiếm, không rời đi. Đặt trước handler Kỳ Ngộ chung để không phụ
+      // thuộc vào nhận diện màu nút.
+      const rescueBtn = this.vanduKyNgoRescueButton(norm, btnNorm);
+      if (rescueBtn) {
+        await this.vanduClickButton(rescueBtn);
+        this.log('🌿 Vân Du: Kỳ Ngộ Độc Kiếm Tiên, bấm Cứu mạng tiền bối');
         await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
         continue;
       }

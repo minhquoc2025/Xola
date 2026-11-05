@@ -442,3 +442,11 @@ const botV33 = new NpcBot({ executeJavaScript() {} }, 1);
 eq(botV33.vanduChooseBuff(['[Ma] Ma Tôn Giáng Thế [Ma Tông - Vàng (Thần Thoại)]', '[Kiếm] Bạt Kiếm Thuật [Kiếm Tông - Lục (Phổ Thông)]'], {}, { 'Ma Tôn Giáng Thế': 5, 'Bạt Kiếm Thuật': 5 }, false, null), null, 'V33: ca bang da max theo so bot -> null, khong bam tam');
 eq(botV33.vanduChooseBuff(['[Ma] Ma Tôn Giáng Thế [Ma Tông - Vàng (Thần Thoại)]', '[Kiếm] Bạt Kiếm Thuật [Kiếm Tông - Lục (Phổ Thông)]'], {}, { 'Ma Tôn Giáng Thế': 5 }, false, null).buttonText, '[Kiếm] Bạt Kiếm Thuật [Kiếm Tông - Lục (Phổ Thông)]', 'V33: la max bi loai khoi con lai, chon la chua max');
 console.log('ALL VANDU TESTS PASSED (V33)');
+
+// V34 (anh 2026-11-05, bang Tiet 11/36 Ky Ngo Doc Kiem Tien Tan hon):
+// chon o xanh "Cuu mang tien boi", khong doat kiem, khong roi di.
+eq(bot.vanduKyNgoRescueButton('tiet diem 11 36 ky ngo doc kiem tien tan hon', ['cuu mang tien boi', 'thua co doat kiem', 'tram mac roi di']), 'Cứu mạng tiền bối', 'V34: bang Doc Kiem Tien -> Cuu mang tien boi');
+eq(bot.vanduKyNgoRescueButton('tiet diem 11 36 ky ngo ho phap phong thap co', ['dang huong']), null, 'V34: Ho Phap khong co nut Cuu mang');
+eq(bot.vanduKyNgoRescueButton('tiet diem 8 36 ky ngo cuong nhan doan dinh', ['dat 50k thap', 'dat cuoc tat tay 150k', 'bo qua']), null, 'V34: bang cuoc khong co nut Cuu mang');
+eq(bot.vanduKyNgoRescueButton('tiet diem 5 36 cua canh mon tien thuong hac thi', ['cuu mang tien boi', 'mua cuu chuyen hoan hon dan']), null, 'V34: man khong phai Ky Ngo thi khong bam');
+console.log('ALL VANDU TESTS PASSED (V34)');
