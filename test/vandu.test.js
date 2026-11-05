@@ -317,3 +317,13 @@ eq(botV24.vanduShouldRestartTrips(), false, 'V24: 5/5 -> dung');
 // nay thi bam Tinh toa giao cam, khong bam Bat buom. Kiem tra nhan dien nut.
 eq(botV24.vanduNormalize('🧘 Tĩnh tọa giao cảm (Tốn 15% HP)').includes('tinh toa giao cam'), true, 'V25: nhan dien nut Tinh toa giao cam');
 eq(botV24.vanduNormalize('🦋 Bắt bướm').includes('tinh toa giao cam'), false, 'V25: nut Bat buom khong nham voi Tinh toa');
+
+// V26 (2026-11-05): buff cu nang sao thang buff moi lam/luc. Truong hop
+// loi cu: ro dau la Ma moi Lam, ro sau co Thuat Tim (hasGood true) nen
+// bot lay Ma moi Lam, bo qua buff cu. Gio phai lay buff cu.
+eq(botV24.vanduChooseBuff(['[Ma] Mới [Ma Tông - Lam]', '[Thuật] T [Thuật Tông - Tím (Cực Phẩm)]', '[Kiếm] Cũ [Kiếm Tông - Lam]'], {}, { 'Cũ': 2 }, true, 'Ma').buttonText, '[Kiếm] Cũ [Kiếm Tông - Lam]', 'V26: cu thang moi Lam khi ro dau la moi Lam');
+eq(botV24.vanduChooseBuff(['[Ma] Mới [Ma Tông - Lam]', '[Thuật] T [Thuật Tông - Tím (Cực Phẩm)]', '[Kiếm] Cũ [Kiếm Tông - Lam]'], {}, { 'Cũ': 2 }, true, 'Ma').reason, 'duplicate', 'V26: ly do la duplicate');
+// Buff moi Vang o ro dau thi van thang buff cu (khong doi).
+eq(botV24.vanduChooseBuff(['[Ma] Mới [Ma Tông - Vàng (Thần Thoại)]', '[Kiếm] Cũ [Kiếm Tông - Lam]'], {}, { 'Cũ': 2 }, true, 'Ma').buttonText, '[Ma] Mới [Ma Tông - Vàng (Thần Thoại)]', 'V26: moi Vang van thang cu');
+// Ro dau khong ro do hiem (0) thi van lay nhu cu, khong coi la thap.
+eq(botV24.vanduChooseBuff(['[Ma] Mới [Ma Tông]', '[Kiếm] Cũ [Kiếm Tông - Lam]'], {}, { 'Cũ': 2 }, true, 'Ma').buttonText, '[Ma] Mới [Ma Tông]', 'V26: moi khong ro do hiem van thang cu');

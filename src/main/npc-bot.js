@@ -5021,10 +5021,20 @@ class NpcBot {
     // mỗi rổ thì vàng > tím > lam > lục (anh dặn "bất kể tông nào").
     // V14: độ hiếm 0 = không đọc được thì KHÔNG coi là thấp.
     const hasGood = buckets.some(([, c]) => c.rarity >= 3 || c.rarity === 0);
-    if (buckets.length > 0 && hasGood) return pick(buckets[0][0], buckets[0][1]);
+    const dup = bestOf(parsed.filter(isUpgradable));
+    if (buckets.length > 0 && hasGood) {
+      // V26 (anh chốt 2026-11-05): buff cũ nâng sao thắng buff mới lam/
+      // lục. Trước đây chỉ cần 1 rổ có vàng/tím là bot lấy luôn rổ đầu,
+      // kể cả khi rổ đầu là buff mới lam/lục — bỏ qua buff cũ nâng được.
+      // Giờ nếu lượt chọn đầu rổ là mới lam/lục đã biết độ hiếm (1-2) mà
+      // có buff cũ nâng được thì lấy buff cũ trước; rổ đầu vàng/tím/
+      // không rõ độ hiếm thì vẫn lấy như cũ (buff mới tốt thắng buff cũ).
+      const first = buckets[0][1];
+      if ((first.rarity === 1 || first.rarity === 2) && dup) return pick('duplicate', dup);
+      return pick(buckets[0][0], buckets[0][1]);
+    }
     // Chưa có buff chỉ tiêu vàng/tím: buff trùng nâng sao là giá trị chắc
     // chắn, lấy trước khi đánh cược Đổi (Đổi có thể làm mất buff trùng).
-    const dup = bestOf(parsed.filter(isUpgradable));
     if (dup) return pick('duplicate', dup);
     if (buckets.length > 0) {
       // Chỉ tiêu toàn lam/lục: còn lượt thì Đổi tìm vàng/tím (luật v13),
