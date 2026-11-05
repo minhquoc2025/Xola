@@ -4845,33 +4845,43 @@ class NpcBot {
     if (parsed.length === 0) return null;
     const countOf = c => (c.sect && sectCounts[c.sect] !== undefined ? sectCounts[c.sect] : 0);
     const byRarity = (a, b) => (this.vanduBuffRarity(b.raw) - this.vanduBuffRarity(a.raw)) || (countOf(b) - countOf(a));
-    // (0) Luật anh chốt 2026-11-04, giữ nguyên: buff theo bảng khắc chế quái
-    // đứng trước vàng và trùng. Trong cùng tông khắc chế, vàng/tím trước
-    // (mẫu tiết 6: Ma Tím thắng Ma Lam, và thắng cả Khí Vàng).
-    if (counterSect) {
-      const counter = parsed.filter(c => c.sect === counterSect);
+    const counter = counterSect ? parsed.filter(c => c.sect === counterSect) : [];
+    const thuat = parsed.filter(c => c.sect === 'Thuật');
+    // Nhóm buff muốn lấy: khắc chế + Thuật (trùng nhau khi khắc chế là Thuật
+    // thì chỉ tính 1 lần). Vàng = Thần Thoại (4), Tím = Cực Phẩm (3).
+    const wantedMap = new Map();
+    for (const c of [...counter, ...thuat]) wantedMap.set(c.raw, c);
+    const wanted = [...wantedMap.values()];
+    // (0) V13 (anh chốt 2026-11-05): có buff muốn lấy mà không có cái nào
+    // vàng/tím (toàn lam/lục) thì bấm Đổi để tìm tiếp, chứ không chọn ngay
+    // như v10 nữa. Áp dụng cho mọi bảng còn lượt đổi, không chỉ bảng đầu.
+    // "Không vàng/tím" hiểu là trong nhóm muốn lấy — vd bảng có Ma Lam +
+    // Khí Vàng thì vẫn Đổi, vì Ma (cái cần) không vàng/tím; nếu anh ý là
+    // "cả bảng không có vàng/tím nào" thì đổi điều kiện này thành parsed.
+    if (wanted.length > 0) {
+      const hasGood = wanted.some(c => this.vanduBuffRarity(c.raw) >= 3);
+      if (!hasGood && allowReroll) return { action: 'reroll' };
+      // Hết lượt đổi (hoặc đã có vàng/tím) thì chọn: khắc chế trước
+      // (luật cũ: khắc chế thắng vàng, mẫu tiết 6), rồi tới Thuật, trong
+      // mỗi tông vàng/tím trước. Hết lượt mà chỉ có Ma Lam thì chọn Ma Lam
+      // trước Khí Vàng khác tông.
       if (counter.length > 0) {
         counter.sort(byRarity);
         return { action: 'pick', buttonText: counter[0].raw };
       }
+      if (thuat.length > 0) {
+        thuat.sort(byRarity);
+        return { action: 'pick', buttonText: thuat[0].raw };
+      }
     }
-    // (1) V10 (anh chốt 2026-11-05): không có buff khắc chế thì lấy Thuật
-    // luôn, KHÔNG bấm Đổi để tìm khắc chế. Vd quái Hư Ảo cần Ma, bảng không
-    // có Ma mà có Thuật thì chọn Thuật ngay. Trong Thuật cũng vàng/tím trước.
-    const thuat = parsed.filter(c => c.sect === 'Thuật');
-    if (thuat.length > 0) {
-      thuat.sort(byRarity);
-      return { action: 'pick', buttonText: thuat[0].raw };
-    }
-    // (2) V10: không có cả khắc chế lẫn Thuật thì mới bấm Đổi Vận để tìm.
-    // allowReroll ở đây là "game còn cho đổi trên bảng này" do bên gọi đọc
-    // từ nút Đổi Vận, không phải đếm cứng 2 nữa.
+    // (1) V10 giữ nguyên: không có cả khắc chế lẫn Thuật thì mới bấm Đổi
+    // Vận để tìm. allowReroll là "game còn cho đổi trên bảng này" do bên
+    // gọi đọc từ nút Đổi Vận, không phải đếm cứng 2 nữa.
     if (allowReroll) return { action: 'reroll' };
-    // (3) V10: đã hết lượt đổi thì mới chọn những buff còn lại — vàng/tím
-    // trước (độ hiếm cao trước), rồi tới tông đang có nhiều nhất (gần mở
-    // Lĩnh Vực nhất cũng nằm trong tiêu chí này khi hiếm bằng nhau), rồi
-    // tới buff trùng để nâng bậc. Luật Lĩnh Vực gần ngưỡng cũ không còn
-    // chen trước Thuật hay trước Đổi nữa.
+    // (2) Đã hết lượt đổi và không có buff muốn lấy thì mới chọn những buff
+    // còn lại — vàng/tím trước, rồi tới buff trùng để nâng bậc, rồi tới
+    // tông đang có nhiều nhất. Luật Lĩnh Vực gần ngưỡng cũ không còn chen
+    // trước Thuật hay trước Đổi nữa.
     const remaining = [...parsed].sort(byRarity);
     const dup = remaining.filter(c => ownedNames[c.name]);
     if (remaining[0] && this.vanduBuffRarity(remaining[0].raw) >= 3) {
