@@ -327,3 +327,32 @@ eq(botV24.vanduChooseBuff(['[Ma] Mới [Ma Tông - Lam]', '[Thuật] T [Thuật 
 eq(botV24.vanduChooseBuff(['[Ma] Mới [Ma Tông - Vàng (Thần Thoại)]', '[Kiếm] Cũ [Kiếm Tông - Lam]'], {}, { 'Cũ': 2 }, true, 'Ma').buttonText, '[Ma] Mới [Ma Tông - Vàng (Thần Thoại)]', 'V26: moi Vang van thang cu');
 // Ro dau khong ro do hiem (0) thi van lay nhu cu, khong coi la thap.
 eq(botV24.vanduChooseBuff(['[Ma] Mới [Ma Tông]', '[Kiếm] Cũ [Kiếm Tông - Lam]'], {}, { 'Cũ': 2 }, true, 'Ma').buttonText, '[Ma] Mới [Ma Tông]', 'V26: moi khong ro do hiem van thang cu');
+
+// V27: bang Tiet 7/36 (anh bao) — nut T2 khong ghi tong, ten bi cat ngan.
+// Ten chuan hoa: bo emoji/ky hieu va tien to T2.
+eq(bot.vanduNormalizeBuffName(bot.vanduParseBuffCard('⬆️T2 ★★ Huyết Tế Đoạt M').name), 'Huyết Tế Đoạt M', 'V27: ten T2 chuan hoa');
+eq(bot.vanduNormalizeBuffName(bot.vanduParseBuffCard('🔵[Ma] 💀 Huyết Tế Đoạt Mện').name), 'Huyết Tế Đoạt Mện', 'V27: ten thuong chuan hoa');
+eq(bot.vanduNormalizeBuffName('Thái Ất'), 'Thái Ất', 'V27: ten thuong khong doi');
+// Nut T2 khong ghi tong van la the (truoc day bi loc mat).
+eq(bot.vanduIsBuffCard('⬆️T2 ★★ Huyết Tế Đoạt M'), true, 'V27: nut T2 la the');
+eq(bot.vanduIsBuffCard('Mew'), false, 'V27: nut ten nguoi khong phai the');
+// Bang Tiet 7: co ban T2 Huyet Te (da so huu tu bang truoc) ma bot cu
+// chon xanh luc Thon Huyet Ma Con — gio phai chon nang cap T2.
+eq(bot.vanduChooseBuff(['⬆️T2 ★★ Nhất Kiếm Trảm', '⬆️T2 ★★ Huyết Tế Đoạt M', '[Ma] Thôn Huyết Ma Côn [Ma Tông - Lục (Phổ Thông)]', '[Vận] Thiên Cơ Đồ Lục [Vận Mệnh - Tím (Cực Phẩm)]'], { Kiếm: 1, Khí: 2, Thuật: 0, Ma: 3 }, { 'Huyết Tế Đoạt Mệnh': 1 }, false, 'Ma').buttonText, '⬆️T2 ★★ Huyết Tế Đoạt M', 'V27: bang Tiet 7 -> nang cap T2 thay vi xanh luc');
+eq(bot.vanduChooseBuff(['⬆️T2 ★★ Nhất Kiếm Trảm', '⬆️T2 ★★ Huyết Tế Đoạt M', '[Ma] Thôn Huyết Ma Côn [Ma Tông - Lục (Phổ Thông)]', '[Vận] Thiên Cơ Đồ Lục [Vận Mệnh - Tím (Cực Phẩm)]'], { Kiếm: 1, Khí: 2, Thuật: 0, Ma: 3 }, { 'Huyết Tế Đoạt Mệnh': 1 }, false, 'Ma').reason, 'duplicate', 'V27: ly do la duplicate');
+// Tong theo mo ta bang (nut T2 khong ghi tong): muc 1 Kiem, muc 2 Ma, muc 3 Ma, muc 4 Van.
+const tiet7Text = '1. ⬆️ ★★ [CHÂN TRUYỀN] 🗡️ Nhất Kiếm Trảm Tiên [Kiếm Tông] • Đột phá lên Bậc 2\n2. ⬆️ ★★ [CHÂN TRUYỀN] 💀 Huyết Tế Đoạt Mệnh [Ma Tông] • Đột phá lên Bậc 2\n3. [Ma] 🩸 Thôn Huyết Ma Côn [Ma Tông - 🟢 Lục (Phổ Thông)] • Hút máu +10%\n4. [Vận] 📜 Thiên Cơ Đồ Lục [Vận Mệnh - 🟣 Tím (Cực Phẩm)] • Được Reroll';
+const tiet7Btns = ['⬆️T2 ★★ Nhất Kiếm Trảm', '⬆️T2 ★★ Huyết Tế Đoạt M', '[Ma] Thôn Huyết Ma Côn', '[Vận] Thiên Cơ Đồ Lục'];
+eq(bot.vanduBuffSects(tiet7Text, tiet7Btns), ['Kiếm', 'Ma', 'Ma', 'Vận'], 'V27: tong theo mo ta bang');
+eq(bot.vanduChooseBuff(['⬆️T2 ★★ Huyết Tế Đoạt M', '[Kiếm] K [Kiếm Tông - Lam]'], {}, {}, false, 'Ma', null, 0, bot.vanduBuffSects(tiet7Text, tiet7Btns).slice(1, 2).concat(['Kiếm'])).buttonText, '⬆️T2 ★★ Huyết Tế Đoạt M', 'V27: T2 lay tong Ma tu mo ta -> khac che');
+// V27: nhan dien man Ky Ngo — recap "Ho Phap dap le" khong du.
+eq(bot.vanduIsKyNgoScreen('tiet diem 10 36 ky duyen mon cua vang sang ruc ho phap dap le than hanh phu 1 buff vo dinh tang cuong', ['bo qua di tiep an toan']), false, 'V27: Ky Duyen co chu Ho Phap khong phai Ky Ngo');
+eq(bot.vanduIsKyNgoScreen('tiet diem 11 36 ky ngo ho phap phong thap co', ['dang huong']), true, 'V27: Ky Ngo co nut Dang huong');
+eq(bot.vanduIsKyNgoScreen('tiet diem 11 36 ky ngo that thai ho diep van menh', ['tinh toa giao cam']), true, 'V27: Ky Ngo theo tieu de tiet diem');
+eq(bot.vanduIsKyNgoScreen('tiet diem 10 36 canh mon tien thuong hac thi ho phap dap le', ['mua cuu chuyen hoan hon dan']), false, 'V27: man shop co chu Ho Phap khong phai Ky Ngo');
+// V27: HP nguoi choi tu muc Dien Bien — khong lay HP quai 89%.
+eq(bot.vanduPlayerHpPct('Linh Tuyền Thủ Thú [Hư Ảo] Băng Tuyết Đa Bảo: 840.364.197/943.248.306 HP (89%)\nDiễn Biến Hiệp Đấu\nHiệp cái: 275712739/505600508'), 55, 'V27: HP nguoi choi tu Dien Bien');
+eq(bot.vanduPlayerHpPct('Diễn Biến Hiệp Đấu\nHiệp cái: 250000/500000'), 50, 'V27: HP 50% dung nguong hoi mau');
+eq(bot.vanduPlayerHpPct('Tiết Điểm 12/36'), null, 'V27: Tiet Diem khong phai HP');
+eq(bot.vanduPlayerHpPct('Tiết Điểm 12/36\nKhí Huyết: 42%'), 42, 'V27: fallback Khi Huyet');
+console.log('ALL VANDU TESTS PASSED');

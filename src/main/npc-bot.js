@@ -105,6 +105,7 @@ class NpcBot {
     // như cũ, xem vanduShouldRestartTrips).
     this.vanduTripCount = 0;
     this.vanduTotalTrips = 0;
+    this.vanduLastKyNgoFailMsgId = null; // V27: chống spam log Kỳ Ngộ
     // V17: số lượt buff đã lấy theo bảng khắc chế trong chuyến này (chỉ
     // tiêu 5). Reset mỗi chuyến ở đầu vanduLoop, không reset mỗi bảng.
     this.vanduCounterPicks = 0;
@@ -4922,6 +4923,12 @@ class NpcBot {
   // [Thuật]...) nên lọc này không loại thẻ thật.
   vanduIsBuffCard(buttonText) {
     const card = this.vanduParseBuffCard(buttonText);
+    // V27: nút nâng cấp T2 ("⬆️T2 ★★ ...") không ghi khung tông nên đọc
+    // nút không ra tông — nhưng nó vẫn là thẻ thật, giữ lại để vòng
+    // chọn xử lý (tông lấy từ mô tả bảng qua vanduBuffSects, trùng
+    // nhận qua tên chuẩn hoá). Nút rác (tên người, lệnh) không có dấu
+    // T2 nên vẫn bị loại như cũ.
+    if (!!card.name && /⬆|T2/.test(String(buttonText || ''))) return true;
     return !!card.sect && !!card.name;
   }
 
@@ -4970,21 +4977,86 @@ class NpcBot {
   // để biết tông nào còn thiếu. Trả thêm reason để bên gọi cập nhật đúng
   // bộ đếm (chỉ lượt khắc chế mới tăng counterPicks, chỉ buff mới mới
   // tăng số tông). Độ hiếm: Vàng 4, Tím 3, Lam 2, Lục 1, 0 = không đọc được.
-  vanduChooseBuff(cards, sectCounts, ownedNames, allowReroll, counterSect, cardRarities, counterPicks) {
+  // V27: chuẩn hoá tên buff để so trùng — nút nâng cấp ghi "⬆️T2 ★★
+  // Tên" còn nút thường ghi "[Tông] Tên" kèm emoji, và tên trên nút hay
+  // bị cắt ngắn ("Huyết Tế Đoạt M" so với "Huyết Tế Đoạt Mệnh"). Bỏ
+  // emoji/ký hiệu và tiền tố T2 rồi gộp khoảng trắng, để 2 dạng cùng
+  // về 1 khóa. Tên thường không có các dấu này nên không đổi.
+  vanduNormalizeBuffName(raw) {
+    // Thứ tự quan trọng: emoji/ký hiệu thành khoảng trắng trước, gộp
+    // khoảng trắng rồi mới cắt tiền tố T2 ở đầu (không gộp trước thì
+    // "⬆️T2 ..." thành "  T2 ..." và ^T2 không khớp).
+    return String(raw || '')
+      .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/^T2\s+/i, '')
+      .trim();
+  }
+
+  // V27: tông của thẻ theo mô tả bảng, theo đúng thứ tự nút (như
+  // vanduBuffRarities làm với độ hiếm). Nút nâng cấp T2 không ghi khung
+  // tông ("⬆️T2 ★★ Huyết Tế Đoạt M") nên chỉ đọc nút thì mất tông; mô
+  // tả liệt kê đủ tông theo từng mục ("[Ma Tông]", "[Kiếm Tông]") nên
+  // căn theo mục sẽ lấy được tông đúng. Số mục khác số nút thì trả null
+  // để giữ cách đọc cũ, không đoán lệch.
+  vanduBuffSects(boardText, buttons) {
+    const text = String(boardText || '');
+    // Mục đầu nằm ở đầu chuỗi (không có \n trước "1.") nên không cắt
+    // bỏ mù: nếu phần đầu bắt đầu bằng số thứ tự thì giữ nó (bỏ số),
+    // nếu là tiêu đề bảng thì mới bỏ.
+    let parts = text.split(/\n\s*\d+\.\s+/);
+    if (/^\d+\.\s/.test(parts[0] || '')) parts[0] = parts[0].replace(/^\d+\.\s+/, '');
+    else parts = parts.slice(1);
+    if (parts.length === 0 || parts.length !== (buttons || []).length) return null;
+    const sects = parts.map(p => {
+      const m = p.match(/(Kiếm|Khí|Thuật|Ma|Vận)\s*Tông/) || p.match(/\[(Kiếm|Khí|Thuật|Ma|Vận)\]/);
+      return m ? m[1] : null;
+    });
+    return sects;
+  }
+
+  vanduChooseBuff(cards, sectCounts, ownedNames, allowReroll, counterSect, cardRarities, counterPicks, cardSects) {
     const parsed = (cards || []).map((c, i) => {
       const card = this.vanduParseBuffCard(c);
       // Độ hiếm ưu tiên lấy từ mô tả bảng (cardRarities) vì nút không ghi;
-      // không có thì mới đọc từ chữ trên nút như trước.
+      // không có thì mới đọc từ chữ trên nút như trước. Tông cũng vậy
+      // (cardSects, v27) vì nút T2 không ghi tông.
       card.rarity = (cardRarities && cardRarities[i] !== undefined) ? cardRarities[i] : this.vanduBuffRarity(c);
+      if (cardSects && cardSects[i]) card.sect = cardSects[i];
       return card;
     }).filter(c => c.name);
     if (parsed.length === 0) return null;
     const counts = sectCounts || {};
+    // V27: so trùng theo tên đã chuẩn hoá, kèm so tiền tố cho tên bị
+    // cắt ngắn trên nút ("Huyết Tế Đoạt M" là tiền tố của "Huyết Tế
+    // Đoạt Mệnh"). Chỉ nhận tiền tố khi phần ngắn (bỏ khoảng trắng) từ
+    // 8 ký tự trở lên để khỏi nhận nhầm tên ngắn. Khớp đúng ưu tiên
+    // trước, tiền tố thì lấy khóa dài nhất khớp.
+    const ownedNorm = {};
+    if (ownedNames) {
+      for (const [k, v] of Object.entries(ownedNames)) {
+        const nk = this.vanduNormalizeBuffName(k);
+        const n = v === true ? 1 : Number(v);
+        if (!nk || !Number.isFinite(n)) continue;
+        ownedNorm[nk] = Math.max(ownedNorm[nk] || 0, n);
+      }
+    }
     const ownedCount = name => {
-      const v = ownedNames ? ownedNames[name] : undefined;
-      if (v === true) return 1; // tương thích test cũ dùng boolean
-      const n = Number(v);
-      return Number.isFinite(n) ? n : 0;
+      const norm = this.vanduNormalizeBuffName(name);
+      if (!norm) return 0;
+      if (ownedNorm[norm] !== undefined) return ownedNorm[norm];
+      const flat = norm.replace(/\s+/g, '');
+      let best = null;
+      for (const k of Object.keys(ownedNorm)) {
+        const kf = k.replace(/\s+/g, '');
+        const shorter = flat.length <= kf.length ? flat : kf;
+        if (shorter.length < 8) continue;
+        if (flat.startsWith(kf) || kf.startsWith(flat)) {
+          if (!best || k.length > best.length) best = k;
+        }
+      }
+      return best ? ownedNorm[best] : 0;
     };
     const isNew = c => ownedCount(c.name) < 1;
     // Buff trùng chỉ được nâng tối đa 4 lần: lần đầu (1) + 4 lần nâng = tối
@@ -5062,8 +5134,26 @@ class NpcBot {
 
   vanduPlayerHpPct(text) {
     const raw = String(text || '');
-    // Ưu tiên "Khí Huyết ... %", rồi tới HP (%) đầu tiên. Đây là heuristic vì
-    // màn hình chiến đấu không ghi rõ nhãn HP của người chơi tách riêng địch.
+    // V27: máu người chơi đọc từ mục "Diễn Biến Hiệp Đấu" trước — dòng
+    // đầu của mục là "Tên: hiện tại/tối đa" của người chơi (vd
+    // 275712739/505600508 ≈ 55%). Cách cũ đọc "HP (%)" đầu tiên toàn
+    // trúng máu QUÁI (dòng quái ghi "840.364.197/943.248.306 HP (89%)"
+    // nằm trên mục Diễn Biến), nên tới 50% máu mình bot vẫn không hồi.
+    // Chỉ nhận cặp số mà max >= 1000 để khỏi nhầm "Tiết Điểm 12/36".
+    const diemIdx = raw.search(/Diễn Biến Hiệp Đấu/i);
+    if (diemIdx >= 0) {
+      const section = raw.slice(diemIdx);
+      const re = /([\d.]+)\s*\/\s*([\d.]+)/g;
+      let m;
+      while ((m = re.exec(section)) !== null) {
+        const cur = Number(m[1].replace(/\./g, ''));
+        const max = Number(m[2].replace(/\./g, ''));
+        if (Number.isFinite(cur) && Number.isFinite(max) && max >= 1000 && cur <= max) {
+          return Math.round((100 * cur) / max);
+        }
+      }
+    }
+    // Fallback cũ cho màn không có mục Diễn Biến (Khí Huyết %, HP %).
     let m = raw.match(/Khí Huyết[^0-9%]*(\d+)\s*%/);
     if (m) return Number(m[1]);
     m = raw.match(/HP[^0-9%]*(\d+)\s*%/);
@@ -5258,81 +5348,61 @@ class NpcBot {
   // quét toàn trang trong container Vân Du — không bấm bừa nút xanh ở
   // chỗ khác của Discord. Không thấy nút xanh thì trả null để bên gọi
   // fallback về Dâng hương.
-  async vanduClickGreenButton() {
-    const userId = this.userId || '';
-    const greenJs = `(() => {
-      const userId = ${JSON.stringify(userId)};
+  // V27: màn Kỳ Ngộ thật = tiêu đề tiết điểm ghi "KỲ NGỘ" (norm hoá
+  // thành "tiet diem 11 36 ky ngo ...") hoặc màn có nút Dâng hương.
+  // "Hộ Pháp" đứng một mình không đủ: dòng recap "Hộ Pháp đáp lễ"
+  // có mặt trên nhiều màn khác (Kỳ Duyên Môn Tiết 10/36) và từng làm
+  // handler Kỳ Ngộ chạy nhầm, nuốt mất lượt bấm "Bỏ qua" của Kỳ Duyên.
+  vanduIsKyNgoScreen(norm, btnNorm) {
+    if ((btnNorm || []).some(x => x.includes('dang huong'))) return true;
+    return /tiet diem\s+\d+\s+\d+\s+ky ngo/.test(String(norm || ''));
+  }
+
+  // V27: chỉ bấm nút xanh TRONG ĐÚNG màn đang xử lý (article có msgId
+  // mà vòng chính vừa quét được). Bản cũ quét 15 article gần nhất rồi
+  // fallback toàn trang — khi màn Kỳ Ngộ đã xử lý xong (nút tắt) hoặc
+  // màn hiện tại không phải Kỳ Ngộ thật, nó vẫn bấm được 1 nút xanh ở
+  // chỗ khác, đúng lỗi log 11:15:51-11:16:29 bấm "Bắt Đầu Xuất Phát" của
+  // màn bắt đầu cũ liên tục. Không có msgId thì không bấm gì cả, thà
+  // bỏ lượt còn hơn bấm nhầm.
+  async vanduClickGreenButton(screenMsgId) {
+    if (!screenMsgId) return null;
+    return await this.exec(`(() => {
+      const msgId = ${JSON.stringify(screenMsgId)};
+      const parseRgb = bg => {
+        const nums = [];
+        let cur = '';
+        for (const ch of String(bg || '')) {
+          if ((ch >= '0' && ch <= '9') || ch === '.') cur += ch;
+          else if (cur) { nums.push(Number(cur)); cur = ''; }
+        }
+        if (cur) nums.push(Number(cur));
+        return nums;
+      };
       const isGreen = bg => {
-        const m = String(bg || '').match(/rgba?\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*,\\s*(\\d+)(?:\\s*,\\s*([\\d.]+))?/);
-        if (!m) return false;
-        if (m[4] !== undefined && Number(m[4]) < 0.5) return false;
-        const r = Number(m[1]), g = Number(m[2]), b = Number(m[3]);
+        const nums = parseRgb(bg);
+        if (nums.length < 3) return false;
+        const r = nums[0], g = nums[1], b = nums[2], a = nums[3];
+        if (a !== undefined && a < 0.5) return false;
         return g > 120 && g > r + 30 && g > b + 30;
       };
       const isVisible = el => el && el.offsetParent !== null;
-      const tryBtns = btns => {
-        for (const btn of btns) {
-          if (btn.disabled || !isVisible(btn)) continue;
-          const raw = (btn.textContent || '').trim();
-          if (!raw) continue;
-          let bg = '';
-          try { bg = getComputedStyle(btn).backgroundColor || ''; } catch (e) {}
-          if (!isGreen(bg)) continue;
-          btn.disabled = false;
-          btn.click();
-          return raw;
-        }
-        return null;
-      };
-      const articles = Array.from(document.querySelectorAll('[role="article"]'));
-      const passes = userId ? [true, false] : [false];
-      for (const onlyOwned of passes) {
-        for (const msg of articles.slice(-15).reverse()) {
-          if (msg.getAttribute('data-bot-ephemeral') === 'true') continue;
-          if (onlyOwned && !(msg.innerHTML || '').includes(userId)) continue;
-          const hit = tryBtns(Array.from(msg.querySelectorAll('button, [role="button"]')));
-          if (hit) return hit;
-        }
-      }
-      return null;
-    })()`;
-    const inArticles = await this.exec(greenJs);
-    if (inArticles) return inArticles;
-    // Fallback: nút xanh nằm ngoài article (Components V2) nhưng trong
-    // container có chữ Vân Du.
-    const anywhere = await this.exec(`(() => {
-      const isGreen = bg => {
-        const m = String(bg || '').match(/rgba?\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*,\\s*(\\d+)(?:\\s*,\\s*([\\d.]+))?/);
-        if (!m) return false;
-        if (m[4] !== undefined && Number(m[4]) < 0.5) return false;
-        const r = Number(m[1]), g = Number(m[2]), b = Number(m[3]);
-        return g > 120 && g > r + 30 && g > b + 30;
-      };
-      const isVisible = el => el && el.offsetParent !== null;
-      const nd = value => String(value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/[\\u0111\\u0110\\u00D0\\u00F0]/g, 'd').replace(/[\\u01A1\\u01A0\\u00F8\\u00D8]/g, 'o').replace(/[\\u01B0\\u01AF]/g, 'u').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-      const keywords = ['van du', 'tiet diem', 'ky ngo', 'ho phap', 'dang huong'];
-      const allBtns = Array.from(document.querySelectorAll('button, [role="button"]'))
-        .filter(b => isVisible(b) && (b.textContent || '').trim().length > 0);
-      for (const btn of allBtns) {
-        if (btn.disabled) continue;
+      const msg = document.getElementById(msgId);
+      if (!msg) return null;
+      const btns = Array.from(msg.querySelectorAll('button, [role="button"]'));
+      for (const btn of btns) {
+        if (btn.disabled || !isVisible(btn)) continue;
+        const raw = (btn.textContent || '').trim();
+        if (!raw) continue;
         let bg = '';
         try { bg = getComputedStyle(btn).backgroundColor || ''; } catch (e) {}
         if (!isGreen(bg)) continue;
-        let el = btn.parentElement;
-        for (let i = 0; i < 8 && el; i++) {
-          const t = el.textContent || '';
-          if (t.length > 100 && keywords.some(k => nd(t).includes(k))) {
-            const raw = (btn.textContent || '').trim();
-            btn.disabled = false;
-            btn.click();
-            return raw;
-          }
-          el = el.parentElement;
-        }
+        btn.disabled = false;
+        btn.click();
+        return raw;
       }
       return null;
     })()`);
-    return anywhere || null;
   }
 
   // V3: bấm nút/mục chọn ở bất cứ đâu trong trang, không chỉ trong article.
@@ -5444,13 +5514,22 @@ class NpcBot {
         this.vanduSkillOrder.some(s => btnNorm.some(b => b.includes(this.vanduNormalize(s))));
       if (!isBattle) return;
       // Hồi máu bằng vật phẩm dưới skill, chỉ khi máu <= 50% và chưa dùng trong trận này.
+      // V27 (anh dặn boss Tiết 12/24/36 máu 50% thì hồi): luật này vốn đã
+      // có nhưng chết từ 2 chỗ — nút thật trên màn chỉ ghi "Cửu Chuyển
+      // Hoàn Hồn" (không có "Đan") nên tìm '...dan' không bao giờ trúng,
+      // và máu người chơi đọc nhầm thành máu quái (xem vanduPlayerHpPct).
+      // Giờ tìm theo 'cuu chuyen hoan hon' (trừ nút Mua ở shop), áp cho
+      // mọi trận kể cả boss 12/24/36, mỗi trận tối đa 1 lần.
       const hp = this.vanduPlayerHpPct(screen.text);
-      const itemBtn = screen.buttons.find(b => this.vanduNormalize(b).includes('cuu chuyen hoan hon dan'));
+      const itemBtn = screen.buttons.find(b => {
+        const n = this.vanduNormalize(b);
+        return n.includes('cuu chuyen hoan hon') && !n.includes('mua');
+      });
       if (!healUsed && hp !== null && hp <= 50 && itemBtn) {
-        const clicked = await this.vanduClickButton('Cửu Chuyển Hoàn Hồn Đan');
+        const clicked = await this.vanduClickButton('Cửu Chuyển Hoàn Hồn');
         if (clicked) {
           healUsed = true;
-          this.log(`💊 Vân Du: hồi máu bằng Cửu Chuyển (HP ${hp}%)`);
+          this.log(`💊 Vân Du: hồi máu bằng Cửu Chuyển (HP ${hp}%, Tiết ${this.vanduNode || '?'})`);
           await this.delay(Math.max(1000, this.skillClickDelayMs || 1000));
           continue;
         }
@@ -5696,16 +5775,30 @@ class NpcBot {
       // Kỳ Ngộ (v19, anh chốt 2026-11-05): cứ nút XANH LÁ mà chọn. Trước
       // đây bot bấm theo chữ "Dâng hương" (vì ở màn đã thấy thì ô xanh lá
       // là Dâng hương), giờ bấm theo màu cho chắc, vì chữ có thể khác
-      // theo màn. Nhận diện màn Kỳ Ngộ bằng tiêu đề (Kỳ Ngộ / Hộ Pháp)
-      // hoặc có nút Dâng hương. Không tìm được nút xanh (vd Discord đổi
-      // cách tô màu) thì fallback về Dâng hương như cũ, không đứng im.
-      if (btnNorm.some(x => x.includes('dang huong')) || norm.includes('ky ngo') || norm.includes('ho phap')) {
-        const green = await this.vanduClickGreenButton();
+      // theo màn. V27 siết nhận diện (xem vanduIsKyNgoScreen): "Hộ Pháp"
+      // đứng một mình KHÔNG đủ, vì dòng "Diễn Biến Vừa Qua: Hộ Pháp đáp
+      // lễ" xuất hiện cả trên màn khác (vd Kỳ Duyên Môn Tiết 10/36) và
+      // đã khiến handler này chạy nhầm, chiếm lượt của handler Kỳ Duyên
+      // bên dưới. Nút "Bỏ qua đi tiếp an toàn" cũng được ưu tiên trước
+      // handler này, để màn Kỳ Duyên luôn tới đúng handler của nó.
+      // V27: nút xanh chỉ bấm trong đúng màn đang xử lý (screen.msgId);
+      // không bấm được gì thì chỉ ghi log (mỗi màn 1 lần) rồi chờ màn
+      // mới, tuyệt đối không quét toàn trang bấm bừa như bản cũ.
+      if (this.vanduIsKyNgoScreen(norm, btnNorm) && !btnNorm.some(x => x.includes('bo qua di tiep an toan'))) {
+        const green = await this.vanduClickGreenButton(screen.msgId);
         if (green) {
           this.log(`🙏 Vân Du: Kỳ Ngộ, chọn nút xanh lá "${green}"`);
-        } else {
-          await this.vanduClickButton('Dâng hương');
-          this.log('🙏 Vân Du: Kỳ Ngộ, không thấy nút xanh lá, fallback Dâng hương');
+        } else if (btnNorm.some(x => x.includes('dang huong'))) {
+          const dh = await this.vanduClickButton('Dâng hương');
+          if (dh) {
+            this.log('🙏 Vân Du: Kỳ Ngộ, không thấy nút xanh lá, bấm Dâng hương');
+          } else if (this.vanduLastKyNgoFailMsgId !== screen.msgId) {
+            this.vanduLastKyNgoFailMsgId = screen.msgId;
+            this.log('⚠️ Vân Du: Kỳ Ngộ, không bấm được nút xanh/Dâng hương trên màn này, chờ màn mới (không bấm bừa)');
+          }
+        } else if (this.vanduLastKyNgoFailMsgId !== screen.msgId) {
+          this.vanduLastKyNgoFailMsgId = screen.msgId;
+          this.log('⚠️ Vân Du: Kỳ Ngộ, không thấy nút xanh/Dâng hương trên màn này, chờ màn mới (không bấm bừa)');
         }
         await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
         continue;
@@ -5806,6 +5899,8 @@ class NpcBot {
           // không ghi độ hiếm. Không gán được thì cardRarities là null và
           // chooseBuff đọc từ chữ trên nút như trước.
           const cardRarities = this.vanduBuffRarities(cur.text || '', buffButtons);
+          // V27: tông theo mô tả bảng (cho nút T2 không ghi tông).
+          const cardSects = this.vanduBuffSects(cur.text || '', buffButtons);
           // V14: nút Đổi thật là nút có chữ Đổi Vận mà KHÔNG phải "Hết
           // Lượt Đổi Vận". Nút hết lượt trước đây bị tính là còn lượt vì
           // chứa chữ "doi van", dẫn tới bấm hoài vào nút tắt rồi đứng im.
@@ -5818,7 +5913,7 @@ class NpcBot {
           // Không đọc được số thì dự phòng tối đa 4 lượt mỗi bảng.
           const remaining = this.vanduRerollRemaining(cur.text || '', cur.buttons || []);
           const allowReroll = !rerollBlocked && !!doiVanBtn && (remaining !== null ? remaining > 0 : rerolls < 4);
-          const choice = this.vanduChooseBuff(buffButtons, this.vanduSectCounts, this.vanduOwnedBuffs, allowReroll, counterSect, cardRarities, this.vanduCounterPicks);
+          const choice = this.vanduChooseBuff(buffButtons, this.vanduSectCounts, this.vanduOwnedBuffs, allowReroll, counterSect, cardRarities, this.vanduCounterPicks, cardSects);
           if (!choice) break;
           if (choice.action === 'reroll') {
             // Ghi rõ bảng đang có gì để lần sau chẩn đoán được vì sao Đổi
@@ -5826,7 +5921,8 @@ class NpcBot {
             const desc = buffButtons.map((b, i) => {
               const c = this.vanduParseBuffCard(b);
               const r = cardRarities && cardRarities[i] !== undefined ? cardRarities[i] : this.vanduBuffRarity(b);
-              return `${c.name || b}(${c.sect || '?'}:${r})`;
+              const s = (cardSects && cardSects[i]) || c.sect || '?';
+              return `${c.name || b}(${s}:${r})`;
             }).join(', ');
             this.log(`🔄 Vân Du: Đổi Vận, bảng đang có: ${desc}`);
             const clicked = await this.vanduClickButton(doiVanBtn);
@@ -5852,9 +5948,13 @@ class NpcBot {
             // do là khắc chế) tăng lượt khắc chế; buff trùng chỉ nâng sao,
             // không làm tăng số tông — trước đây cộng cả trùng nên số tông
             // lệch khỏi bảng game.
-            const prevOwned = this.vanduOwnedBuffs[card.name] || 0;
+            // V27: khóa túi theo tên đã chuẩn hoá (xem
+            // vanduNormalizeBuffName) để lần sau nhận ra trùng dù nút
+            // đổi tiền tố T2/emoji hay bị cắt ngắn.
+            const ownedKey = this.vanduNormalizeBuffName(card.name);
+            const prevOwned = (ownedKey && this.vanduOwnedBuffs[ownedKey]) || 0;
             const isNewBuff = !prevOwned;
-            if (card.name) this.vanduOwnedBuffs[card.name] = prevOwned + 1;
+            if (ownedKey) this.vanduOwnedBuffs[ownedKey] = prevOwned + 1;
             if (isNewBuff && card.sect) this.vanduSectCounts[card.sect] = (this.vanduSectCounts[card.sect] || 0) + 1;
             if (isNewBuff && choice.reason === 'counter') this.vanduCounterPicks = (this.vanduCounterPicks || 0) + 1;
             const reasonTag = choice.reason ? ` [${choice.reason}]` : '';
