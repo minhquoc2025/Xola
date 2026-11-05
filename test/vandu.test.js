@@ -375,3 +375,34 @@ eq(bot.vanduChooseBuff(shot28bBtns, {}, {}, false, 'Ma', bot.vanduBuffRarities(s
 eq(bot.vanduChooseBuff(shot28Btns, {}, {}, false, 'Thuật', bot.vanduBuffRarities(shot28Text, shot28Btns), 0, bot.vanduBuffSects(shot28Text, shot28Btns)).buttonText, '[Vận] Đại Đạo Đồng Quy', 'V28: khong co khac che -> Van Vang');
 eq(bot.vanduChooseBuff(shot28Btns, {}, {}, false, 'Thuật', bot.vanduBuffRarities(shot28Text, shot28Btns), 0, bot.vanduBuffSects(shot28Text, shot28Btns)).reason, 'van', 'V28: ly do la van');
 console.log('ALL VANDU TESTS PASSED (V28)');
+
+// V29 (2026-11-05, lỗi "Không phải lượt của bạn!" 15:11): đã nhập User ID
+// thì chỉ quét/bấm màn của mình — không rơi xuống lượt "mọi article" nữa.
+(async () => {
+  const mk = (userId) => {
+    const seen = [];
+    const b = new NpcBot({ executeJavaScript: (code) => { seen.push(String(code)); return null; } }, 1);
+    b.userId = userId || '';
+    b.isRunning = true; b.delay = async () => {}; b.log = () => {};
+    return { b, seen };
+  };
+  const s1 = mk('1477145807366131744');
+  await s1.b.vanduScanLatest();
+  const scanJs = s1.seen.join('\n');
+  eq(scanJs.includes('passes = userId ? [true] : [false]'), true, 'V29: scan co ID chi quet owned');
+  eq(scanJs.includes('[true, false]'), false, 'V29: scan co ID khong con luot moi article');
+  const s2 = mk('');
+  await s2.b.vanduScanLatest();
+  eq(s2.seen.join('\n').includes('passes = userId ? [true] : [false]'), true, 'V29: scan khong ID giu fallback cu');
+  const c1 = mk('1477145807366131744');
+  await c1.b.vanduClickButton('Khai Môn');
+  const clickJs = c1.seen.join('\n');
+  eq(clickJs.includes('passes = userId ? [true] : [false]'), true, 'V29: click co ID chi bam owned');
+  eq(clickJs.includes('[true, false]'), false, 'V29: click co ID khong con luot moi article');
+  eq(clickJs.includes("closest('[role=\"article\"]')"), true, 'V29: Anywhere co guard article');
+  const e1 = mk('1477145807366131744');
+  await e1.b.vanduClickExactText('Trở Về Giang Hồ');
+  eq(e1.seen.join('\n').includes("closest('[role=\"article\"]')"), true, 'V29: ExactText co guard article');
+  console.log('V29 ownership guards: OK');
+})().catch(e => { console.error(e); process.exit(1); });
+console.log('ALL VANDU TESTS PASSED (V29)');

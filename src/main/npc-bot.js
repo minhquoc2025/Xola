@@ -5258,6 +5258,7 @@ class NpcBot {
       .toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   }
 
+  // V29: khi đã nhập User ID thì chỉ quét/bấm màn của mình — lượt quét article mọi người cũ là đường bấm nhầm màn người khác (Không phải lượt của bạn!, giống Luân Hồi). Chưa nhập ID thì giữ như cũ (fallback mọi article).
   async vanduScanLatest() {
     const username = this.username || '';
     const userId = this.userId || '';
@@ -5280,7 +5281,7 @@ class NpcBot {
       // Quét kiểu cũ chỉ có 1 lượt, và nếu màn bắt đầu không nằm trong article
       // (Discord Components V2 render nút ngoài article) thì bot quét mãi không thấy,
       // log đứng im sau Sent: !vandu — đúng triệu chứng test 2026-11-04.
-      const passes = userId ? [true, false] : [false];
+      const passes = userId ? [true] : [false];
       for (const onlyOwned of passes) {
         for (const msg of articles.slice(-15).reverse()) {
           if (msg.getAttribute('data-bot-ephemeral') === 'true') continue;
@@ -5313,6 +5314,19 @@ class NpcBot {
         if (!container) continue;
         const text = container.textContent || '';
         if (!isVanduText(text)) continue;
+        // V29: fallback ngoài article cũng chỉ nhận màn của mình khi đã
+        // nhập User ID — "Bắt Đầu Xuất Phát" / "Trở Về Giang Hồ" trên màn
+        // người khác cũng khớp chữ. Tìm User ID trong container rồi đi
+        // ngược lên tối đa 12 cấp (ID có thể nằm ở thẻ bao ngoài).
+        if (userId) {
+          let ownedEl = container;
+          let owned = (container.innerHTML || '').includes(userId);
+          for (let i = 0; i < 12 && !owned && ownedEl.parentElement; i++) {
+            ownedEl = ownedEl.parentElement;
+            owned = (ownedEl.innerHTML || '').includes(userId);
+          }
+          if (!owned) continue;
+        }
         const btns = btnTexts(container);
         if (btns.length === 0) btns.push((btn.textContent || '').trim());
         return { msgId: container.id || '', text, buttons: btns };
@@ -5321,6 +5335,7 @@ class NpcBot {
     })()`);
   }
 
+  // V29: như vanduScanLatest — đã nhập User ID thì chỉ bấm trong article của mình, không rơi xuống lượt mọi article nữa.
   async vanduClickButton(needle) {
     const needleNorm = this.vanduNormalize(needle);
     const userId = this.userId || '';
@@ -5329,7 +5344,7 @@ class NpcBot {
       const userId = ${JSON.stringify(userId)};
       const nd = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\u0111\u0110\u00D0\u00F0]/g, 'd').replace(/[\u01A1\u01A0\u00F8\u00D8]/g, 'o').replace(/[\u01B0\u01AF]/g, 'u').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
       const articles = Array.from(document.querySelectorAll('[role="article"]'));
-      const passes = userId ? [true, false] : [false];
+      const passes = userId ? [true] : [false];
       for (const onlyOwned of passes) {
         for (const msg of articles.slice(-15).reverse()) {
           if (msg.getAttribute('data-bot-ephemeral') === 'true') continue;
@@ -5439,8 +5454,10 @@ class NpcBot {
   // thấy nó và bot dừng ở "không bấm được map".
   async vanduClickAnywhere(needle) {
     const needleNorm = this.vanduNormalize(needle);
+    const userId = this.userId || '';
     return await this.exec(`(() => {
       const needle = ${JSON.stringify(needleNorm)};
+      const userId = ${JSON.stringify(userId)};
       const nd = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\u0111\u0110\u00D0\u00F0]/g, 'd').replace(/[\u01A1\u01A0\u00F8\u00D8]/g, 'o').replace(/[\u01B0\u01AF]/g, 'u').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
       const isVisible = el => el && !el.disabled && el.offsetParent !== null && el.getClientRects().length > 0;
       const cands = Array.from(document.querySelectorAll('button, [role="button"], [role="menuitem"], [role="option"], [role="combobox"], [role="listbox"], [class*="option"], [class*="menuitem"], [class*="select"]'))
@@ -5450,6 +5467,13 @@ class NpcBot {
         const raw = (el.textContent || '').trim();
         if (!raw || raw.length > 120) continue;
         if (!nd(raw).includes(needle)) continue;
+        // V29: ứng viên nằm trong article của người khác thì bỏ qua (khi
+        // đã nhập User ID). Ứng viên ngoài article (vd menu chọn map) thì
+        // vẫn bấm, vì đó là menu do chính mình mở.
+        if (userId) {
+          const art = el.closest('[role="article"]');
+          if (art && !(art.innerHTML || '').includes(userId)) continue;
+        }
         let depth = 0;
         let p = el;
         while (p.parentElement) { depth++; p = p.parentElement; }
@@ -5474,8 +5498,10 @@ class NpcBot {
   // Bấm phần tử sâu nhất khớp tên; click sẽ nổi bọt lên handler của ô select.
   async vanduClickExactText(needle) {
     const needleNorm = this.vanduNormalize(needle);
+    const userId = this.userId || '';
     return await this.exec(`(() => {
       const needle = ${JSON.stringify(needleNorm)};
+      const userId = ${JSON.stringify(userId)};
       const nd = value => String(value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/[\\u0111\\u0110\\u00D0\\u00F0]/g, 'd').replace(/[\\u01A1\\u01A0\\u00F8\\u00D8]/g, 'o').replace(/[\\u01B0\\u01AF]/g, 'u').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
       const isVisible = el => el && !el.disabled && el.offsetParent !== null && el.getClientRects().length > 0;
       const cands = [];
@@ -5484,6 +5510,12 @@ class NpcBot {
         const raw = (el.textContent || '').trim();
         if (!raw || raw.length > 100) continue;
         if (nd(raw) !== needle) continue;
+        // V29: như vanduClickAnywhere — phần tử trong article người khác
+        // thì bỏ qua khi đã nhập User ID; phần tử ngoài article vẫn bấm.
+        if (userId) {
+          const art = el.closest('[role="article"]');
+          if (art && !(art.innerHTML || '').includes(userId)) continue;
+        }
         let depth = 0;
         let q = el;
         while (q.parentElement) { depth++; q = q.parentElement; }
@@ -5634,7 +5666,7 @@ class NpcBot {
       const screen = await this.vanduScanLatest();
       if (!screen) {
         idleScans++;
-        if (idleScans === 1 || idleScans % 15 === 0) this.log('⏳ Vân Du: chưa thấy màn hình game, vẫn chờ...');
+        if (idleScans === 1 || idleScans % 15 === 0) this.log(this.userId ? '⏳ Vân Du: chưa thấy màn hình game của mình (chỉ thấy màn người khác hoặc chưa có màn mới), vẫn chờ — không bấm màn người khác.' : '⏳ Vân Du: chưa thấy màn hình game, vẫn chờ...');
         if (idleScans > 90) {
           this.log('⛔ Vân Du: quá lâu không thấy màn hình game, dừng để tránh thao tác nhầm.');
           break;
