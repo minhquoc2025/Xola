@@ -100,7 +100,11 @@ class NpcBot {
     // màn mới (tin tiến độ game) với màn cũ quét lại (giữ mạch dài hơn).
     this.vanduCircuitMsgId = null;
     // V16: Số lần đi, khởi tạo 0, chỉ tăng khi bấm Trở Về Giang Hồ.
+    // V24: thêm giới hạn như Luân Hồi (luanhoiTotalRuns): ô "Số lần đi"
+    // ở tab Vân Du, 0 = không đặt giới hạn (và v24 giữ dừng sau 1 chuyến
+    // như cũ, xem vanduShouldRestartTrips).
     this.vanduTripCount = 0;
+    this.vanduTotalTrips = 0;
     // V17: số lượt buff đã lấy theo bảng khắc chế trong chuyến này (chỉ
     // tiêu 5). Reset mỗi chuyến ở đầu vanduLoop, không reset mỗi bảng.
     this.vanduCounterPicks = 0;
@@ -345,6 +349,7 @@ class NpcBot {
     if (config.vanduCmd !== undefined) this.vanduCmd = String(config.vanduCmd || '!vandu');
     if (config.vanduRealm !== undefined) this.vanduRealm = String(config.vanduRealm || '');
     if (config.vanduMap !== undefined) this.vanduMap = String(config.vanduMap || '');
+    if (config.vanduTotalTrips !== undefined) this.vanduTotalTrips = config.vanduTotalTrips;
     // V15: thứ tự skill Vân Du lấy từ cấu hình chung (bicanhSkillOrder qua
     // renderer) như Luân Hồi, không chọn cứng nữa. Rỗng thì giữ mặc định.
     if (config.vanduSkillNames !== undefined && Array.isArray(config.vanduSkillNames) && config.vanduSkillNames.length > 0) this.vanduSkillOrder = config.vanduSkillNames;
@@ -393,6 +398,10 @@ class NpcBot {
     this.processedLockIds = new Set();
     this.luanhoiSkillIdx = 0;
     this.luanhoiRunCount = 0;
+    // V24: Số lần đi Vân Du reset mỗi lần START như Luân Hồi (đếm trong
+    // phiên này tới giới hạn rồi dừng), không còn giữ qua các lần START
+    // như v16-v23 nữa.
+    this.vanduTripCount = 0;
     this.lastLuanhoiTarget = null;
     this.diangucPending = null;
     this.diangucSkillIdx = 0;
@@ -487,8 +496,8 @@ class NpcBot {
 
   resetStats() {
     this.stats = { wins: 0, losses: 0, coins: 0, exp: 0, items: [], itemCounts: {}, targetNpc: null, lastBattle: null };
-    // V16: Reset Stats cũng về 0 Số lần đi Vân Du (cách duy nhất để về 0
-    // ngoài khởi động lại tool, vì vanduLoop không reset nó).
+    // V16: Reset Stats cũng về 0 Số lần đi Vân Du (v24: START cũng reset
+    // như Luân Hồi, xem start()).
     this.vanduTripCount = 0;
   }
 
@@ -497,6 +506,16 @@ class NpcBot {
   vanduCountTrip() {
     this.vanduTripCount = (this.vanduTripCount || 0) + 1;
     return this.vanduTripCount;
+  }
+
+  // V24: còn chạy tiếp chuyến nữa không, giống Luân Hồi (đủ N thì dừng).
+  // Khác Luân Hồi ở giới hạn 0: Luân Hồi 0 = chạy vô hạn (autoRestart),
+  // Vân Du 0 = chỉ 1 chuyến rồi dừng như v16-v23, vì Vân Du giới hạn
+  // vé/ngày (6 vé) nên chạy vô hạn sẽ cạn vé rồi kẹt màn hết vé.
+  vanduShouldRestartTrips() {
+    const limit = this.vanduTotalTrips || 0;
+    if (limit === 0) return false;
+    return (this.vanduTripCount || 0) < limit;
   }
 
   parseBattleRewards(text) {
@@ -793,6 +812,7 @@ class NpcBot {
       vanduNode: this.vanduNode,
       vanduDanCount: this.vanduDanCount,
       vanduTripCount: this.vanduTripCount,
+      vanduTotalTrips: this.vanduTotalTrips,
       vanduCircuit: this.vanduCircuit,
       diangucFloor: this.diangucFloor,
       diangucStep: this.diangucStep,
@@ -5471,9 +5491,10 @@ class NpcBot {
     // V22: reset luôn msgId mạch theo chuyến, để màn đầu chuyến nào cũng
     // được tính là mới (không so với msgId chuyến trước).
     this.vanduCircuitMsgId = null;
-    // V16: cố tình KHÔNG reset vanduTripCount ở đây. Vân Du dừng sau mỗi
-    // chuyến nên nếu reset mỗi lần START thì đếm mãi vẫn là 1. Chỉ về 0
-    // khi bấm Reset Stats (xem resetStats) hoặc khởi động lại tool.
+    // V24: vanduTripCount KHÔNG reset ở đây nữa mà reset ở start() như
+    // Luân Hồi — vì 1 lần START giờ có thể chạy nhiều chuyến (tự bắt đầu
+    // lại ở cuối chuyến), reset ở đây sẽ xóa đếm giữa các chuyến. Reset
+    // Stats vẫn về 0 (xem resetStats) như trước.
     // V17: ngược lại, chỉ tiêu buff theo chuyến (số tông, buff đã chọn,
     // lượt khắc chế) PHẢI reset mỗi chuyến vì túi buff reset mỗi chuyến.
     this.vanduCounterPicks = 0;
@@ -5519,10 +5540,41 @@ class NpcBot {
       if (btnNorm.some(b => b.includes('tro ve giang ho')) || norm.includes('tro ve giang ho')) {
         // V23: bấm cuối chuyến có thử lại (xem vanduClickTripEndButton),
         // không còn thử 1 lần rồi dừng như v16-v22.
+        // V24: hết 1 chuyến = bấm xong Trở Về Giang Hồ (anh chốt). Đếm
+        // xong thì như Luân Hồi: đủ N lần thì dừng, chưa đủ thì tự bắt
+        // đầu chuyến mới (gửi lại !vandu) thay vì dừng như v16-v23. Đếm
+        // KHÔNG reset ở đây — reset ở start() cho cả phiên.
         const result = await this.vanduClickTripEndButton();
         if (result && result !== 'gone') {
           const trips = this.vanduCountTrip();
-          this.log(`🏁 Vân Du: đã về Giang Hồ, hết chuyến số ${trips}.`);
+          const limit = this.vanduTotalTrips || 0;
+          this.log(`🏁 Vân Du: đã về Giang Hồ, hết chuyến số ${trips}${limit > 0 ? ' / ' + limit : ''}.`);
+          if (!this.vanduShouldRestartTrips()) {
+            if (limit > 0) this.log(`🛑 Vân Du: đã hoàn thành đủ ${limit} lần đi. Dừng bot.`);
+            await this.stop();
+            return;
+          }
+          this.log(`🔁 Vân Du: tự động bắt đầu chuyến mới (${this.vanduCmd})...`);
+          // Reset trạng thái theo chuyến (đúng danh sách ở đầu vanduLoop),
+          // nhưng GIỮ vanduTripCount để đếm tiếp tới giới hạn.
+          this.vanduSkillIdx = 0;
+          this.vanduNode = 0;
+          this.vanduDanCount = 0;
+          this.vanduCircuit = null;
+          this.vanduCircuitMsgId = null;
+          this.vanduCounterPicks = 0;
+          this.vanduSectCounts = {};
+          this.vanduOwnedBuffs = {};
+          this.vanduMapPicked = false;
+          shopKey = '';
+          lastUnrecognized = '';
+          shopBought = false;
+          shopBiTich = false;
+          idleScans = 0;
+          await this.sendChat(this.vanduCmd);
+          await this.delay(this.rand(3000, 4000));
+          if (!this.isRunning || this.runId !== runId) return;
+          continue;
         } else if (result === 'gone') {
           this.log('⚠️ Vân Du: nút Trở Về Giang Hồ đã biến mất (có thể đã bấm tay), dừng mà không tính chuyến này.');
         } else {

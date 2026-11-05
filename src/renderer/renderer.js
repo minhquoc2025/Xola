@@ -18,6 +18,12 @@ window.addEventListener('DOMContentLoaded', () => {
     const savedUserId = localStorage.getItem('userid-vandu') || '';
     if (savedUserId) vanduUserIdEl.value = savedUserId;
   }
+  // V24: Số lần đi Vân Du, như ô cùng tên ở tab Luân Hồi.
+  const vanduTotalTripsEl = document.getElementById('vandu-total-trips');
+  if (vanduTotalTripsEl) {
+    const savedTotalTrips = localStorage.getItem('vandu-total-trips');
+    if (savedTotalTrips !== null) vanduTotalTripsEl.value = savedTotalTrips;
+  }
 
   window.api.onLogMessage((msg) => {
     appendLog(msg);
@@ -282,6 +288,11 @@ function getVanduConfig() {
     if (vanduUserId) localStorage.setItem('userid-vandu', vanduUserId);
     else localStorage.removeItem('userid-vandu');
   }
+  // V24: Số lần đi, cùng cách tính như Luân Hồi (nhập > 0 mới có giới
+  // hạn, để trống/0 thì bot giữ dừng sau 1 chuyến như cũ).
+  const vanduTotalTripsEl = document.getElementById('vandu-total-trips');
+  const vanduTotalTripsVal = vanduTotalTripsEl ? parseInt(vanduTotalTripsEl.value) : 0;
+  if (vanduTotalTripsEl) localStorage.setItem('vandu-total-trips', vanduTotalTripsEl.value);
   // V15: Vân Du lấy thứ tự skill từ cùng ô cấu hình chung (bicanhSkillOrder,
   // vd 29,26,23) như Luân Hồi, không chọn cứng trong code nữa. Rỗng thì bot
   // giữ thứ tự mặc định cũ.
@@ -298,6 +309,7 @@ function getVanduConfig() {
     buttonDelayMs: (parseFloat(document.getElementById('vandu-delay').value) || 2) * 1000,
     vanduRealm: vanduRealm,
     vanduMap: vanduRealm ? (VANDU_REALM_MAPS[vanduRealm] || '') : '',
+    vanduTotalTrips: (!isNaN(vanduTotalTripsVal) && vanduTotalTripsVal > 0) ? vanduTotalTripsVal : 0,
     vanduSkillNames: vanduSkills,
     skillClickDelayMs: getSkillClickDelayMs(),
   };
@@ -580,8 +592,12 @@ async function updateStats() {
 
     // Top row stats - Target shows battle progress
     if (status.mode === 'vandu') {
-      // V16: hiện Số lần đi (tăng khi bấm Trở Về Giang Hồ, giữ qua các lần START).
-      document.getElementById('stat-total').textContent = `🌿 Vân Du: Tiết ${status.vanduNode || 0} | Đan ${status.vanduDanCount || 0}/3 | Đã đi: ${status.vanduTripCount || 0} lần`;
+      // V16: hiện Số lần đi (tăng khi bấm Trở Về Giang Hồ). V24: như Luân
+      // Hồi, có giới hạn thì hiện dạng Z / N.
+      const vanduTrips = status.vanduTripCount || 0;
+      const vanduTripsLimit = status.vanduTotalTrips || 0;
+      const vanduTripsText = vanduTripsLimit > 0 ? `Đã đi: ${vanduTrips} / ${vanduTripsLimit} lần` : `Đã đi: ${vanduTrips} lần`;
+      document.getElementById('stat-total').textContent = `🌿 Vân Du: Tiết ${status.vanduNode || 0} | Đan ${status.vanduDanCount || 0}/3 | ${vanduTripsText}`;
     } else if (status.mode === 'dianguc') {
       document.getElementById('stat-total').textContent = `Tầng ${status.diangucFloor || 0}, bước ${status.diangucStep || 0}`;
     } else if (status.mode === 'bicanh') {

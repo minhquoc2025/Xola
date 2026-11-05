@@ -755,6 +755,15 @@
                    max="10"
                    step="0.5">
           </div>
+          <div class="config-field">
+            <label for="vandu-total-trips">Số lần đi</label>
+            <input id="vandu-total-trips"
+                   type="number"
+                   value=""
+                   min="0"
+                   max="999"
+                   placeholder="0">
+          </div>
           <div class="config-field full">
             <label for="vandu-realm">Chọn Map theo Cảnh Giới</label>
             <select id="vandu-realm" style="width: 100%;">
@@ -767,7 +776,7 @@
             </select>
           </div>
           <div class="config-field full">
-            <label style="font-size:9px;color:#888;">Vân Du: chọn cảnh giới trong list trước khi START, bot sẽ mở danh sách map trong game, chọn map tương ứng rồi bấm Bắt Đầu Xuất Phát. Để trống = chọn tay trong game. Chưa có số lần đi.</label>
+            <label style="font-size:9px;color:#888;">Vân Du: chọn cảnh giới trong list trước khi START, bot sẽ mở danh sách map trong game, chọn map tương ứng rồi bấm Bắt Đầu Xuất Phát. Để trống = chọn tay trong game. Số lần đi: nhập N thì bot tự chạy đủ N chuyến (mỗi chuyến bấm xong Trở Về Giang Hồ tính 1 lần), để trống/0 thì 1 chuyến rồi dừng như cũ.</label>
           </div>
         </div>
       </div>

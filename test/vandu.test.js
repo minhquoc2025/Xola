@@ -300,3 +300,15 @@ eq(botV17.vanduChooseDoor(['Sinh Môn', 'Hưu Môn', 'Khai Môn'], { type: 'khac
   eq(await b3.vanduClickTripEndButton(), 'gone', 'V23: nut bien mat giua chung -> gone');
   console.log('V23 trip-end retry: OK');
 })().catch(e => { console.error(e); process.exit(1); });
+
+// V24: Số lần đi Vân Du như Luân Hồi — đủ N thì dừng, chưa đủ thì chạy tiếp.
+// Giới hạn 0 = chỉ 1 chuyến rồi dừng (không chạy vô hạn như Luân Hồi).
+const botV24 = new NpcBot({ executeJavaScript() {} }, 1);
+botV24.vanduTripCount = 0; botV24.vanduTotalTrips = 0;
+eq(botV24.vanduShouldRestartTrips(), false, 'V24: gioi han 0, moi 0 chuyen -> dung sau 1');
+botV24.vanduTripCount = 1; botV24.vanduTotalTrips = 0;
+eq(botV24.vanduShouldRestartTrips(), false, 'V24: gioi han 0, xong 1 chuyen -> dung');
+botV24.vanduTripCount = 1; botV24.vanduTotalTrips = 5;
+eq(botV24.vanduShouldRestartTrips(), true, 'V24: 1/5 -> chay tiep');
+botV24.vanduTripCount = 5; botV24.vanduTotalTrips = 5;
+eq(botV24.vanduShouldRestartTrips(), false, 'V24: 5/5 -> dung');
