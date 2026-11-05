@@ -44,7 +44,9 @@ eq(bot.vanduParseCircuit('Mạch Tương Khắc, định vị khởi đầu tạ
 // V13 thay V10 ở đây: Thuật lam (không vàng/tím) mà còn lượt đổi thì Đổi, hết lượt mới chọn.
 eq(bot.vanduChooseBuff(['[Thuật] Thái Ất [Thuật Tông - Lam]', '[Kiếm] Kiếm X [Kiếm Tông - Lam]'], { Thuật: 2, Kiếm: 0 }, {}, true), { action: 'reroll' }, 'V13: Thuat lam, con luot doi -> doi');
 eq(bot.vanduChooseBuff(['[Thuật] Thái Ất [Thuật Tông - Lam]', '[Kiếm] Kiếm X [Kiếm Tông - Lam]'], { Thuật: 2, Kiếm: 0 }, {}, false).buttonText, '[Thuật] Thái Ất [Thuật Tông - Lam]', 'V13: Thuat lam, het luot doi -> chon Thuat');
-eq(bot.vanduChooseBuff(['[Kiếm] A [Kiếm Tông - Lam]', '[Khí] B [Khí Tông - Vàng (Thần Thoại)]'], { Kiếm: 0, Khí: 0 }, {}, true), { action: 'reroll' }, 'V10: khong counter/Thuat, con luot doi -> doi, khong lay vang ngay');
+// V17 thay V10 o day: Khi vang gio la 1 trong 12 buff cung (1 Khi vang)
+// nen lay luon, khong Doi bo nhu truoc nua.
+eq(bot.vanduChooseBuff(['[Kiếm] A [Kiếm Tông - Lam]', '[Khí] B [Khí Tông - Vàng (Thần Thoại)]'], { Kiếm: 0, Khí: 0 }, {}, true).buttonText, '[Khí] B [Khí Tông - Vàng (Thần Thoại)]', 'V17: Khi vang la buff cung -> lay luon, khong doi');
 eq(bot.vanduChooseBuff(['[Kiếm] A [Kiếm Tông - Lam]', '[Khí] B [Khí Tông - Vàng (Thần Thoại)]'], { Kiếm: 0, Khí: 0 }, {}, false).buttonText, '[Khí] B [Khí Tông - Vàng (Thần Thoại)]', 'V10: het luot doi -> vang con lai truoc');
 eq(bot.vanduChooseBuff(['[Kiếm] A [Kiếm Tông - Lam]'], { Kiếm: 0 }, {}, true), { action: 'reroll' }, 'V10: khong counter/Thuat -> reroll');
 eq(bot.vanduChooseBuff(['[Kiếm] A [Kiếm Tông - Lam]'], { Kiếm: 0 }, { A: true }, false).buttonText, '[Kiếm] A [Kiếm Tông - Lam]', 'V10: het luot doi -> chon con lai');
@@ -167,7 +169,10 @@ eq(bot.vanduIsCircuitComplete('Bản Đồ Thiên Cơ, Tiết Điểm 11/36'), f
 eq(bot.vanduChooseBuff(['[Ma] M [Ma Tông - Lam]', '[Kiếm] K [Kiếm Tông - Lam]'], {}, {}, true, 'Ma'), { action: 'reroll' }, 'V13: Ma lam, con luot doi -> doi');
 eq(bot.vanduChooseBuff(['[Ma] M [Ma Tông - Lam]', '[Kiếm] K [Kiếm Tông - Lam]'], {}, {}, false, 'Ma').buttonText, '[Ma] M [Ma Tông - Lam]', 'V13: Ma lam, het luot doi -> chon Ma lam');
 eq(bot.vanduChooseBuff(['[Ma] M [Ma Tông - Tím (Cực Phẩm)]', '[Kiếm] K [Kiếm Tông - Lam]'], {}, {}, true, 'Ma').buttonText, '[Ma] M [Ma Tông - Tím (Cực Phẩm)]', 'V13: Ma tim, con luot doi -> chon Ma tim, khong doi');
-eq(bot.vanduChooseBuff(['[Ma] M [Ma Tông - Lam]', '[Khí] K [Khí Tông - Vàng (Thần Thoại)]'], {}, {}, true, 'Ma'), { action: 'reroll' }, 'V13: Ma lam + Khi vang khac tong, con luot doi -> doi (vang/tim tinh trong nhom muon lay)');
+// V17 thay V13 o day: Khi vang gio tinh vao nhom muon lay (chi tieu) nen
+// co vang -> khong Doi nua; nhung thu tu ro thi khac che van thang, nen
+// chon Ma Lam truoc Khi Vang (giong ban het luot doi ben duoi).
+eq(bot.vanduChooseBuff(['[Ma] M [Ma Tông - Lam]', '[Khí] K [Khí Tông - Vàng (Thần Thoại)]'], {}, {}, true, 'Ma').buttonText, '[Ma] M [Ma Tông - Lam]', 'V17: Ma lam + Khi vang, con luot -> khong doi, chon Ma lam (khac che truoc)');
 eq(bot.vanduChooseBuff(['[Ma] M [Ma Tông - Lam]', '[Khí] K [Khí Tông - Vàng (Thần Thoại)]'], {}, {}, false, 'Ma').buttonText, '[Ma] M [Ma Tông - Lam]', 'V13: Ma lam + Khi vang, het luot doi -> chon Ma lam truoc vang khac tong');
 eq(bot.vanduChooseBuff(['[Ma] M [Ma Tông - Lam]', '[Thuật] T [Thuật Tông - Vàng (Thần Thoại)]'], {}, {}, true, 'Ma').buttonText, '[Ma] M [Ma Tông - Lam]', 'V13: khac che thang Thuat vang (luat cu giu nguyen)');
 
@@ -210,3 +215,24 @@ eq(bot3.vanduCountTrip(), 2, 'V16: chuyen 2');
 eq(bot3.vanduTripCount, 2, 'V16: giu qua cac lan goi (khong reset o vanduLoop)');
 bot3.resetStats();
 eq(bot3.vanduTripCount, 0, 'V16: Reset Stats ve 0');
+
+// V17 (2026-11-05): tui cung 5 Thuat + 1 Van vang + 1 Khi vang + 5 khac che,
+// trung nang sao toi da 4 lan, vang > tim > lam > luc trong moi ro.
+const botV17 = new NpcBot({ executeJavaScript() {} }, 1);
+eq(botV17.vanduCounterPicks, 0, 'V17: khoi tao 0 luot khac che');
+eq(botV17.vanduChooseBuff(['[Vận] V [Vận Mệnh - Vàng (Thần Thoại)]', '[Ma] Ma Tôn Giáng Thế [Ma Tông - Vàng (Thần Thoại)]', '[Kiếm] K [Kiếm Tông - Lục]', '[Ma] T [Ma Tông - Lam]'], { Ma: 0, Vận: 0 }, {}, false, 'Ma').buttonText, '[Ma] Ma Tôn Giáng Thế [Ma Tông - Vàng (Thần Thoại)]', 'V17: bang tiet 1 -> Ma Vang (khac che thang Van Vang khi cung vang)');
+eq(botV17.vanduChooseBuff(['[Vận] V [Vận Mệnh - Vàng (Thần Thoại)]', '[Ma] Ma Tôn Giáng Thế [Ma Tông - Vàng (Thần Thoại)]', '[Kiếm] K [Kiếm Tông - Lục]', '[Ma] T [Ma Tông - Lam]'], { Ma: 0, Vận: 0 }, {}, false, 'Ma').reason, 'counter', 'V17: ly do la counter');
+eq(botV17.vanduChooseBuff(['[Thuật] T [Thuật Tông - Vàng (Thần Thoại)]', '[Kiếm] K [Kiếm Tông - Lam]'], { Thuật: 0 }, {}, true, 'Ma').buttonText, '[Thuật] T [Thuật Tông - Vàng (Thần Thoại)]', 'V17: khong co khac che -> lay Thuat Vang');
+eq(botV17.vanduChooseBuff(['[Thuật] T [Thuật Tông - Vàng (Thần Thoại)]', '[Kiếm] K [Kiếm Tông - Lam]'], { Thuật: 0 }, {}, true, 'Ma').reason, 'thuat', 'V17: ly do la thuat');
+eq(botV17.vanduChooseBuff(['[Vận] V [Vận Mệnh - Vàng (Thần Thoại)]', '[Kiếm] K [Kiếm Tông - Lam]'], { Thuật: 5, Vận: 0, Khí: 1 }, {}, true, 'Ma', null, 5).buttonText, '[Vận] V [Vận Mệnh - Vàng (Thần Thoại)]', 'V17: chi con Van thieu -> lay Van Vang');
+eq(botV17.vanduChooseBuff(['[Vận] V [Vận Mệnh - Vàng (Thần Thoại)]', '[Kiếm] K [Kiếm Tông - Lam]'], { Thuật: 5, Vận: 0, Khí: 1 }, {}, true, 'Ma', null, 5).reason, 'van', 'V17: ly do la van');
+eq(botV17.vanduChooseBuff(['[Khí] K [Khí Tông - Vàng (Thần Thoại)]', '[Kiếm] Y [Kiếm Tông - Lam]'], { Thuật: 5, Vận: 1, Khí: 0 }, {}, true, 'Ma', null, 5).reason, 'khi', 'V17: chi con Khi thieu -> lay Khi Vang');
+eq(botV17.vanduChooseBuff(['[Ma] M [Ma Tông - Lam]', '[Thuật] T [Thuật Tông - Lam]'], { Thuật: 0 }, {}, true, 'Ma'), { action: 'reroll' }, 'V17: chi tieu toan lam -> doi');
+eq(botV17.vanduChooseBuff(['[Ma] M [Ma Tông - Lam]', '[Thuật] T [Thuật Tông - Lam]'], { Thuật: 0 }, {}, false, 'Ma').buttonText, '[Ma] M [Ma Tông - Lam]', 'V17: het luot doi -> chon Ma Lam (khac che truoc)');
+eq(botV17.vanduChooseBuff(['[Ma] Ma Tôn [Ma Tông - Vàng (Thần Thoại)]', '[Kiếm] K [Kiếm Tông - Lam]'], { Thuật: 5, Vận: 1, Khí: 1, Ma: 1 }, { 'Ma Tôn': 2 }, true, 'Ma', null, 5).buttonText, '[Ma] Ma Tôn [Ma Tông - Vàng (Thần Thoại)]', 'V17: chi tieu du -> lay trung nang sao');
+eq(botV17.vanduChooseBuff(['[Ma] Ma Tôn [Ma Tông - Vàng (Thần Thoại)]', '[Kiếm] K [Kiếm Tông - Lam]'], { Thuật: 5, Vận: 1, Khí: 1, Ma: 1 }, { 'Ma Tôn': 2 }, true, 'Ma', null, 5).reason, 'duplicate', 'V17: ly do la duplicate');
+eq(botV17.vanduChooseBuff(['[Ma] Ma Tôn [Ma Tông - Vàng (Thần Thoại)]', '[Kiếm] K [Kiếm Tông - Lam]'], { Thuật: 5, Vận: 1, Khí: 1, Ma: 1 }, { 'Ma Tôn': 5 }, false, 'Ma', null, 5).buttonText, '[Kiếm] K [Kiếm Tông - Lam]', 'V17: trung da nang 4 lan (5 lan chon) -> khong nang nua, lay buff con lai');
+eq(botV17.vanduChooseBuff(['[Ma] M [Ma Tông - Vàng (Thần Thoại)]', '[Thuật] T [Thuật Tông - Vàng (Thần Thoại)]'], { Thuật: 0 }, {}, true, 'Ma', null, 5).buttonText, '[Thuật] T [Thuật Tông - Vàng (Thần Thoại)]', 'V17: du luot khac che -> khac che khong chen nua, lay Thuat Vang');
+eq(botV17.vanduChooseBuff(['[Thuật] T [Thuật Tông - Vàng (Thần Thoại)]', '[Ma] M [Ma Tông - Lam]'], { Thuật: 5 }, {}, false, 'Ma', null, 0).buttonText, '[Ma] M [Ma Tông - Lam]', 'V17: Thuat du 5 -> Thuat Vang khong phai chi tieu, lay Ma Lam khac che');
+eq(botV17.vanduChooseBuff(['[Ma] M [Ma Tông - Lam]', '[Thuật] T [Thuật Tông - Lam]', '[Kiếm] K [Kiếm Tông - Lam]'], { Thuật: 0 }, { 'K': 1 }, true, 'Ma').buttonText, '[Kiếm] K [Kiếm Tông - Lam]', 'V17: chi tieu toan lam + co trung -> lay trung truoc khi doi');
+eq(botV17.vanduChooseBuff(['[Vận] V [Vận Mệnh - Tím (Cực Phẩm)]', '[Thuật] T [Thuật Tông - Lam]'], { Thuật: 0, Vận: 0 }, {}, true, 'Ma'), { action: 'reroll' }, 'V17: Van tim khong phai chi tieu (Van can vang) -> doi, khong lay Van Tim');

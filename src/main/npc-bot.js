@@ -98,6 +98,9 @@ class NpcBot {
     this.vanduCircuit = null;
     // V16: Số lần đi, khởi tạo 0, chỉ tăng khi bấm Trở Về Giang Hồ.
     this.vanduTripCount = 0;
+    // V17: số lượt buff đã lấy theo bảng khắc chế trong chuyến này (chỉ
+    // tiêu 5). Reset mỗi chuyến ở đầu vanduLoop, không reset mỗi bảng.
+    this.vanduCounterPicks = 0;
     this.vanduSectCounts = {};
     this.vanduOwnedBuffs = {};
     this.dianguc = false;
@@ -4891,7 +4894,13 @@ class NpcBot {
     return found;
   }
 
-  vanduChooseBuff(cards, sectCounts, ownedNames, allowReroll, counterSect, cardRarities) {
+  // V17 (anh chốt 2026-11-05, ảnh bảng Tông Môn Lĩnh Vực): túi cứng 12 buff
+  // = 5 Thuật + 1 Vận (vàng) + 1 Khí (vàng) + 5 theo bảng khắc chế quái.
+  // Bot đọc số tông từ bảng (sectCounts: "X Tông: N/3" + số nó tự đếm)
+  // để biết tông nào còn thiếu. Trả thêm reason để bên gọi cập nhật đúng
+  // bộ đếm (chỉ lượt khắc chế mới tăng counterPicks, chỉ buff mới mới
+  // tăng số tông). Độ hiếm: Vàng 4, Tím 3, Lam 2, Lục 1, 0 = không đọc được.
+  vanduChooseBuff(cards, sectCounts, ownedNames, allowReroll, counterSect, cardRarities, counterPicks) {
     const parsed = (cards || []).map((c, i) => {
       const card = this.vanduParseBuffCard(c);
       // Độ hiếm ưu tiên lấy từ mô tả bảng (cardRarities) vì nút không ghi;
@@ -4900,59 +4909,66 @@ class NpcBot {
       return card;
     }).filter(c => c.name);
     if (parsed.length === 0) return null;
-    const countOf = c => (c.sect && sectCounts[c.sect] !== undefined ? sectCounts[c.sect] : 0);
+    const counts = sectCounts || {};
+    const ownedCount = name => {
+      const v = ownedNames ? ownedNames[name] : undefined;
+      if (v === true) return 1; // tương thích test cũ dùng boolean
+      const n = Number(v);
+      return Number.isFinite(n) ? n : 0;
+    };
+    const isNew = c => ownedCount(c.name) < 1;
+    // Buff trùng chỉ được nâng tối đa 4 lần: lần đầu (1) + 4 lần nâng = tối
+    // đa 5 lần chọn cùng 1 buff. Đã chọn 5 lần thì không nâng nữa.
+    const isUpgradable = c => ownedCount(c.name) >= 1 && ownedCount(c.name) < 5;
+    const countOf = c => (c.sect && counts[c.sect] !== undefined ? counts[c.sect] : 0);
     const byRarity = (a, b) => (b.rarity - a.rarity) || (countOf(b) - countOf(a));
-    const counter = counterSect ? parsed.filter(c => c.sect === counterSect) : [];
-    const thuat = parsed.filter(c => c.sect === 'Thuật');
-    // Nhóm buff muốn lấy: khắc chế + Thuật (trùng nhau khi khắc chế là Thuật
-    // thì chỉ tính 1 lần). Vàng = Thần Thoại (4), Tím = Cực Phẩm (3).
-    const wantedMap = new Map();
-    for (const c of [...counter, ...thuat]) wantedMap.set(c.raw, c);
-    const wanted = [...wantedMap.values()];
-    // (0) V13 (anh chốt 2026-11-05): có buff muốn lấy mà không có cái nào
-    // vàng/tím (toàn lam/lục) thì bấm Đổi để tìm tiếp, chứ không chọn ngay
-    // như v10 nữa. Áp dụng cho mọi bảng còn lượt đổi, không chỉ bảng đầu.
-    // "Không vàng/tím" hiểu là trong nhóm muốn lấy — vd bảng có Ma Lam +
-    // Khí Vàng thì vẫn Đổi, vì Ma (cái cần) không vàng/tím; nếu anh ý là
-    // "cả bảng không có vàng/tím nào" thì đổi điều kiện này thành parsed.
-    if (wanted.length > 0) {
-      // V14: độ hiếm 0 = không đọc được (nút không ghi độ hiếm, mô tả
-      // không gán được) thì KHÔNG coi là thấp. Chỉ Đổi khi biết chắc toàn
-      // lam/lục (1-2). Đổi đi 1 buff vàng chỉ vì không đọc được chữ vàng
-      // là sai đắt hơn chọn nhầm 1 buff lam.
-      const hasGood = wanted.some(c => c.rarity >= 3 || c.rarity === 0);
-      if (!hasGood && allowReroll) return { action: 'reroll' };
-      // Hết lượt đổi (hoặc đã có vàng/tím) thì chọn: khắc chế trước
-      // (luật cũ: khắc chế thắng vàng, mẫu tiết 6), rồi tới Thuật, trong
-      // mỗi tông vàng/tím trước. Hết lượt mà chỉ có Ma Lam thì chọn Ma Lam
-      // trước Khí Vàng khác tông.
-      if (counter.length > 0) {
-        counter.sort(byRarity);
-        return { action: 'pick', buttonText: counter[0].raw };
-      }
-      if (thuat.length > 0) {
-        thuat.sort(byRarity);
-        return { action: 'pick', buttonText: thuat[0].raw };
-      }
+    const pick = (bucket, card) => ({ action: 'pick', buttonText: card.raw, reason: bucket });
+    const bestOf = list => (list.length > 0 ? [...list].sort(byRarity)[0] : null);
+    // Các rổ chỉ tiêu tính trên buff MỚI (trùng không tăng số tông, không
+    // tính vào chỉ tiêu). Vận/Khí chỉ tính khi là vàng, đúng anh dặn.
+    const fresh = parsed.filter(isNew);
+    const buckets = [];
+    const counterPicksSoFar = Number(counterPicks) || 0;
+    if (counterSect && counterPicksSoFar < 5) {
+      const b = bestOf(fresh.filter(c => c.sect === counterSect));
+      if (b) buckets.push(['counter', b]);
     }
-    // (1) V10 giữ nguyên: không có cả khắc chế lẫn Thuật thì mới bấm Đổi
-    // Vận để tìm. allowReroll là "game còn cho đổi trên bảng này" do bên
-    // gọi đọc từ nút Đổi Vận, không phải đếm cứng 2 nữa.
+    if ((counts['Thuật'] || 0) < 5) {
+      const b = bestOf(fresh.filter(c => c.sect === 'Thuật'));
+      if (b) buckets.push(['thuat', b]);
+    }
+    if ((counts['Vận'] || 0) < 1) {
+      const b = bestOf(fresh.filter(c => c.sect === 'Vận' && c.rarity === 4));
+      if (b) buckets.push(['van', b]);
+    }
+    if ((counts['Khí'] || 0) < 1) {
+      const b = bestOf(fresh.filter(c => c.sect === 'Khí' && c.rarity === 4));
+      if (b) buckets.push(['khi', b]);
+    }
+    // Thứ tự rổ: khắc chế > Thuật > Vận > Khí. Đây là thứ tự ưu tiên khi
+    // chọn, KHÔNG phải thứ tự trong danh sách túi cứng của anh. Khắc chế
+    // thắng vàng khác tông (mẫu tiết 6: Ma Tím thắng Khí Vàng), và trong
+    // mỗi rổ thì vàng > tím > lam > lục (anh dặn "bất kể tông nào").
+    // V14: độ hiếm 0 = không đọc được thì KHÔNG coi là thấp.
+    const hasGood = buckets.some(([, c]) => c.rarity >= 3 || c.rarity === 0);
+    if (buckets.length > 0 && hasGood) return pick(buckets[0][0], buckets[0][1]);
+    // Chưa có buff chỉ tiêu vàng/tím: buff trùng nâng sao là giá trị chắc
+    // chắn, lấy trước khi đánh cược Đổi (Đổi có thể làm mất buff trùng).
+    const dup = bestOf(parsed.filter(isUpgradable));
+    if (dup) return pick('duplicate', dup);
+    if (buckets.length > 0) {
+      // Chỉ tiêu toàn lam/lục: còn lượt thì Đổi tìm vàng/tím (luật v13),
+      // hết lượt thì bắt buộc chọn theo thứ tự rổ, khắc chế trước.
+      if (allowReroll) return { action: 'reroll' };
+      return pick(buckets[0][0], buckets[0][1]);
+    }
+    // Không còn buff chỉ tiêu nào trên bảng thì mới Đổi, hết lượt thì
+    // chọn buff còn lại theo độ hiếm. Buff đã nâng max (5 lần) thì loại
+    // khỏi "còn lại" vì bấm nữa cũng không nâng được; chỉ khi bảng toàn
+    // buff max (hiếm) mới bấm tạm 1 cái để qua bảng, thay vì đứng im.
     if (allowReroll) return { action: 'reroll' };
-    // (2) Đã hết lượt đổi và không có buff muốn lấy thì mới chọn những buff
-    // còn lại — vàng/tím trước, rồi tới buff trùng để nâng bậc, rồi tới
-    // tông đang có nhiều nhất. Luật Lĩnh Vực gần ngưỡng cũ không còn chen
-    // trước Thuật hay trước Đổi nữa.
-    const remaining = [...parsed].sort(byRarity);
-    const dup = remaining.filter(c => ownedNames[c.name]);
-    if (remaining[0] && remaining[0].rarity >= 3) {
-      return { action: 'pick', buttonText: remaining[0].raw };
-    }
-    if (dup.length > 0) {
-      dup.sort(byRarity);
-      return { action: 'pick', buttonText: dup[0].raw };
-    }
-    return { action: 'pick', buttonText: remaining[0].raw };
+    const pickable = parsed.filter(c => ownedCount(c.name) < 5);
+    return pick('remaining', bestOf(pickable.length > 0 ? pickable : parsed));
   }
 
   vanduShopAction(danCount, boughtThisVisit, biTichDoneThisVisit) {
@@ -5281,6 +5297,9 @@ class NpcBot {
     // V16: cố tình KHÔNG reset vanduTripCount ở đây. Vân Du dừng sau mỗi
     // chuyến nên nếu reset mỗi lần START thì đếm mãi vẫn là 1. Chỉ về 0
     // khi bấm Reset Stats (xem resetStats) hoặc khởi động lại tool.
+    // V17: ngược lại, chỉ tiêu buff theo chuyến (số tông, buff đã chọn,
+    // lượt khắc chế) PHẢI reset mỗi chuyến vì túi buff reset mỗi chuyến.
+    this.vanduCounterPicks = 0;
     this.vanduSectCounts = {};
     this.vanduOwnedBuffs = {};
     this.vanduMapPicked = false;
@@ -5512,7 +5531,7 @@ class NpcBot {
           // Không đọc được số thì dự phòng tối đa 4 lượt mỗi bảng.
           const remaining = this.vanduRerollRemaining(cur.text || '', cur.buttons || []);
           const allowReroll = !rerollBlocked && !!doiVanBtn && (remaining !== null ? remaining > 0 : rerolls < 4);
-          const choice = this.vanduChooseBuff(buffButtons, this.vanduSectCounts, this.vanduOwnedBuffs, allowReroll, counterSect, cardRarities);
+          const choice = this.vanduChooseBuff(buffButtons, this.vanduSectCounts, this.vanduOwnedBuffs, allowReroll, counterSect, cardRarities, this.vanduCounterPicks);
           if (!choice) break;
           if (choice.action === 'reroll') {
             // Ghi rõ bảng đang có gì để lần sau chẩn đoán được vì sao Đổi
@@ -5541,9 +5560,18 @@ class NpcBot {
           const card = this.vanduParseBuffCard(choice.buttonText);
           const clicked = await this.vanduClickButton(choice.buttonText);
           if (clicked) {
-            if (card.name) this.vanduOwnedBuffs[card.name] = true;
-            if (card.sect) this.vanduSectCounts[card.sect] = (this.vanduSectCounts[card.sect] || 0) + 1;
-            this.log(`✨ Vân Du: chọn buff "${clicked}"`);
+            // V17: đếm buff đã chọn bằng SỐ LẦN (để biết nâng sao tới đâu),
+            // không còn boolean. Chỉ buff MỚI mới tăng số tông và (nếu lý
+            // do là khắc chế) tăng lượt khắc chế; buff trùng chỉ nâng sao,
+            // không làm tăng số tông — trước đây cộng cả trùng nên số tông
+            // lệch khỏi bảng game.
+            const prevOwned = this.vanduOwnedBuffs[card.name] || 0;
+            const isNewBuff = !prevOwned;
+            if (card.name) this.vanduOwnedBuffs[card.name] = prevOwned + 1;
+            if (isNewBuff && card.sect) this.vanduSectCounts[card.sect] = (this.vanduSectCounts[card.sect] || 0) + 1;
+            if (isNewBuff && choice.reason === 'counter') this.vanduCounterPicks = (this.vanduCounterPicks || 0) + 1;
+            const reasonTag = choice.reason ? ` [${choice.reason}]` : '';
+            this.log(`✨ Vân Du: chọn buff "${clicked}"${reasonTag}`);
             picked = true;
           } else {
             break;
