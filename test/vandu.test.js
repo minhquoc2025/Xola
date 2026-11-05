@@ -109,3 +109,10 @@ eq(bot.vanduNormalize('Thiên Sơn Tuyết Lãnh'), 'thien son tuyet lanh', 'map
 eq(bot.vanduCurrentMap('Đại Vùng Đang Chọn: 🌿 Thanh Vân TrấnThôn trấn thanh bình nơi chân núi Thanh Vân khởi nguồn của mọi hành trình'), 'Thanh Vân Trấn', 'current map dinh mo ta -> Thanh Van');
 eq(bot.vanduCurrentMap('Đại Vùng Đang Chọn: 🌿 Thiên Sơn Tuyết Lãnh\nMô tả'), 'Thiên Sơn Tuyết Lãnh', 'current map Thien Son');
 eq(bot.vanduCurrentMap('không có dòng đại vùng'), '', 'khong co dong -> rong');
+
+// V8 (2026-11-05): không có mạch, ưu tiên Thương -> Sinh -> Cảnh -> Kinh
+eq(bot.vanduChooseDoor(['Hưu Môn', 'Kinh Môn'], null), 'Kinh Môn', 'no circuit: Kinh truoc Huu (bang moi)');
+eq(bot.vanduChooseDoor(['Cảnh Môn', 'Kinh Môn'], null), 'Cảnh Môn', 'no circuit: Canh truoc Kinh');
+eq(bot.vanduChooseDoor(['Cảnh Môn', 'Thương Môn', 'Tử Môn'], null), 'Thương Môn', 'no circuit: man Tiet 11, Thuong thang');
+eq(bot.vanduChooseDoor(['Khai Môn', 'Hưu Môn'], null), 'Hưu Môn', 'no circuit: duoi sau Kinh, Huu truoc Khai');
+eq(bot.vanduChooseDoor(['Đỗ Môn', 'Khai Môn'], null), 'Khai Môn', 'no circuit: duoi sau Kinh, Khai truoc Do');

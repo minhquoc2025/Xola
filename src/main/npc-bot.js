@@ -4677,9 +4677,15 @@ class NpcBot {
     return { type, elements: known, last: known[known.length - 1] };
   }
 
+  // V8 (anh chốt 2026-11-05, màn Tiết 11 đã thông suốt 2 mạch nên không còn
+  // mạch để đi theo): khi không có mạch, ưu tiên Thương -> Sinh -> Cảnh ->
+  // Kinh. Đuôi sau Kinh giữ nguyên thứ tự cũ (Hưu -> Khai -> Đỗ, Tử cuối)
+  // vì anh chưa nói tới đuôi; nếu đuôi muốn khác thì đổi tiếp một dòng này.
+  // Thứ tự này cũng là tie-break khi một hành có 2 cửa (Kinh trước Khai,
+  // Thương trước Đỗ, Sinh trước Tử vẫn giữ nguyên như cũ).
   vanduDoorPriority(buttonText) {
     const t = this.vanduNormalize(buttonText);
-    const order = ['thuong mon', 'sinh mon', 'canh mon', 'huu mon', 'kinh mon', 'khai mon', 'do mon', 'tu mon'];
+    const order = ['thuong mon', 'sinh mon', 'canh mon', 'kinh mon', 'huu mon', 'khai mon', 'do mon', 'tu mon'];
     for (let i = 0; i < order.length; i++) {
       if (t.includes(order[i])) return i;
     }
