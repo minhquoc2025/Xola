@@ -4681,8 +4681,9 @@ class NpcBot {
   // mạch để đi theo): khi không có mạch, ưu tiên Thương -> Sinh -> Cảnh ->
   // Kinh. Đuôi sau Kinh giữ nguyên thứ tự cũ (Hưu -> Khai -> Đỗ, Tử cuối)
   // vì anh chưa nói tới đuôi; nếu đuôi muốn khác thì đổi tiếp một dòng này.
-  // Thứ tự này cũng là tie-break khi một hành có 2 cửa (Kinh trước Khai,
-  // Thương trước Đỗ, Sinh trước Tử vẫn giữ nguyên như cũ).
+  // Thứ tự này dùng cho 2 việc: cửa đầu tiên khi mới vô mạch, và tie-break
+  // khi một hành có 2 cửa (Kinh trước Khai, Thương trước Đỗ, Sinh trước Tử
+  // vẫn giữ nguyên như cũ). V11: nó KHÔNG dùng làm fallback khi đã vô mạch.
   vanduDoorPriority(buttonText) {
     const t = this.vanduNormalize(buttonText);
     const order = ['thuong mon', 'sinh mon', 'canh mon', 'kinh mon', 'huu mon', 'khai mon', 'do mon', 'tu mon'];
@@ -4692,10 +4693,39 @@ class NpcBot {
     return 99;
   }
 
+  // V11 (lỗi nghiêm trọng 2026-11-05, mạch Khắc Kim->Mộc->Thổ): bot tự tiến
+  // mạch sau cú bấm đúng của chính nó, vì game tính bước ngay khi vào đúng
+  // cửa. Chỉ tiến khi cửa bấm đúng là bước tiếp theo của mạch; cửa neo mạch
+  // (khi chưa có mạch) không tiến gì, chờ game báo mạch.
+  vanduAdvanceCircuit(circuit, element) {
+    if (!circuit || !element || !circuit.last) return circuit;
+    const next = this.vanduNextElement(circuit.type, circuit.last);
+    if (element !== next) return circuit;
+    return { type: circuit.type, elements: [...(circuit.elements || []), element], last: element };
+  }
+
+  // V11: gộp mạch đọc từ màn hình vào mạch bot đang giữ, nhưng KHÔNG cho
+  // màn hình cũ làm tụt mạch. Màn hình chỉ ghi neo mạch (vd chỉ [Kim]) trong
+  // khi bot đã tự tiến tới [Kim, Mộc] là màn cũ, phải giữ [Kim, Mộc]. Chỉ
+  // nhận màn mới khi: chưa có mạch, đổi loại mạch, hoặc tiến độ dài hơn
+  // hoặc bằng mạch đang giữ.
+  vanduMergeCircuit(current, parsed) {
+    if (!parsed) return current;
+    if (!current) return parsed;
+    if (parsed.type !== current.type) return parsed;
+    if ((parsed.elements || []).length >= (current.elements || []).length) return parsed;
+    return current;
+  }
+
   vanduChooseDoor(buttons, circuit) {
     const list = (buttons || []).filter(Boolean);
     if (circuit) {
-      const next = this.vanduNextElement(circuit.type, circuit.last);
+      // V11 (anh chốt 2026-11-05): cửa ưu tiên CHỈ dùng cho cửa đầu tiên khi
+      // mới vô mạch (khi chưa có mạch). Đã vô mạch rồi thì chỉ được đi theo
+      // bảng tương sinh/tương khắc — không rơi về ưu tiên cửa nữa. Nếu bước
+      // tiếp theo không có cửa trong 3 lựa chọn, hoặc chưa biết hành hiện
+      // tại, thì trả null (không bấm) còn hơn bấm sai mạch.
+      const next = circuit.last ? this.vanduNextElement(circuit.type, circuit.last) : null;
       if (next) {
         const hits = list.filter(b => this.vanduElementOfDoor(b) === next);
         if (hits.length === 1) return hits[0];
@@ -4712,10 +4742,11 @@ class NpcBot {
           return hits[0];
         }
       }
+      return null;
     }
-    // Không mạch, hoặc mạch không có cửa đúng trong 3 lựa chọn: ưu tiên
-    // Thương rồi Sinh (anh chốt 2026-11-04, thay Cảnh ở vị trí thứ 2 của v1),
-    // rồi Cảnh, Hưu, Kinh, Khai, Đỗ; Tử Môn chỉ khi không còn cửa nào khác
+    // Chưa có mạch: cửa đầu tiên khi vô mạch, ưu tiên Thương rồi Sinh
+    // (anh chốt 2026-11-04, thay Cảnh ở vị trí thứ 2 của v1), rồi Cảnh,
+    // Kinh, Hưu, Khai, Đỗ; Tử Môn chỉ khi không còn cửa nào khác
     // (trường hợp chỉ có Tử thì trả null như v1 để chờ màn mới).
     const sorted = [...list].sort((a, c) => this.vanduDoorPriority(a) - this.vanduDoorPriority(c));
     const first = sorted.find(x => !this.vanduNormalize(x).includes('tu mon'));
@@ -5259,10 +5290,12 @@ class NpcBot {
       }
 
       // Cập nhật mạch từ mọi màn hình có ghi mạch, và xóa mạch khi hoàn thành.
+      // V11: gộp bằng vanduMergeCircuit để màn hình cũ (chỉ ghi neo mạch)
+      // không làm tụt mạch bot đã tự tiến sau cú bấm đúng.
       const parsedCircuit = this.vanduParseCircuit(text);
-      if (parsedCircuit) this.vanduCircuit = parsedCircuit;
+      if (parsedCircuit) this.vanduCircuit = this.vanduMergeCircuit(this.vanduCircuit, parsedCircuit);
       const correctMatch = text.match(/bước đúng huyền cơ mang hành\s*(Mộc|Hỏa|Thổ|Kim|Thủy)/);
-      if (correctMatch && this.vanduCircuit) this.vanduCircuit = { type: this.vanduCircuit.type, elements: [...(this.vanduCircuit.elements || []), correctMatch[1]], last: correctMatch[1] };
+      if (correctMatch && this.vanduCircuit && correctMatch[1] !== this.vanduCircuit.last) this.vanduCircuit = { type: this.vanduCircuit.type, elements: [...(this.vanduCircuit.elements || []), correctMatch[1]], last: correctMatch[1] };
       if (/HOÀN MỸ|thông trọn vẹn mạch/i.test(text)) this.vanduCircuit = null;
 
       // Bảng Tiếp Tục Tiến Sâu: sau thua boss (về checkpoint) và sau giải đố
@@ -5412,10 +5445,31 @@ class NpcBot {
       const doorButtons = buttons.filter(b => this.vanduElementOfDoor(b) !== null);
       const isDoor = norm.includes('nga re') || norm.includes('hay chon 1 cua') || doorButtons.length >= 2;
       if (isDoor && doorButtons.length > 0) {
-        const chosen = this.vanduChooseDoor(doorButtons, this.vanduCircuit);
+        const circuitBefore = this.vanduCircuit;
+        const chosen = this.vanduChooseDoor(doorButtons, circuitBefore);
         if (chosen) {
-          await this.vanduClickButton(chosen);
-          this.log(`🚪 Vân Du: chọn cửa "${chosen}"${this.vanduCircuit ? ` (mạch ${this.vanduCircuit.type}, sau ${this.vanduCircuit.last || '?'})` : ''}`);
+          // V11: bấm đúng bước mạch thì tự tiến mạch ngay, không chờ màn
+          // hình sau nhắc lại tiến độ (đó là gốc lỗi Kim->Mộc rồi quay lại
+          // Thương). Cửa neo mạch (chưa có mạch) không tiến gì.
+          const chosenElement = this.vanduElementOfDoor(chosen);
+          const clicked = await this.vanduClickButton(chosen);
+          if (clicked && circuitBefore && circuitBefore.last) {
+            const advanced = this.vanduAdvanceCircuit(circuitBefore, chosenElement);
+            if (advanced !== circuitBefore) {
+              this.vanduCircuit = advanced;
+              this.log(`🚪 Vân Du: chọn cửa "${chosen}" — mạch ${circuitBefore.type} tiến ${circuitBefore.last} -> ${advanced.last}, bước tiếp là ${this.vanduNextElement(advanced.type, advanced.last)}`);
+            } else {
+              this.log(`🚪 Vân Du: chọn cửa "${chosen}"${circuitBefore ? ` (mạch ${circuitBefore.type}, sau ${circuitBefore.last || '?'})` : ''}`);
+            }
+          } else {
+            this.log(`🚪 Vân Du: chọn cửa "${chosen}"${circuitBefore ? ` (mạch ${circuitBefore.type}, sau ${circuitBefore.last || '?'})` : ''}`);
+          }
+        } else if (circuitBefore) {
+          // V11: đang có mạch mà không có cửa đúng thì không bấm, còn hơn
+          // bấm sai mạch. Log rõ cần hành nào để anh kiểm tra màn hình.
+          const need = circuitBefore.last ? this.vanduNextElement(circuitBefore.type, circuitBefore.last) : null;
+          if (need) this.log(`⛔ Vân Du: mạch ${circuitBefore.type} cần ${need} nhưng không có cửa ${need} trong [${doorButtons.join(', ')}], không bấm để tránh sai mạch`);
+          else this.log(`⛔ Vân Du: mạch ${circuitBefore.type} chưa biết hành hiện tại, không đoán cửa`);
         } else {
           this.log('⚠️ Vân Du: chỉ thấy cửa Tử Môn, không chọn theo luật (chờ màn hình mới)');
         }

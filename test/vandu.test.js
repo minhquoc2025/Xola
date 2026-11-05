@@ -136,3 +136,20 @@ eq(bot.vanduChooseDoor(['Tử Môn', 'Cảnh Môn', 'Kinh Môn'], { type: 'sinh'
 eq(bot.vanduChooseDoor(['Tử Môn', 'Cảnh Môn', 'Kinh Môn'], { type: 'khac', last: 'Mộc' }), 'Tử Môn', 'khac Moc->Tho, chi co Tu -> Tu');
 eq(bot.vanduChooseDoor(['Sinh Môn', 'Tử Môn', 'Cảnh Môn'], { type: 'sinh', last: 'Hỏa' }), 'Sinh Môn', 'sinh Hoa->Tho, co ca Sinh/Tu -> Sinh');
 eq(bot.vanduChooseDoor(['Sinh Môn', 'Tử Môn', 'Cảnh Môn'], { type: 'khac', last: 'Mộc' }), 'Sinh Môn', 'khac Moc->Tho, co ca Sinh/Tu -> Sinh');
+
+// V11 (lỗi nghiêm trọng 2026-11-05): mạch Khắc Kim->Mộc, lượt trước Kinh->Đỗ,
+// lượt sau phải Thổ (Sinh/Tử), không được quay lại Thương.
+// - Bot tự tiến mạch sau cú bấm đúng.
+eq(bot.vanduAdvanceCircuit({ type: 'khac', elements: ['Kim'], last: 'Kim' }, 'Mộc'), { type: 'khac', elements: ['Kim', 'Mộc'], last: 'Mộc' }, 'V11: bam Do (Moc) dung buoc Khac -> tien toi Moc');
+eq(bot.vanduAdvanceCircuit({ type: 'khac', elements: ['Kim', 'Mộc'], last: 'Mộc' }, 'Hỏa'), { type: 'khac', elements: ['Kim', 'Mộc'], last: 'Mộc' }, 'V11: cua khong phai buoc tiep (Hoa, trong khi can Tho) thi khong tien');
+// - Màn hình cũ chỉ ghi neo Kim không được làm tụt mạch đã tiến tới Mộc.
+eq(bot.vanduMergeCircuit({ type: 'khac', elements: ['Kim', 'Mộc'], last: 'Mộc' }, { type: 'khac', elements: ['Kim'], last: 'Kim' }), { type: 'khac', elements: ['Kim', 'Mộc'], last: 'Mộc' }, 'V11: man cu chi ghi Kim khong lam tut mach');
+eq(bot.vanduMergeCircuit({ type: 'khac', elements: ['Kim', 'Mộc'], last: 'Mộc' }, { type: 'khac', elements: ['Kim', 'Mộc', 'Thổ'], last: 'Thổ' }), { type: 'khac', elements: ['Kim', 'Mộc', 'Thổ'], last: 'Thổ' }, 'V11: man moi dai hon thi nhan');
+eq(bot.vanduMergeCircuit({ type: 'sinh', elements: ['Mộc', 'Hỏa'], last: 'Hỏa' }, { type: 'khac', elements: ['Kim'], last: 'Kim' }), { type: 'khac', elements: ['Kim'], last: 'Kim' }, 'V11: doi loai mach thi nhan mach moi');
+// - Chuỗi đầy đủ của lỗi: sau Đỗ, mạch là Mộc, cửa có Thương + Sinh -> phải Sinh (Thổ), không phải Thương.
+eq(bot.vanduChooseDoor(['Thương Môn', 'Sinh Môn', 'Cảnh Môn'], { type: 'khac', elements: ['Kim', 'Mộc'], last: 'Mộc' }), 'Sinh Môn', 'V11: Khac Moc->Tho, co Thuong + Sinh -> Sinh, khong quay lai Thuong');
+// - Đang có mạch mà không có cửa đúng thì không bấm (null), không rơi về ưu tiên cửa.
+eq(bot.vanduChooseDoor(['Thương Môn', 'Cảnh Môn', 'Kinh Môn'], { type: 'khac', elements: ['Kim', 'Mộc'], last: 'Mộc' }), null, 'V11: Khac can Tho ma khong co cua Tho -> khong bam');
+eq(bot.vanduChooseDoor(['Thương Môn', 'Cảnh Môn'], { type: 'khac', elements: [], last: null }), null, 'V11: co mach nhung chua biet hanh hien tai -> khong doan');
+// - Chưa có mạch thì ưu tiên cửa vẫn dùng như cũ (cửa đầu tiên khi vô mạch).
+eq(bot.vanduChooseDoor(['Thương Môn', 'Sinh Môn', 'Cảnh Môn'], null), 'Thương Môn', 'V11: chua co mach -> uu tien cua nhu cu');
