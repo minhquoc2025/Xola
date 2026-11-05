@@ -277,3 +277,26 @@ botV17.vanduCircuitMsgId = 'M1';
 eq(botV17.vanduMergeCircuit({ type: 'khac', elements: ['Mộc', 'Thổ'], last: 'Thổ' }, { type: 'khac', elements: ['Kim'], last: 'Kim', fromProgress: false }, 'M2'), { type: 'khac', elements: ['Kim'], last: 'Kim', fromProgress: false }, 'V22: man moi neo don la mach moi');
 eq(botV17.vanduMergeCircuit({ type: 'khac', elements: ['Mộc', 'Thổ'], last: 'Thổ' }, { type: 'khac', elements: [], last: null, fromProgress: false }, 'M2'), { type: 'khac', elements: ['Mộc', 'Thổ'], last: 'Thổ' }, 'V22: man moi khong co thong tin mach -> giu nguyen');
 eq(botV17.vanduChooseDoor(['Sinh Môn', 'Hưu Môn', 'Khai Môn'], { type: 'khac', elements: ['Mộc'], last: 'Mộc' }), 'Sinh Môn', 'V22: Khac sau Moc can Tho -> Sinh Mon');
+
+// V23 (2026-11-05, log 09:40:58): bam cuoi chuyen co thu lai, khong con
+// thu 1 lan roi dung nhu v16-v22.
+(async () => {
+  const mk = () => { const b = new NpcBot({ executeJavaScript() {} }, 1); b.isRunning = true; b.delay = async () => {}; b.log = () => {}; return b; };
+  const b1 = mk();
+  let n1 = 0;
+  b1.vanduClickButton = async () => (++n1 === 2 ? 'Trở Về Giang Hồ' : null);
+  b1.vanduClickExactText = async () => null;
+  b1.vanduScanLatest = async () => ({ text: 'Bấm Trở Về Giang Hồ', buttons: ['Trở Về Giang Hồ'] });
+  eq(await b1.vanduClickTripEndButton(), 'Trở Về Giang Hồ', 'V23: lan 2 bam duoc');
+  const b2 = mk();
+  b2.vanduClickButton = async () => null;
+  b2.vanduClickExactText = async () => null;
+  b2.vanduScanLatest = async () => ({ text: 'Trở Về Giang Hồ', buttons: ['Trở Về Giang Hồ'] });
+  eq(await b2.vanduClickTripEndButton(), null, 'V23: het 5 lan, nut van con -> null');
+  const b3 = mk();
+  b3.vanduClickButton = async () => null;
+  b3.vanduClickExactText = async () => null;
+  b3.vanduScanLatest = async () => ({ text: 'man khac', buttons: ['Sinh Môn'] });
+  eq(await b3.vanduClickTripEndButton(), 'gone', 'V23: nut bien mat giua chung -> gone');
+  console.log('V23 trip-end retry: OK');
+})().catch(e => { console.error(e); process.exit(1); });

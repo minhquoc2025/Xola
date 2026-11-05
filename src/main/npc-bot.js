@@ -5370,6 +5370,30 @@ class NpcBot {
     })()`);
   }
 
+  // V23 (log 2026-11-05 09:40:58): bảng cuối PHÁN XÉT THIÊN CƠ vừa hiện
+  // thì nút Trở Về Giang Hồ có thể chưa bấm được ngay (Discord mới
+  // render / nút đang disabled), mà code cũ chỉ thử 1 lần rồi dừng luôn
+  // nên chuyến không được tính dù nút vẫn nằm đó. Thử lại tối đa 5 lần,
+  // mỗi lần thử ClickButton (đã fallback Anywhere) rồi ExactText, giữa
+  // các lần chờ 2s và quét lại màn mới. Trả về: tên nút đã bấm, 'gone'
+  // nếu nút biến mất giữa chừng (có thể đã bấm tay), null nếu hết 5 lần
+  // mà nút vẫn còn đó.
+  async vanduClickTripEndButton() {
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      if (!this.isRunning) return null;
+      const clicked = (await this.vanduClickButton('Trở Về Giang Hồ')) || (await this.vanduClickExactText('Trở Về Giang Hồ'));
+      if (clicked) return clicked;
+      if (attempt < 5) {
+        this.log(`⏳ Vân Du: chưa bấm được Trở Về Giang Hồ (lần ${attempt}/5), chờ quét lại...`);
+        await this.delay(2000);
+        const again = await this.vanduScanLatest();
+        const stillThere = !!again && ((again.buttons || []).some(b => this.vanduNormalize(b).includes('tro ve giang ho')) || this.vanduNormalize(again.text || '').includes('tro ve giang ho'));
+        if (!stillThere) return 'gone';
+      }
+    }
+    return null;
+  }
+
   async vanduBattleLoop(runId) {
     // V15: log luôn thứ tự đang dùng để anh kiểm tra cấu hình có vào bot không.
     this.log(`⚔️ Vân Du: vào trận (thứ tự: ${this.vanduSkillOrder.join(' -> ')})`);
@@ -5493,12 +5517,16 @@ class NpcBot {
       // đếm khi bấm thành công; bấm không được thì vẫn dừng như cũ nhưng
       // không đếm, vì chuyến chưa thực sự kết thúc bằng cú bấm đó.
       if (btnNorm.some(b => b.includes('tro ve giang ho')) || norm.includes('tro ve giang ho')) {
-        const clicked = await this.vanduClickButton('Trở Về Giang Hồ');
-        if (clicked) {
+        // V23: bấm cuối chuyến có thử lại (xem vanduClickTripEndButton),
+        // không còn thử 1 lần rồi dừng như v16-v22.
+        const result = await this.vanduClickTripEndButton();
+        if (result && result !== 'gone') {
           const trips = this.vanduCountTrip();
           this.log(`🏁 Vân Du: đã về Giang Hồ, hết chuyến số ${trips}.`);
+        } else if (result === 'gone') {
+          this.log('⚠️ Vân Du: nút Trở Về Giang Hồ đã biến mất (có thể đã bấm tay), dừng mà không tính chuyến này.');
         } else {
-          this.log('⚠️ Vân Du: thấy nút Trở Về Giang Hồ nhưng bấm không được, dừng mà không tính chuyến này.');
+          this.log('⚠️ Vân Du: thấy nút Trở Về Giang Hồ nhưng bấm không được sau 5 lần thử, dừng mà không tính chuyến này. Bấm tay nút này rồi START lại chuyến mới.');
         }
         await this.stop();
         return;
