@@ -418,3 +418,20 @@ eq(bot.vanduKyNgoSkipButton('tiet diem 10 36 ky duyen mon cua vang sang ruc', ['
 eq(bot.vanduKyNgoSkipButton('tiet diem 11 36 ky ngo ho phap phong thap co', ['dang huong']), null, 'V31: Ho Phap khong co nut Bo qua');
 eq(bot.vanduKyNgoSkipButton('tiet diem 5 36 cua canh mon tien thuong hac thi', ['bo qua', 'mua cuu chuyen hoan hon dan']), null, 'V31: man khong phai Ky Ngo thi khong bam Bo qua');
 console.log('ALL VANDU TESTS PASSED (V31)');
+
+// V32 (log 2026-11-05 15:30:37-59, Tiet 16/36): bot bam Tu Mon (Tho)
+// nhung cu bam khong vao game — man khong doi, game van ghi Khac 1/5
+// [Moc] — ma bot tu tien len [Moc, Tho] roi ket "can Thuy" trong khi
+// Tu Mon van con tren man. Gio quet lai cung man ma tien do game ngan
+// hon thi tra mach ve theo game de bam lai cua do.
+const botV32 = new NpcBot({ executeJavaScript() {} }, 1);
+botV32.vanduCircuitMsgId = 'M1';
+botV32.vanduLastCircuitClick = { msgId: 'M1', element: 'Thổ', count: 1 };
+eq(botV32.vanduMergeCircuit({ type: 'khac', elements: ['Mộc', 'Thổ'], last: 'Thổ' }, { type: 'khac', elements: ['Mộc'], last: 'Mộc', fromProgress: true }, 'M1'), { type: 'khac', elements: ['Mộc'], last: 'Mộc', fromProgress: true }, 'V32: cung man, bam Tho chua vao -> tra ve Moc de bam lai');
+botV32.vanduLastCircuitClick = null;
+eq(botV32.vanduMergeCircuit({ type: 'khac', elements: ['Mộc', 'Thổ'], last: 'Thổ' }, { type: 'khac', elements: ['Mộc'], last: 'Mộc', fromProgress: true }, 'M1'), { type: 'khac', elements: ['Mộc', 'Thổ'], last: 'Thổ' }, 'V32: khong co ban ghi bam thi giu luat v22 (man cu khong tut)');
+botV32.vanduLastCircuitClick = { msgId: 'M1', element: 'Kim', count: 1 };
+eq(botV32.vanduMergeCircuit({ type: 'khac', elements: ['Mộc', 'Thổ'], last: 'Thổ' }, { type: 'khac', elements: ['Mộc'], last: 'Mộc', fromProgress: true }, 'M1'), { type: 'khac', elements: ['Mộc', 'Thổ'], last: 'Thổ' }, 'V32: buoc thua khong phai hanh vua bam thi khong tra');
+botV32.vanduLastCircuitClick = { msgId: 'M9', element: 'Thổ', count: 1 };
+eq(botV32.vanduMergeCircuit({ type: 'khac', elements: ['Mộc', 'Thổ'], last: 'Thổ' }, { type: 'khac', elements: ['Mộc'], last: 'Mộc', fromProgress: true }, 'M1'), { type: 'khac', elements: ['Mộc', 'Thổ'], last: 'Thổ' }, 'V32: bam tren man khac thi khong tra');
+console.log('ALL VANDU TESTS PASSED (V32)');
