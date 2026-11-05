@@ -5408,6 +5408,17 @@ class NpcBot {
     return /tiet diem\s+\d+\s+\d+\s+ky ngo/.test(String(norm || ''));
   }
 
+  // V31: bảng Kỳ Ngộ đánh cược (Cuống Nhân Đoán Định: Đặt 50k tháp /
+  // Đặt cược tất tay 150k) thì luôn Bỏ qua, không cược. Chỉ nhận khi màn
+  // đúng là Kỳ Ngộ (tiêu đề, xem vanduIsKyNgoScreen) và có nút "Bỏ qua"
+  // đúng chữ — nút "Bỏ qua đi tiếp an toàn" của Kỳ Duyên Môn không tính
+  // (so bằng, không so chuỗi con) để không cướp lượt handler Kỳ Duyên.
+  vanduKyNgoSkipButton(norm, btnNorm) {
+    if (!this.vanduIsKyNgoScreen(norm, btnNorm)) return null;
+    if ((btnNorm || []).some(x => x === 'bo qua')) return 'Bỏ qua';
+    return null;
+  }
+
   // V27: chỉ bấm nút xanh TRONG ĐÚNG màn đang xử lý (article có msgId
   // mà vòng chính vừa quét được). Bản cũ quét 15 article gần nhất rồi
   // fallback toàn trang — khi màn Kỳ Ngộ đã xử lý xong (nút tắt) hoặc
@@ -5835,6 +5846,22 @@ class NpcBot {
       if (btnNorm.some(x => x.includes('tinh toa giao cam'))) {
         await this.vanduClickButton('Tĩnh tọa giao cảm');
         this.log('🦋 Vân Du: Kỳ Ngộ Thất Thái Hồ Điệp, chọn Tĩnh tọa giao cảm (tốn 15% HP)');
+        await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
+        continue;
+      }
+
+      // Kỳ Ngộ đánh cược — Cuống Nhân Đoán Định (v31, anh chốt 2026-11-05,
+      // ảnh Tiết 8/36): 2 nút cược (Đặt 50k tháp, Đặt cược tất tay 150k)
+      // và nút Bỏ qua. Anh dặn gặp bảng này thì luôn Bỏ qua, không cược.
+      // Đặt TRƯỚC handler Kỳ Ngộ chung vì màn này không có nút xanh lá
+      // cũng không có Dâng hương — handler chung sẽ kẹt chờ màn mới.
+      // Mạch trên màn này ghi "Chưa khai mở" (vừa thua boss lùi về Tiết 8)
+      // nên cứ qua bảng rồi cửa sau sẽ neo lại theo luật v20, không reset
+      // gì thêm ở đây.
+      const skipBtn = this.vanduKyNgoSkipButton(norm, btnNorm);
+      if (skipBtn) {
+        await this.vanduClickButton(skipBtn);
+        this.log('⏭️ Vân Du: Kỳ Ngộ đánh cược, bấm Bỏ qua, không cược');
         await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
         continue;
       }

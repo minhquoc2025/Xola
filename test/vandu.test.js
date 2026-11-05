@@ -410,3 +410,11 @@ console.log('ALL VANDU TESTS PASSED (V28)');
   console.log('V29 ownership guards: OK');
 })().catch(e => { console.error(e); process.exit(1); });
 console.log('ALL VANDU TESTS PASSED (V29)');
+
+// V31 (anh 2026-11-05, bang Tiet 8/36 Ky Ngo Cuong Nhan Doan Dinh):
+// gap bang cuoc thi bam "Bỏ qua", khong cuoc 50k/tat tay.
+eq(bot.vanduKyNgoSkipButton('tiet diem 8 36 ky ngo cuong nhan doan dinh', ['dat 50k thap', 'dat cuoc tat tay 150k', 'bo qua']), 'Bỏ qua', 'V31: bang cuoc Ky Ngo -> Bo qua');
+eq(bot.vanduKyNgoSkipButton('tiet diem 10 36 ky duyen mon cua vang sang ruc', ['ca do tat tay x2 5 hoac mat sach', 'bo qua di tiep an toan']), null, 'V31: Ky Duyen dung nut "Bo qua di tiep an toan", khong cuop luot');
+eq(bot.vanduKyNgoSkipButton('tiet diem 11 36 ky ngo ho phap phong thap co', ['dang huong']), null, 'V31: Ho Phap khong co nut Bo qua');
+eq(bot.vanduKyNgoSkipButton('tiet diem 5 36 cua canh mon tien thuong hac thi', ['bo qua', 'mua cuu chuyen hoan hon dan']), null, 'V31: man khong phai Ky Ngo thi khong bam Bo qua');
+console.log('ALL VANDU TESTS PASSED (V31)');
