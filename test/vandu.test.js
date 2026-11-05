@@ -356,3 +356,22 @@ eq(bot.vanduPlayerHpPct('Diễn Biến Hiệp Đấu\nHiệp cái: 250000/500000
 eq(bot.vanduPlayerHpPct('Tiết Điểm 12/36'), null, 'V27: Tiet Diem khong phai HP');
 eq(bot.vanduPlayerHpPct('Tiết Điểm 12/36\nKhí Huyết: 42%'), 42, 'V27: fallback Khi Huyet');
 console.log('ALL VANDU TESTS PASSED');
+
+// V28: bang anh 2026-11-05 — do hiem ghi "[Vận Mệnh - Vàng (Thần Thoại)]",
+// khong co "• Vàng" nhu bang cu nen cach doc cu ra 0 ket qua.
+const shot28Text = '1. [Vận] Đại Đạo Đồng Quy [Vận Mệnh - 🟡 Vàng (Thần Thoại)]\n• Hiệu ứng: Tăng toàn bộ thuộc tính cơ bản thêm 25% và tăng 15% Tỉ Lệ Bạo Kích.\n2. [Ma] Ma Tôn Giáng Thế [Ma Tông - 🟡 Vàng (Thần Thoại)]\n• Hiệu ứng: Mỗi đòn cướp 5% Công/Thủ của địch, +30% Tấn Công và +20% Phòng Thủ!\n3. [Kiếm] Bạt Kiếm Thuật [Kiếm Tông - 🟢 Lục (Phổ Thông)]\n• Hiệu ứng: Tăng 12% Tỉ Lệ Bạo Kích trong suốt chuyến thám hiểm.\n4. [Ma] Tuyệt Đối Tập Kích [Ma Tông - 🔵 Lam (Hiếm)]\n• Hiệu ứng: Đòn đánh 100% trúng đích, +25% Chính Xác và +15% Tấn Công.';
+const shot28Btns = ['[Vận] Đại Đạo Đồng Quy', '[Ma] Ma Tôn Giáng Thế', '[Kiếm] Bạt Kiếm Thuật', '[Ma] Tuyệt Đối Tập Kích'];
+eq(bot.vanduBuffRarities(shot28Text, shot28Btns), [4, 4, 1, 2], 'V28: do hiem kieu moi trong [Vận Mệnh - Vàng]');
+eq(bot.vanduBuffSects(shot28Text, shot28Btns), ['Vận', 'Ma', 'Kiếm', 'Ma'], 'V28: tong theo mo ta bang anh');
+eq(bot.vanduChooseBuff(shot28Btns, {}, {}, false, 'Ma', bot.vanduBuffRarities(shot28Text, shot28Btns), 0, bot.vanduBuffSects(shot28Text, shot28Btns)).buttonText, '[Ma] Ma Tôn Giáng Thế', 'V28: khac che Ma -> Ma Vang, khong phai Ma Lam');
+eq(bot.vanduChooseBuff(shot28Btns, {}, {}, false, 'Ma', bot.vanduBuffRarities(shot28Text, shot28Btns), 0, bot.vanduBuffSects(shot28Text, shot28Btns)).reason, 'counter', 'V28: ly do la counter');
+// Lam dung truoc Vang trong cung tong Ma: cu chi doc "• mau" thi ca 2 ve 0,
+// lay theo thu tu nut se lay nham Lam.
+const shot28bText = '1. [Ma] Tuyệt Đối Tập Kích [Ma Tông - 🔵 Lam (Hiếm)]\n• Hiệu ứng: Đòn đánh 100% trúng đích.\n2. [Ma] Ma Tôn Giáng Thế [Ma Tông - 🟡 Vàng (Thần Thoại)]\n• Hiệu ứng: Mỗi đòn cướp 5% Công/Thủ của địch.\n3. [Vận] Đại Đạo Đồng Quy [Vận Mệnh - 🟡 Vàng (Thần Thoại)]\n• Hiệu ứng: Tăng toàn bộ thuộc tính.\n4. [Kiếm] Bạt Kiếm Thuật [Kiếm Tông - 🟢 Lục (Phổ Thông)]\n• Hiệu ứng: Tăng 12% Tỉ Lệ Bạo Kích.';
+const shot28bBtns = ['[Ma] Tuyệt Đối Tập Kích', '[Ma] Ma Tôn Giáng Thế', '[Vận] Đại Đạo Đồng Quy', '[Kiếm] Bạt Kiếm Thuật'];
+eq(bot.vanduBuffRarities(shot28bText, shot28bBtns), [2, 4, 4, 1], 'V28: do hiem khi Lam dung truoc Vang');
+eq(bot.vanduChooseBuff(shot28bBtns, {}, {}, false, 'Ma', bot.vanduBuffRarities(shot28bText, shot28bBtns), 0, bot.vanduBuffSects(shot28bText, shot28bBtns)).buttonText, '[Ma] Ma Tôn Giáng Thế', 'V28: Ma Vang thang Ma Lam du dung sau');
+// Khong co the khac che: lay Van Vang.
+eq(bot.vanduChooseBuff(shot28Btns, {}, {}, false, 'Thuật', bot.vanduBuffRarities(shot28Text, shot28Btns), 0, bot.vanduBuffSects(shot28Text, shot28Btns)).buttonText, '[Vận] Đại Đạo Đồng Quy', 'V28: khong co khac che -> Van Vang');
+eq(bot.vanduChooseBuff(shot28Btns, {}, {}, false, 'Thuật', bot.vanduBuffRarities(shot28Text, shot28Btns), 0, bot.vanduBuffSects(shot28Text, shot28Btns)).reason, 'van', 'V28: ly do la van');
+console.log('ALL VANDU TESTS PASSED (V28)');

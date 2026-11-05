@@ -4961,13 +4961,46 @@ class NpcBot {
   // Hàm này đọc các độ hiếm trong mô tả theo thứ tự xuất hiện (thứ tự
   // này khớp thứ tự nút trong ảnh thật), trả về mảng cùng thứ tự với
   // buttons. Không khớp số lượng thì trả null để bên gọi coi là không biết.
+  // V28: tách mô tả bảng thành từng mục thẻ ("1. ...", "2. ...") theo
+  // thứ tự nút. Dùng chung cho tông (v27) và độ hiếm (v28). Mục đầu
+  // nằm ở đầu chuỗi (không có \n trước "1.") nên không cắt bỏ mù: nếu
+  // phần đầu bắt đầu bằng số thứ tự thì giữ nó (bỏ số), nếu là tiêu đề
+  // bảng thì mới bỏ. Không tách được thì trả null để giữ cách đọc cũ.
+  vanduBuffEntries(boardText) {
+    const text = String(boardText || '');
+    let parts = text.split(/\n\s*\d+\.\s+/);
+    if (/^\d+\.\s/.test(parts[0] || '')) parts[0] = parts[0].replace(/^\d+\.\s+/, '');
+    else parts = parts.slice(1);
+    return parts.length > 0 ? parts : null;
+  }
+
   vanduBuffRarities(boardText, buttons) {
     const text = String(boardText || '');
+    const btns = buttons || [];
+    // V28: độ hiếm đọc theo từng mục, chỉ trong phần tiêu đề (trước
+    // "Hiệu ứng") để khỏi nhầm chữ trong mô tả hiệu ứng. Bảng kiểu mới
+    // ghi "[Vận Mệnh - 🟡 Vàng (Thần Thoại)]" — không có "•" trước chữ
+    // màu như bảng cũ nên cách đọc cũ (tìm "• Vàng") ra 0 kết quả, bot
+    // coi tất cả là không rõ độ hiếm (0) và không phân biệt được vàng
+    // với lam/lục (vd Ma Vàng với Ma Lam cùng tông thì lấy theo thứ tự
+    // nút, có thể lấy nhầm lam). Đọc được mục nào thì lấy mục đó.
+    const entries = this.vanduBuffEntries(text);
+    if (entries && entries.length === btns.length) {
+      const found = entries.map(e => {
+        const header = String(e || '').split(/hiệu ứng/i)[0];
+        const m = header.match(/(Vàng|Tím|Lam|Lục)/);
+        return m ? this.vanduBuffRarity(m[1]) : 0;
+      });
+      if (found.some(r => r > 0)) return found;
+      // Không mục nào có chữ màu thì rơi xuống cách đọc cũ (nút/mô tả
+      // kiểu khác), thay vì trả toàn 0 và chặn fallback.
+    }
+    // Cách đọc cũ (v14): "• Vàng" / "• Tím" ... trong toàn mô tả.
     const found = [];
     const re = /•\s*(Vàng|Tím|Lam|Lục)/g;
     let m;
     while ((m = re.exec(text)) !== null) found.push(this.vanduBuffRarity(m[1]));
-    if (found.length === 0 || found.length !== (buttons || []).length) return null;
+    if (found.length === 0 || found.length !== btns.length) return null;
     return found;
   }
 
@@ -5001,14 +5034,9 @@ class NpcBot {
   // căn theo mục sẽ lấy được tông đúng. Số mục khác số nút thì trả null
   // để giữ cách đọc cũ, không đoán lệch.
   vanduBuffSects(boardText, buttons) {
-    const text = String(boardText || '');
-    // Mục đầu nằm ở đầu chuỗi (không có \n trước "1.") nên không cắt
-    // bỏ mù: nếu phần đầu bắt đầu bằng số thứ tự thì giữ nó (bỏ số),
-    // nếu là tiêu đề bảng thì mới bỏ.
-    let parts = text.split(/\n\s*\d+\.\s+/);
-    if (/^\d+\.\s/.test(parts[0] || '')) parts[0] = parts[0].replace(/^\d+\.\s+/, '');
-    else parts = parts.slice(1);
-    if (parts.length === 0 || parts.length !== (buttons || []).length) return null;
+    // V28: tách mục dùng chung vanduBuffEntries (v27 tách riêng ở đây).
+    const parts = this.vanduBuffEntries(boardText);
+    if (!parts || parts.length !== (buttons || []).length) return null;
     const sects = parts.map(p => {
       const m = p.match(/(Kiếm|Khí|Thuật|Ma|Vận)\s*Tông/) || p.match(/\[(Kiếm|Khí|Thuật|Ma|Vận)\]/);
       return m ? m[1] : null;
