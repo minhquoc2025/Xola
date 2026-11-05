@@ -4636,6 +4636,10 @@ class NpcBot {
     return null;
   }
 
+  // V7 (bảng 2026-11-05): mạch Sinh/Khắc là vòng tròn, không phải danh sách
+  // thẳng — Sinh Mộc→Hỏa→Thổ→Kim→Thủy→Mộc, Khắc Hỏa→Kim→Mộc→Thổ→Thủy→Hỏa.
+  // Bản cũ dừng ở cuối danh sách (trả null), nên mạch Khắc bắt đầu từ Mộc
+  // hay mạch Sinh bắt đầu từ Thủy kẹt ngay bước đầu; giờ quay vòng bằng %.
   vanduNextElement(circuitType, lastElement) {
     const chains = {
       sinh: ['Mộc', 'Hỏa', 'Thổ', 'Kim', 'Thủy'],
@@ -4644,8 +4648,8 @@ class NpcBot {
     const chain = chains[circuitType];
     if (!chain) return null;
     const idx = chain.indexOf(lastElement);
-    if (idx < 0 || idx + 1 >= chain.length) return null;
-    return chain[idx + 1];
+    if (idx < 0) return null;
+    return chain[(idx + 1) % chain.length];
   }
 
   vanduParseCircuit(text) {
@@ -4712,6 +4716,11 @@ class NpcBot {
   vanduCounterSectFromText(text) {
     const raw = String(text || '');
     if (raw.includes('Hư Ảo') || raw.includes('Hư Ảnh')) return 'Ma';
+    // V7 (bảng 2026-11-05): [Cường Thể] (Huyền Giáp) bị Thuật Tông khắc.
+    // Trước đây Cường Thể cố tình không đưa vào vì chưa xác nhận; bảng này
+    // chốt luôn, nên thêm. Cuồng Thể (Huyền Giáp) trước đó cũng là Thuật,
+    // nên Huyền Giáp về Thuật là nhất quán cả hai bảng.
+    if (raw.includes('Cường Thể') || raw.includes('Huyền Giáp')) return 'Thuật';
     if (raw.includes('Cuồng Thể')) return 'Thuật';
     if (raw.includes('Cuồng Bạo')) return 'Khí';
     if (raw.includes('Huyết Tế') || raw.includes('Huyết Ma')) return 'Kiếm';

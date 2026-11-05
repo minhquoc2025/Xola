@@ -14,11 +14,14 @@ eq(bot.mode, 'vandu', 'mode');
 eq(bot.vanduCmd, '!vandu', 'vanduCmd');
 eq(bot.vanduSkillOrder, ['Phá Giáp', 'Băng Phong', 'Hư Không Đại Na Di', 'Kim Đan Phá Sát', 'Băng Phong', 'Vạn Kiếm Quy Tông'], 'skill order');
 
-// Circuit next element
+// Circuit next element — V7: mạch là vòng tròn (bảng 2026-11-05)
 eq(bot.vanduNextElement('sinh', 'Mộc'), 'Hỏa', 'sinh Mộc->Hỏa');
-eq(bot.vanduNextElement('sinh', 'Thủy'), null, 'sinh ends at Thủy');
+eq(bot.vanduNextElement('sinh', 'Thủy'), 'Mộc', 'sinh Thuy->Moc (quay vong)');
+eq(bot.vanduNextElement('sinh', 'Kim'), 'Thủy', 'sinh Kim->Thuy');
 eq(bot.vanduNextElement('khac', 'Thổ'), 'Thủy', 'khac Thổ->Thủy');
 eq(bot.vanduNextElement('khac', 'Kim'), 'Mộc', 'khac Kim->Mộc');
+eq(bot.vanduNextElement('khac', 'Mộc'), 'Thổ', 'khac Moc->Tho (quay vong)');
+eq(bot.vanduNextElement('khac', 'Hỏa'), 'Kim', 'khac Hoa->Kim');
 
 // Door element: game writes Thương Môn as Thượng Môn, both must map to Mộc.
 eq(bot.vanduElementOfDoor('Thượng Môn'), 'Mộc', 'Thượng = Mộc');
@@ -71,6 +74,10 @@ eq(bot.vanduChooseDoor(['Tử Môn', 'Hưu Môn', 'Sinh Môn'], null), 'Sinh Mô
 eq(bot.vanduChooseDoor(['Đỗ Môn', 'Thương Môn'], { type: 'sinh', last: 'Thủy' }), 'Thương Môn', 'circuit tie Moc: Thuong truoc Do');
 eq(bot.vanduChooseDoor(['Khai Môn', 'Kinh Môn'], { type: 'khac', last: 'Hỏa' }), 'Kinh Môn', 'circuit tie Kim: Kinh truoc Khai (chua chot rieng)');
 // V2: bảng khắc chế
+// V7 (bảng 2026-11-05): Cường Thể / Huyền Giáp -> Thuật
+eq(bot.vanduCounterSectFromText('quái [Cường Thể] X'), 'Thuật', 'Cuong The -> Thuat');
+eq(bot.vanduCounterSectFromText('quái [Huyền Giáp] X'), 'Thuật', 'Huyen Giap -> Thuat');
+eq(bot.vanduCounterSectFromText('quái [Cuồng Thể] X'), 'Thuật', 'Cuong The (cu) -> Thuat');
 eq(bot.vanduCounterSectFromText('đã chém gục [Hư Ảo] Băng Tuyết Dạ Báo'), 'Ma', 'Hu Ao -> Ma');
 eq(bot.vanduCounterSectFromText('quái [Cuồng Bạo] X'), 'Khí', 'Cuong Bao -> Khi');
 eq(bot.vanduCounterSectFromText('quái lạ không tên'), null, 'quai la -> null');
