@@ -4704,6 +4704,12 @@ class NpcBot {
     return { type: circuit.type, elements: [...(circuit.elements || []), element], last: element };
   }
 
+  // V12: màn hình hoàn thành mạch thật sự — chỉ 2 câu này, không phải bất
+  // kỳ chữ "hoàn mỹ" nào (bảng đố hoàn hảo cũng có chữ đó, xem chỗ gọi).
+  vanduIsCircuitComplete(text) {
+    return /THIÊN CƠ HOÀN MỸ|thông trọn vẹn mạch/i.test(String(text || ''));
+  }
+
   // V11: gộp mạch đọc từ màn hình vào mạch bot đang giữ, nhưng KHÔNG cho
   // màn hình cũ làm tụt mạch. Màn hình chỉ ghi neo mạch (vd chỉ [Kim]) trong
   // khi bot đã tự tiến tới [Kim, Mộc] là màn cũ, phải giữ [Kim, Mộc]. Chỉ
@@ -5296,7 +5302,12 @@ class NpcBot {
       if (parsedCircuit) this.vanduCircuit = this.vanduMergeCircuit(this.vanduCircuit, parsedCircuit);
       const correctMatch = text.match(/bước đúng huyền cơ mang hành\s*(Mộc|Hỏa|Thổ|Kim|Thủy)/);
       if (correctMatch && this.vanduCircuit && correctMatch[1] !== this.vanduCircuit.last) this.vanduCircuit = { type: this.vanduCircuit.type, elements: [...(this.vanduCircuit.elements || []), correctMatch[1]], last: correctMatch[1] };
-      if (/HOÀN MỸ|thông trọn vẹn mạch/i.test(text)) this.vanduCircuit = null;
+      // V12 (log 2026-11-05 08:29): chỉ xóa mạch khi đúng câu hoàn thành
+      // mạch. Regex cũ /HOÀN MỸ/ quá chung — bảng giải đố thành công hoàn
+      // hảo cũng có chữ "hoàn mỹ" nên xóa nhầm mạch Khắc đang đi dở, khiến
+      // cửa sau rơi về ưu tiên cửa và bấm Thương thay vì Thổ. Câu hoàn
+      // thành mạch theo walkthrough là "THIÊN CƠ HOÀN MỸ!" (5/5).
+      if (this.vanduIsCircuitComplete(text)) this.vanduCircuit = null;
 
       // Bảng Tiếp Tục Tiến Sâu: sau thua boss (về checkpoint) và sau giải đố
       // đúng (sang chặng kế) đều dùng nút này. V1 Vân Du chưa xử lý nên kẹt.

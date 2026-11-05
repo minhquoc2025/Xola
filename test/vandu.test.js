@@ -153,3 +153,11 @@ eq(bot.vanduChooseDoor(['Thương Môn', 'Cảnh Môn', 'Kinh Môn'], { type: 'k
 eq(bot.vanduChooseDoor(['Thương Môn', 'Cảnh Môn'], { type: 'khac', elements: [], last: null }), null, 'V11: co mach nhung chua biet hanh hien tai -> khong doan');
 // - Chưa có mạch thì ưu tiên cửa vẫn dùng như cũ (cửa đầu tiên khi vô mạch).
 eq(bot.vanduChooseDoor(['Thương Môn', 'Sinh Môn', 'Cảnh Môn'], null), 'Thương Môn', 'V11: chua co mach -> uu tien cua nhu cu');
+
+// V12 (log 2026-11-05 08:29): chỉ câu hoàn thành mạch thật mới xóa mạch.
+// Bảng đố hoàn hảo có chữ "hoàn mỹ" nhưng không được xóa mạch đang đi dở.
+eq(bot.vanduIsCircuitComplete('THIÊN CƠ HOÀN MỸ! Boss suy yếu!'), true, 'V12: Thien Co Hoan My -> xong mach');
+eq(bot.vanduIsCircuitComplete('đã thông trọn vẹn mạch Tương Khắc'), true, 'V12: thong tron ven mach -> xong mach');
+eq(bot.vanduIsCircuitComplete('Giải đố hoàn mỹ! +62,500 Ngân Lượng'), false, 'V12: giai do hoan my khong xoa mach');
+eq(bot.vanduIsCircuitComplete('HOÀN MỸ'), false, 'V12: chu Hoan My don thuan khong xoa mach');
+eq(bot.vanduIsCircuitComplete('Bản Đồ Thiên Cơ, Tiết Điểm 11/36'), false, 'V12: man cua thuong khong xoa mach');
