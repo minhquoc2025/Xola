@@ -104,6 +104,10 @@ eq(bot.vanduPuzzleElement('Tiếng nước róc rách: "Thủy lưu vạn trư�
 eq(bot.vanduPuzzleDoor('Hỏa'), 'Ly', 'Hoa -> Ly');
 eq(bot.vanduPuzzleDoor('Thủy'), 'Khảm', 'Thuy -> Kham');
 eq(bot.vanduPuzzleDoor('Thổ'), 'Khôn', 'Tho -> Khon');
+// V30 (anh 2026-11-05, bang Tiet 7/36): tho co "Càn đạo biến hóa" thì
+// chon Cửa Càn — khong phai Hoa (chu "hóa" trong "biến hóa" gay nham).
+eq(bot.vanduPuzzleElement('Tiết Điểm 7/36: ĐỖ MÔN — Bát Quái Trận Đố\n📜 "Ngược nhìn trần động phủ thấy đồ hình tinh tú luân chuyển: Càn đạo biến hóa, các chinh tinh mệnh, chín tầng mây xanh cuồng khí trướng tổn!"'), 'Càn', 'V30: tho Can dao -> Can');
+eq(bot.vanduPuzzleDoor('Càn'), 'Càn', 'V30: Can -> Cua Can');
 // V2: cooldown skill
 eq(bot.vanduSkillCooldown('Băng Phong (2)'), 2, 'cooldown 2');
 eq(bot.vanduSkillCooldown('Băng Phong'), null, 'khong cooldown');

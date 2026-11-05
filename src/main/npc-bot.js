@@ -4872,6 +4872,12 @@ class NpcBot {
     while ((m = re.exec(raw)) !== null) quoted.push(m[1]);
     const hay = this.vanduNormalize(quoted.join(' '));
     if (!hay) return null;
+    // V30 (ảnh Tiết 7/36, anh chốt "chọn càn"): thơ nhắc thẳng tên quẻ
+    // "Càn đạo" thì đáp án là Cửa Càn — không qua hành. Phải kiểm tra
+    // trước các từ khóa hành, vì "biến hóa" trong câu thơ chứa "hóa" nên
+    // cách đọc cũ nhận nhầm thành Hỏa rồi không thấy cửa Ly mà dừng.
+    // Chỉ nhận "càn" đứng riêng thành từ để khỏi nhầm "cần/căn/cạn".
+    if (/(^|\s)can(\s|$)/.test(hay)) return 'Càn';
     if (hay.includes('thuy') || hay.includes('nuoc')) return 'Thủy';
     if (hay.includes('hoa') || hay.includes('viem') || hay.includes('thieu') || hay.includes('lua')) return 'Hỏa';
     if (hay.includes('moc') || hay.includes('cay') || hay.includes('rung')) return 'Mộc';
@@ -4881,7 +4887,8 @@ class NpcBot {
   }
 
   vanduPuzzleDoor(element) {
-    const map = { 'Hỏa': 'Ly', 'Thủy': 'Khảm', 'Mộc': 'Chấn', 'Kim': 'Đoài', 'Thổ': 'Khôn' };
+    // V30: 'Càn' là tên quẻ đáp thẳng Cửa Càn (không qua hành).
+    const map = { 'Hỏa': 'Ly', 'Thủy': 'Khảm', 'Mộc': 'Chấn', 'Kim': 'Đoài', 'Thổ': 'Khôn', 'Càn': 'Càn' };
     return map[element] || null;
   }
 
@@ -5897,7 +5904,7 @@ class NpcBot {
 
       // Đố Bát Quái: đọc thơ trong ngoặc kép, map hành -> cửa. Không đoán
       // được hành hoặc không thấy cửa đó thì dừng để tránh mở sai cửa.
-      if (/bát quái trận đố|bat quai tran do/i.test(text) || btnNorm.some(x => x.includes('cua ly') || x.includes('cua kham') || x.includes('cua khon') || x.includes('cua chan') || x.includes('cua doai'))) {
+      if (/bát quái trận đố|bat quai tran do/i.test(text) || btnNorm.some(x => x.includes('cua ly') || x.includes('cua kham') || x.includes('cua khon') || x.includes('cua chan') || x.includes('cua doai') || x.includes('cua can') || x.includes('cua ton'))) {
         const element = this.vanduPuzzleElement(text);
         const door = element ? this.vanduPuzzleDoor(element) : null;
         const doorBtn = door ? buttons.find(x => this.vanduNormalize(x).includes(this.vanduNormalize('Cửa ' + door))) : null;
