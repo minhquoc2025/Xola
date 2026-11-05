@@ -435,3 +435,10 @@ eq(botV32.vanduMergeCircuit({ type: 'khac', elements: ['Mộc', 'Thổ'], last: 
 botV32.vanduLastCircuitClick = { msgId: 'M9', element: 'Thổ', count: 1 };
 eq(botV32.vanduMergeCircuit({ type: 'khac', elements: ['Mộc', 'Thổ'], last: 'Thổ' }, { type: 'khac', elements: ['Mộc'], last: 'Mộc', fromProgress: true }, 'M1'), { type: 'khac', elements: ['Mộc', 'Thổ'], last: 'Thổ' }, 'V32: bam tren man khac thi khong tra');
 console.log('ALL VANDU TESTS PASSED (V32)');
+
+// V33 (anh 2026-11-05): buff nang max khong hien lai tren bang — khong
+// con truong hop "ca bang toan la max" de bam tam 1 la cho qua bang.
+const botV33 = new NpcBot({ executeJavaScript() {} }, 1);
+eq(botV33.vanduChooseBuff(['[Ma] Ma Tôn Giáng Thế [Ma Tông - Vàng (Thần Thoại)]', '[Kiếm] Bạt Kiếm Thuật [Kiếm Tông - Lục (Phổ Thông)]'], {}, { 'Ma Tôn Giáng Thế': 5, 'Bạt Kiếm Thuật': 5 }, false, null), null, 'V33: ca bang da max theo so bot -> null, khong bam tam');
+eq(botV33.vanduChooseBuff(['[Ma] Ma Tôn Giáng Thế [Ma Tông - Vàng (Thần Thoại)]', '[Kiếm] Bạt Kiếm Thuật [Kiếm Tông - Lục (Phổ Thông)]'], {}, { 'Ma Tôn Giáng Thế': 5 }, false, null).buttonText, '[Kiếm] Bạt Kiếm Thuật [Kiếm Tông - Lục (Phổ Thông)]', 'V33: la max bi loai khoi con lai, chon la chua max');
+console.log('ALL VANDU TESTS PASSED (V33)');

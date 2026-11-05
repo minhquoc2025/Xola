@@ -5175,8 +5175,15 @@ class NpcBot {
     // khỏi "còn lại" vì bấm nữa cũng không nâng được; chỉ khi bảng toàn
     // buff max (hiếm) mới bấm tạm 1 cái để qua bảng, thay vì đứng im.
     if (allowReroll) return { action: 'reroll' };
+    // V33 (anh chốt 2026-11-05): buff đã nâng max KHÔNG hiện lại trên
+    // bảng, nên không có trường hợp "cả bảng toàn lá max" — nhánh dự
+    // phòng cũ (bấm tạm 1 lá max để qua bảng) là code chết, bỏ. Lá nào
+    // sổ bot ghi đã max thì loại khỏi "còn lại"; nếu rỗng (sổ lệch) thì
+    // trả null để vòng ngoài chờ màn mới, không bấm bừa.
     const pickable = parsed.filter(c => ownedCount(c.name) < 5);
-    return pick('remaining', bestOf(pickable.length > 0 ? pickable : parsed));
+    const best = bestOf(pickable);
+    if (!best) return null;
+    return pick('remaining', best);
   }
 
   vanduShopAction(danCount, boughtThisVisit, biTichDoneThisVisit) {
@@ -6030,7 +6037,13 @@ class NpcBot {
           const remaining = this.vanduRerollRemaining(cur.text || '', cur.buttons || []);
           const allowReroll = !rerollBlocked && !!doiVanBtn && (remaining !== null ? remaining > 0 : rerolls < 4);
           const choice = this.vanduChooseBuff(buffButtons, this.vanduSectCounts, this.vanduOwnedBuffs, allowReroll, counterSect, cardRarities, this.vanduCounterPicks, cardSects);
-          if (!choice) break;
+          if (!choice) {
+            // V33: chỉ xảy ra khi sổ bot ghi max hết mà bảng vẫn hiện lá
+            // (game không hiện lá max, nên đây là sổ lệch) — chờ màn mới
+            // thay vì bấm bừa.
+            this.log('⛔ Vân Du: bảng buff không còn lá chọn được (sổ bot ghi max hết, game không hiện lá max — có thể đếm lệch), chờ màn mới');
+            break;
+          }
           if (choice.action === 'reroll') {
             // Ghi rõ bảng đang có gì để lần sau chẩn đoán được vì sao Đổi
             // (vd Ma Vàng mà vẫn Đổi thì phải thấy ngay trong log).
