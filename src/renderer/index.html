@@ -511,6 +511,13 @@
                    step="100"
                    style="width:100%;padding:8px 10px;background:#0a0a1a;border:1px solid #1a1a4e;border-radius:6px;color:#eee;font-size:14px;outline:none;box-sizing:border-box;">
           </div>
+          <div style="margin-bottom:15px;">
+            <label style="color:#eee;font-size:12px;">User ID Discord (dùng chung cho cả 5 mode): </label>
+            <input id="userid-shared"
+                   type="text"
+                   placeholder="ID Discord (dãy số)"
+                   style="width:100%;padding:8px 10px;background:#0a0a1a;border:1px solid #1a1a4e;border-radius:6px;color:#eee;font-size:14px;outline:none;box-sizing:border-box;">
+          </div>
           <div style="display:flex;gap:10px;justify-content:flex-end;">
             <button onclick="saveSkillOrder()"
                     style="background:#1a5a2e;color:#fff;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:13px;">💾 Lưu</button>
@@ -530,13 +537,6 @@
                     style="width: 100%;"
                     class="btn-start"
                     onclick="toggleBot()">▶ START</button>
-          </div>
-          <div class="config-field">
-            <label for="userid">User ID</label>
-            <input id="userid"
-                   type="text"
-                   value=""
-                   placeholder="ID Discord (dãy số)">
           </div>
           <div class="config-field">
             <label for="npc-number">NPC Number</label>
@@ -603,13 +603,6 @@
                     onclick="toggleBot()">▶ START</button>
           </div>
           <div class="config-field">
-            <label for="userid-lh">User ID</label>
-            <input id="userid-lh"
-                   type="text"
-                   value=""
-                   placeholder="ID Discord (dãy số)">
-          </div>
-          <div class="config-field">
             <label for="luanhoi-target">Tầng Dừng (Target)</label>
             <!-- 1 input duy nhất: gõ số tự do, bấm mũi tên xuống để chọn
                  nhanh 1 mức preset trong datalist (50-300). Dùng type="text"
@@ -658,6 +651,15 @@
                    max="10"
                    step="0.5">
           </div>
+          <div class="config-field full">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input id="luanhoi-continue-noshard"
+                     type="checkbox"
+                     checked
+                     style="width:13px;height:13px;">
+              <span style="font-size:10px;color:#ccc;">Đi tiếp khi chưa thấy Mảnh (tới Target mà Mảnh set: 0 loại thì leo tiếp tới boss kế)</span>
+            </label>
+          </div>
         </div>
       </div>
 
@@ -670,13 +672,6 @@
                     style="width: 100%;"
                     class="btn-start"
                     onclick="toggleBot()">▶ START</button>
-          </div>
-          <div class="config-field">
-            <label for="userid-dianguc">User ID</label>
-            <input id="userid-dianguc"
-                   type="text"
-                   value=""
-                   placeholder="ID Discord (dãy số)">
           </div>
           <div class="config-field">
             <label for="dianguc-cmd">Lệnh tham gia</label>
@@ -707,13 +702,6 @@
                     onclick="toggleBot()">▶ START</button>
           </div>
           <div class="config-field">
-            <label for="userid-bicanh">User ID</label>
-            <input id="userid-bicanh"
-                   type="text"
-                   value=""
-                   placeholder="ID Discord (dãy số)">
-          </div>
-          <div class="config-field">
             <label for="bicanh-cmd">Lệnh</label>
             <input id="bicanh-cmd"
                    type="text"
@@ -732,13 +720,6 @@
                     style="width: 100%;"
                     class="btn-start"
                     onclick="toggleBot()">▶ START</button>
-          </div>
-          <div class="config-field">
-            <label for="userid-upgrade">User ID</label>
-            <input id="userid-upgrade"
-                   type="text"
-                   value=""
-                   placeholder="ID Discord (dãy số)">
           </div>
           <div class="config-field">
             <label for="spam-count">Số lần gửi</label>

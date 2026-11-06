@@ -115,6 +115,7 @@ class NpcBot {
     this.luanhoiAutoRestart = true;
     this.luanhoiRestartDelaySec = 5;
     this.luanhoiTotalRuns = 0;  // 0 = kh\u00f4ng gi\u1edbi h\u1ea1n
+    this.luanhoiContinueNoShard = true; // ô "Đi tiếp khi chưa thấy Mảnh" (mặc định bật = hành vi cũ)
     this.luanhoiRunCount = 0;   // \u0111\u1ebfm s\u1ed1 l\u1ea7n v\u01b0\u1ee3t t\u1ea7ng trong phi\u00ean hi\u1ec7n t\u1ea1i
     // Log debug: bật qua env XOLA_DEBUG=1 hoặc bot.debug = true
     this.debug = process.env.XOLA_DEBUG === '1';
@@ -319,6 +320,7 @@ class NpcBot {
     if (config.luanhoiCmd !== undefined) this.luanhoiCmd = config.luanhoiCmd;
     if (config.luanhoiSkillNames !== undefined) this.luanhoiSkillNames = config.luanhoiSkillNames;
     if (config.luanhoiTotalRuns !== undefined) this.luanhoiTotalRuns = config.luanhoiTotalRuns;
+    if (config.luanhoiContinueNoShard !== undefined) this.luanhoiContinueNoShard = !!config.luanhoiContinueNoShard;
     if (config.dianguc !== undefined) this.dianguc = config.dianguc;
     if (config.diangucCmd !== undefined) this.diangucCmd = config.diangucCmd;
     if (config.diangucDelayMs !== undefined) this.diangucDelayMs = config.diangucDelayMs;
@@ -3110,13 +3112,15 @@ class NpcBot {
     const _effectiveTarget = this.luanhoiEffectiveTarget || this.luanhoiTarget;
     if (currentTier >= _effectiveTarget && isWin) {
       // Quy tắc Mảnh set (2026-10-31): tới Target mà chưa có mảnh thì KHÔNG
-      // dừng, KHÔNG đếm lượt, mà đi tiếp tới mốc boss kế (+10 tầng).
+      // dừng, KHÔNG đếm lượt, mà đi tiếp tới mốc boss kế (+10 tầng) — nhưng
+      // chỉ khi ô "Đi tiếp khi chưa thấy Mảnh" đang bật (mặc định bật);
+      // tắt thì dừng luôn ở Target (xem luanhoiShouldContinueNoShard).
       // Ví dụ: Target 200, Mảnh set: 0 loại -> đi tiếp tới 210, vẫn 0 -> 220,
       // đánh xong 220 mà Mảnh set > 0 thì mới dừng / đếm lượt như cũ.
       // "Có mảnh" = Mảnh set >= 1 loại trong panel thưởng sau boss.
       let _manh = this.parseLuanhoiManhSet(battleResult && battleResult.rewardText ? battleResult.rewardText : '');
       if (_manh === null) _manh = await this.readLuanhoiManhSet();
-      if (_manh !== null && _manh <= 0) {
+      if (this.luanhoiShouldContinueNoShard(_manh)) {
         const _nextTarget = (Math.floor(currentTier / 10) + 1) * 10;
         this.luanhoiEffectiveTarget = _nextTarget;
         this.log(`🧩 Tới tầng ${_effectiveTarget} (hiện tại ${currentTier}) nhưng Mảnh set: 0 loại — chưa có mảnh, đi tiếp tới tầng ${_nextTarget}, không dừng, không đếm lượt.`);
@@ -3125,6 +3129,8 @@ class NpcBot {
       } else {
         if (_manh === null) {
           this.log(`⚠️ Không đọc được "Mảnh set" ở tầng ${currentTier} — dừng theo Target cũ (${_effectiveTarget}) để tránh chạy vô hạn.`);
+        } else if (_manh <= 0) {
+          this.log(`🧩 Mảnh set: 0 loại ở tầng ${currentTier} nhưng ô "Đi tiếp khi chưa thấy Mảnh" đang tắt — dừng theo Target (${_effectiveTarget}).`);
         } else {
           this.log(`🧩 Đã có Mảnh set: ${_manh} loại ở tầng ${currentTier} — đủ điều kiện dừng.`);
         }
@@ -3940,6 +3946,15 @@ class NpcBot {
   // Quét message game mới nhất (đã gắn owned) để lấy "Mảnh set" mới nhất.
   // Dùng khi battleResult.rewardText không chứa dòng Mảnh set (panel thưởng
   // có thể nằm ở message riêng sau khi hạ boss).
+  // Checkbox "Đi tiếp khi chưa thấy Mảnh" (nhánh fix/luanhoi-stats, anh chốt
+  // 2026-11-06): tới Target mà Mảnh set: 0 loại thì leo tiếp tới boss kế
+  // thay vì dừng — nhưng chỉ khi ô này đang bật. Tắt thì dừng luôn ở
+  // Target dù chưa thấy mảnh. Mặc định bật (hành vi cũ, fix cứng trước đây);
+  // cờ undefined cũng coi là bật để config cũ không đổi hành vi.
+  luanhoiShouldContinueNoShard(manh) {
+    return manh !== null && manh <= 0 && this.luanhoiContinueNoShard !== false;
+  }
+
   async readLuanhoiManhSet() {
     await this.markLuanhoiMessages();
     const val = await this.exec(`(() => {

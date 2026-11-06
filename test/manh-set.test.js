@@ -19,3 +19,36 @@ for (const [input, expected] of cases) {
 }
 
 console.log('M\u1ea3nh set parse passed');
+
+// Checkbox "Đi tiếp khi chưa thấy Mảnh" (nhánh fix/luanhoi-stats, anh chốt 2026-11-06):
+// bật (mặc định) thì tới Target mà Mảnh set: 0 loại vẫn leo tiếp; tắt thì dừng luôn.
+if (bot.luanhoiContinueNoShard !== true) {
+  throw new Error(`luanhoiContinueNoShard default = ${bot.luanhoiContinueNoShard}, expected true`);
+}
+if (bot.luanhoiShouldContinueNoShard(0) !== true) {
+  throw new Error('luanhoiShouldContinueNoShard(0) with flag on = false, expected true');
+}
+if (bot.luanhoiShouldContinueNoShard(1) !== false) {
+  throw new Error('luanhoiShouldContinueNoShard(1) = true, expected false');
+}
+if (bot.luanhoiShouldContinueNoShard(null) !== false) {
+  throw new Error('luanhoiShouldContinueNoShard(null) = true, expected false');
+}
+bot.luanhoiContinueNoShard = false;
+if (bot.luanhoiShouldContinueNoShard(0) !== false) {
+  throw new Error('luanhoiShouldContinueNoShard(0) with flag off = true, expected false');
+}
+bot.luanhoiContinueNoShard = undefined;
+if (bot.luanhoiShouldContinueNoShard(0) !== true) {
+  throw new Error('luanhoiShouldContinueNoShard(0) with flag undefined = false, expected true (config cũ không đổi hành vi)');
+}
+bot.updateConfig({ luanhoiContinueNoShard: false });
+if (bot.luanhoiContinueNoShard !== false) {
+  throw new Error('updateConfig({ luanhoiContinueNoShard: false }) did not store false');
+}
+bot.updateConfig({ luanhoiContinueNoShard: true });
+if (bot.luanhoiContinueNoShard !== true) {
+  throw new Error('updateConfig({ luanhoiContinueNoShard: true }) did not store true');
+}
+
+console.log('Mảnh set continue-no-shard passed');
