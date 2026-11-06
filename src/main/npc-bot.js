@@ -5626,6 +5626,11 @@ class NpcBot {
   async vanduBattleLoop(runId) {
     // V15: log luôn thứ tự đang dùng để anh kiểm tra cấu hình có vào bot không.
     this.log(`⚔️ Vân Du: vào trận (thứ tự: ${this.vanduSkillOrder.join(' -> ')})`);
+    // V40 (anh 2026-11-06): bấm skill nhanh quá nên hụt combo — tăng
+    // khoảng nghỉ giữa các cú bấm trong trận Vân Du thêm 1s (1s -> 2s).
+    // Chỉ Vân Du: skillClickDelayMs là chung cho cả Luân Hồi/Bicanh nên
+    // không đổi mặc định chung, cộng 1s riêng ở đây (cả sau hồi máu).
+    const skillGapMs = (this.skillClickDelayMs || 1000) + 1000;
     let healUsed = false;
     const startedAt = Date.now();
     while (this.isRunning && this.runId === runId) {
@@ -5659,7 +5664,7 @@ class NpcBot {
         if (clicked) {
           healUsed = true;
           this.log(`💊 Vân Du: hồi máu bằng Cửu Chuyển (HP ${hp}%, Tiết ${this.vanduNode || '?'})`);
-          await this.delay(Math.max(1000, this.skillClickDelayMs || 1000));
+          await this.delay(Math.max(1000, skillGapMs));
           continue;
         }
       }
@@ -5696,7 +5701,7 @@ class NpcBot {
       } else {
         this.logDebug('Vân Du: không có skill nào bấm được lúc này, chờ quét lại');
       }
-      await this.delay(Math.max(500, this.skillClickDelayMs || 1000));
+      await this.delay(Math.max(500, skillGapMs));
     }
   }
 

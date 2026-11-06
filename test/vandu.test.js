@@ -469,3 +469,9 @@ console.log('ALL VANDU TESTS PASSED (V38)');
 // test cu (dong 67-70) da khoa san; reset co mua shop khi thay man cua
 // la logic vong lap, khong test truc tiep o day.
 console.log('ALL VANDU TESTS PASSED (V39)');
+
+// V40 (anh 2026-11-06): khoang nghi giua cac cu bam skill trong tran
+// Van Du +1s (1s -> 2s, skillGapMs), chi Van Du — skillClickDelayMs
+// chung cho ca Luan Hoi/Bicanh nen khong doi mac dinh chung. La logic
+// vong lap nen khong test truc tiep o day, can test tay tren Discord.
+console.log('ALL VANDU TESTS PASSED (V40)');
