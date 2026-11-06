@@ -533,3 +533,10 @@ eq(bot.vanduKyNgoHealHunterButton('tiet diem 10 36 ky duyen mon cua vang sang ru
 eq(bot.vanduIsKyNgoScreen('tiet diem 7 36 ky ngo tho san kho bau trong thuong', ['cuu chua ton 50 hp', 'doat ban do', 'bo mac']), true, 'V47: Ky Ngo Tho San Kho Bau nhan dien theo tieu de');
 console.log('ALL VANDU TESTS PASSED (V47)');
 
+
+// V48 (anh 2026-11-06, bang Tiet 11/36 Ky Ngo Song Sinh Cau Tu):
+eq(bot.vanduKyNgoShareFoodButton('tiet diem 11 36 ky ngo song sinh cau tu', ['chia do an cho ca hai', 'chi cho mot dua', 'duoi di']), 'Chia đồ ăn cho cả hai', 'V48: bang tre sinh doi Ky Ngo -> Chia do an cho ca hai');
+eq(bot.vanduKyNgoShareFoodButton('tiet diem 11 36 ky ngo song sinh cau tu', ['chi cho mot dua', 'duoi di']), null, 'V48: khong co nut Chia do an');
+eq(bot.vanduKyNgoShareFoodButton('tiet diem 10 36 ky duyen mon cua vang sang ruc', ['chia do an cho ca hai']), null, 'V48: man khong phai Ky Ngo thi khong chia do an');
+eq(bot.vanduIsKyNgoScreen('tiet diem 11 36 ky ngo song sinh cau tu', ['chia do an cho ca hai', 'chi cho mot dua', 'duoi di']), true, 'V48: Ky Ngo Song Sinh Cau Tu nhan dien theo tieu de');
+console.log('ALL VANDU TESTS PASSED (V48)');

@@ -5520,6 +5520,19 @@ class NpcBot {
     return null;
   }
 
+  // V48: Kỳ Ngộ Song Sinh Cầu Tử (ảnh Tiết 11/36, anh chốt 2026-11-06):
+  // 2 đứa trẻ rách rưới xin ăn trước cổng thành. 3 nút — xanh "Chia đồ
+  // ăn cho cả hai", xám "Chỉ cho một đứa", đỏ "Đuổi đi". Anh dặn gặp
+  // bảng này thì bấm Chia đồ ăn cho cả hai. Luật chung (v19) bấm nút
+  // xanh lá cũng trúng nút này, nhưng luật chữ chắc hơn luật màu nên
+  // làm handler riêng theo đúng chữ, đặt trước handler chung (như
+  // v34/v43). So theo chuỗi con cho chắc.
+  vanduKyNgoShareFoodButton(norm, btnNorm) {
+    if (!this.vanduIsKyNgoScreen(norm, btnNorm)) return null;
+    if ((btnNorm || []).some(x => x.includes('chia do an cho ca hai'))) return 'Chia đồ ăn cho cả hai';
+    return null;
+  }
+
   // V27: chỉ bấm nút xanh TRONG ĐÚNG màn đang xử lý (article có msgId
   // mà vòng chính vừa quét được). Bản cũ quét 15 article gần nhất rồi
   // fallback toàn trang — khi màn Kỳ Ngộ đã xử lý xong (nút tắt) hoặc
@@ -6042,6 +6055,18 @@ class NpcBot {
       if (healHunterBtn) {
         await this.vanduClickButton(healHunterBtn);
         this.log('💚 Vân Du: Kỳ Ngộ Thợ Săn Kho Báu Trọng Thương, bấm Cứu chữa (tốn 50% HP)');
+        await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
+        continue;
+      }
+
+      // Kỳ Ngộ Song Sinh Cầu Tử — Chia đồ ăn cho cả hai (v48, anh chốt
+      // 2026-11-06, ảnh Tiết 11/36): luôn chọn ô xanh "Chia đồ ăn cho
+      // cả hai", không chỉ cho một đứa, không đuổi đi. Đặt trước handler
+      // Kỳ Ngộ chung để không phụ thuộc vào nhận diện màu nút.
+      const shareFoodBtn = this.vanduKyNgoShareFoodButton(norm, btnNorm);
+      if (shareFoodBtn) {
+        await this.vanduClickButton(shareFoodBtn);
+        this.log('🍑 Vân Du: Kỳ Ngộ Song Sinh Cầu Tử, bấm Chia đồ ăn cho cả hai');
         await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
         continue;
       }
