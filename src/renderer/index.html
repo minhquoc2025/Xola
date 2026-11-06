@@ -62,6 +62,7 @@
 
     #content {
       flex: 1;
+      min-height: 0;
       position: relative;
       background: #0a0a1a;
     }
@@ -76,12 +77,19 @@
       display: none;
     }
 
+    /* Panel dưới co giãn theo cửa sổ, không cố định 240px nữa:
+       màn nhỏ (14"/15.6"/16" scale 125-150%) thì panel cao tối đa
+       44% chiều cao cửa sổ và tự cuộn, không cắt nội dung. */
     #control-panel {
-      height: 240px;
+      flex: 0 0 auto;
+      min-height: 260px;
+      max-height: 44vh;
+      overflow-y: auto;
       flex-shrink: 0;
       background: #0d1b2e;
       border-top: 1px solid #1a3a5e;
       display: flex;
+      flex-wrap: wrap;
       gap: 6px;
       padding: 6px;
     }
@@ -99,26 +107,36 @@
       margin-bottom: 6px;
     }
 
-    /* === NPC Panel (25%) === */
+    /* === NPC Panel === */
     #npc-panel {
-      flex: 0.25;
+      flex: 1 1 280px;
+      min-width: 260px;
       border: 1px solid #1a2a4e;
       border-radius: 6px;
       padding: 8px;
       display: flex;
       flex-direction: column;
-      min-width: 220px;
+      min-height: 0;
+      overflow-y: auto;
     }
 
-    /* === Tabs cho panel điều khiển === */
+    /* === Tabs cho panel điều khiển ===
+       Gốc lỗi khuất mode: 7 nút 1 hàng, mỗi nút white-space:nowrap
+       nên tổng bề rộng tối thiểu ~400px, trong khi panel chỉ ~280px
+       ở cửa sổ 1200px (còn hẹp hơn khi màn 16" scale 125-150%).
+       Cho tabs xuống 2 hàng (4 nút/hàng), nút ⚙️ giữ 1 ô nhỏ ở
+       hàng 2, chữ dài quá thì cắt "..." chứ không đẩy nút khác ra ngoài. */
     #mode-tabs {
       display: flex;
+      flex-wrap: wrap;
       gap: 4px;
       margin-bottom: 8px;
+      flex-shrink: 0;
     }
 
     #mode-tabs button {
-      flex: 1;
+      flex: 1 1 calc(25% - 4px);
+      min-width: 0;
       padding: 5px 4px;
       background: #0a1628;
       color: #aaa;
@@ -128,6 +146,12 @@
       font-size: 10px;
       font-weight: 600;
       white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    #btn-config-modal {
+      flex: 0 0 40px !important;
     }
 
     #mode-tabs button.active {
@@ -248,9 +272,10 @@
       border-radius: 3px;
     }
 
-    /* === Stats Panel (50%) === */
+    /* === Stats Panel === */
     #stats-panel {
-      flex: 0.5;
+      flex: 2 1 420px;
+      min-width: 320px;
       border: 1px solid #1a2a4e;
       border-radius: 6px;
       padding: 8px;
@@ -258,6 +283,7 @@
       flex-direction: column;
       gap: 6px;
       overflow-y: auto;
+      min-height: 0;
     }
 
     .stats-top {
@@ -400,11 +426,13 @@
       white-space: nowrap;
     }
 
-    /* === Log Panel (25%) === */
+    /* === Log Panel === */
     #log-section {
-      flex: 0.25;
+      flex: 1 1 240px;
+      min-width: 220px;
       display: flex;
       flex-direction: column;
+      min-height: 0;
     }
 
     #log-area {
@@ -441,6 +469,42 @@
 
     #log-controls button:hover {
       background: #3a3a5a;
+    }
+
+    /* === Responsive: 22" / 16" / 15.6" / 14" ===
+       Màn lớn giữ 3 cột như cũ. Màn hẹp: ô thống kê 6 -> 3 cột,
+       panel dưới được cuộn và các cột tự xuống hàng thay vì bị cắt. */
+    @media (max-width: 1400px) {
+      .stats-top {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+      #control-panel {
+        max-height: 46vh;
+      }
+    }
+
+    @media (max-width: 1100px) {
+      #npc-panel,
+      #stats-panel,
+      #log-section {
+        flex-basis: 100%;
+        min-width: 0;
+      }
+      #log-section {
+        min-height: 140px;
+      }
+      .stats-bottom {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 700px) {
+      .config-grid {
+        grid-template-columns: 1fr;
+      }
+      #mode-tabs button {
+        flex-basis: calc(50% - 4px);
+      }
     }
   </style>
 </head>

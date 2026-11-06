@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, webContents } = require('electron');
+const { app, BrowserWindow, ipcMain, webContents, screen } = require('electron');
 const path = require('path');
 
 app.commandLine.appendSwitch('disable-site-isolation-trials');
@@ -10,9 +10,18 @@ const botMap = {};
 let globalLogBuffer = [];
 
 function createMainWindow() {
+  // Cửa sổ theo kích thước màn thật thay vì cố định 1200x800:
+  // màn 14"/15.6"/16" (thường 1366x768 hoặc 1920x1080 scale 125-150%)
+  // mở ~92% vùng làm việc, không tràn taskbar; màn 22" mở rộng hơn,
+  // tối đa 1600x1000. Người dùng vẫn kéo to/nhỏ, thu nhỏ tối thiểu 960x640.
+  const workArea = screen.getPrimaryDisplay().workAreaSize;
+  const width = Math.max(960, Math.min(1600, Math.floor(workArea.width * 0.92)));
+  const height = Math.max(640, Math.min(1000, Math.floor(workArea.height * 0.92)));
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
+    width,
+    height,
+    minWidth: 960,
+    minHeight: 640,
     title: 'Discord NPC Auto',
     webPreferences: {
       preload: path.join(__dirname, '..', 'renderer', 'preload.js'),
