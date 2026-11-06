@@ -540,3 +540,17 @@ eq(bot.vanduKyNgoShareFoodButton('tiet diem 11 36 ky ngo song sinh cau tu', ['ch
 eq(bot.vanduKyNgoShareFoodButton('tiet diem 10 36 ky duyen mon cua vang sang ruc', ['chia do an cho ca hai']), null, 'V48: man khong phai Ky Ngo thi khong chia do an');
 eq(bot.vanduIsKyNgoScreen('tiet diem 11 36 ky ngo song sinh cau tu', ['chia do an cho ca hai', 'chi cho mot dua', 'duoi di']), true, 'V48: Ky Ngo Song Sinh Cau Tu nhan dien theo tieu de');
 console.log('ALL VANDU TESTS PASSED (V48)');
+
+// V49 (anh 2026-11-06): tu Tiet 1 den 12 uu tien 5 buff Thuat truoc.
+bot.vanduNode = 5;
+eq(bot.vanduChooseBuff(['[Ma] M [Ma Tông - Lam]', '[Thuật] T [Thuật Tông - Vàng (Thần Thoại)]'], {}, {}, true, 'Ma').buttonText, '[Thuật] T [Thuật Tông - Vàng (Thần Thoại)]', 'V49: Tiet 5, Thuat Vang thang counter Ma Lam');
+eq(bot.vanduChooseBuff(['[Ma] M [Ma Tông - Lam]', '[Thuật] T [Thuật Tông - Vàng (Thần Thoại)]'], {}, {}, true, 'Ma').reason, 'thuat', 'V49: Tiet 5, ly do la thuat');
+bot.vanduNode = 12;
+eq(bot.vanduChooseBuff(['[Ma] M [Ma Tông - Lam]', '[Thuật] T [Thuật Tông - Vàng (Thần Thoại)]'], {}, {}, true, 'Ma').buttonText, '[Thuật] T [Thuật Tông - Vàng (Thần Thoại)]', 'V49: Tiet 12 (bien), Thuat van truoc');
+bot.vanduNode = 13;
+eq(bot.vanduChooseBuff(['[Ma] M [Ma Tông - Lam]', '[Thuật] T [Thuật Tông - Vàng (Thần Thoại)]'], {}, {}, true, 'Ma').buttonText, '[Ma] M [Ma Tông - Lam]', 'V49: Tiet 13 tro di, counter lai truoc');
+bot.vanduNode = 0;
+eq(bot.vanduChooseBuff(['[Ma] M [Ma Tông - Lam]', '[Thuật] T [Thuật Tông - Vàng (Thần Thoại)]'], {}, {}, true, 'Ma').buttonText, '[Ma] M [Ma Tông - Lam]', 'V49: chua doc duoc Tiet, giu luat cu (counter truoc)');
+bot.vanduNode = 5;
+eq(bot.vanduChooseBuff(['[Ma] M [Ma Tông - Lam]', '[Thuật] T [Thuật Tông - Vàng (Thần Thoại)]'], { Thuật: 5 }, {}, false, 'Ma').buttonText, '[Ma] M [Ma Tông - Lam]', 'V49: Tiet 5 nhung Thuat da du 5 -> counter thang');
+console.log('ALL VANDU TESTS PASSED (V49)');

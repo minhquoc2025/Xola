@@ -5138,14 +5138,25 @@ class NpcBot {
     const fresh = parsed.filter(isNew);
     const buckets = [];
     const counterPicksSoFar = Number(counterPicks) || 0;
-    if (counterSect && counterPicksSoFar < 5) {
-      const b = bestOf(fresh.filter(c => c.sect === counterSect));
-      if (b) buckets.push(['counter', b]);
-    }
-    if ((counts['Thuật'] || 0) < 5) {
-      const b = bestOf(fresh.filter(c => c.sect === 'Thuật'));
-      if (b) buckets.push(['thuat', b]);
-    }
+    // V49 (anh 2026-11-06): từ Tiết 1 đến 12 ưu tiên chọn 5 buff Thuật
+    // trước — rổ Thuật xếp trên rổ khắc chế. Từ Tiết 13 trở đi (hoặc chưa
+    // đọc được Tiết) giữ thứ tự cũ: khắc chế > Thuật > Vận > Khí. Tiết
+    // đọc từ màn (vanduNode, cập nhật mỗi lần quét); đủ 5 Thuật rồi thì
+    // rổ Thuật tự hết, khắc chế lên đầu như thường.
+    const thuatFirst = this.vanduNode >= 1 && this.vanduNode <= 12;
+    const pushCounter = () => {
+      if (counterSect && counterPicksSoFar < 5) {
+        const b = bestOf(fresh.filter(c => c.sect === counterSect));
+        if (b) buckets.push(['counter', b]);
+      }
+    };
+    const pushThuat = () => {
+      if ((counts['Thuật'] || 0) < 5) {
+        const b = bestOf(fresh.filter(c => c.sect === 'Thuật'));
+        if (b) buckets.push(['thuat', b]);
+      }
+    };
+    if (thuatFirst) { pushThuat(); pushCounter(); } else { pushCounter(); pushThuat(); }
     if ((counts['Vận'] || 0) < 1) {
       const b = bestOf(fresh.filter(c => c.sect === 'Vận' && c.rarity === 4));
       if (b) buckets.push(['van', b]);
@@ -5154,10 +5165,11 @@ class NpcBot {
       const b = bestOf(fresh.filter(c => c.sect === 'Khí' && c.rarity === 4));
       if (b) buckets.push(['khi', b]);
     }
-    // Thứ tự rổ: khắc chế > Thuật > Vận > Khí. Đây là thứ tự ưu tiên khi
-    // chọn, KHÔNG phải thứ tự trong danh sách túi cứng của anh. Khắc chế
-    // thắng vàng khác tông (mẫu tiết 6: Ma Tím thắng Khí Vàng), và trong
-    // mỗi rổ thì vàng > tím > lam > lục (anh dặn "bất kể tông nào").
+    // Thứ tự rổ (mặc định): khắc chế > Thuật > Vận > Khí; Tiết 1–12 thì
+    // Thuật > khắc chế (v49). Đây là thứ tự ưu tiên khi chọn, KHÔNG phải
+    // thứ tự trong danh sách túi cứng của anh. Khắc chế thắng vàng khác
+    // tông (mẫu tiết 6: Ma Tím thắng Khí Vàng), và trong mỗi rổ thì vàng
+    // > tím > lam > lục (anh dặn "bất kể tông nào").
     // V14: độ hiếm 0 = không đọc được thì KHÔNG coi là thấp.
     const hasGood = buckets.some(([, c]) => c.rarity >= 3 || c.rarity === 0);
     const dup = bestOf(parsed.filter(isUpgradable));
