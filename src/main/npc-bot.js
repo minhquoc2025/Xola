@@ -5626,6 +5626,10 @@ class NpcBot {
   async vanduBattleLoop(runId) {
     // V15: log luôn thứ tự đang dùng để anh kiểm tra cấu hình có vào bot không.
     this.log(`⚔️ Vân Du: vào trận (thứ tự: ${this.vanduSkillOrder.join(' -> ')})`);
+    // V41 (anh 2026-11-06): qua Tiết mới gặp trận mới thì bấm lại skill
+    // từ đầu theo config — trước đây vanduSkillIdx chỉ reset đầu chuyến
+    // nên trận sau bấm tiếp diễn từ chỗ trận trước dừng lại.
+    this.vanduSkillIdx = 0;
     // V40 (anh 2026-11-06): bấm skill nhanh quá nên hụt combo — tăng
     // khoảng nghỉ giữa các cú bấm trong trận Vân Du thêm 1s (1s -> 2s).
     // Chỉ Vân Du: skillClickDelayMs là chung cho cả Luân Hồi/Bicanh nên

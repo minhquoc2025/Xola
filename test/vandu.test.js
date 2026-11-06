@@ -475,3 +475,10 @@ console.log('ALL VANDU TESTS PASSED (V39)');
 // chung cho ca Luan Hoi/Bicanh nen khong doi mac dinh chung. La logic
 // vong lap nen khong test truc tiep o day, can test tay tren Discord.
 console.log('ALL VANDU TESTS PASSED (V40)');
+
+// V41 (anh 2026-11-06): tran moi bam lai skill tu dau theo config
+// (reset vanduSkillIdx o dau vanduBattleLoop) — truoc day chi reset
+// dau chuyen nen tran sau bam tiep dien. La logic vong lap nen khong
+// test truc tiep o day, can test tay: qua Tiet moi, skill dau tien
+// bam phai la skill dau trong config.
+console.log('ALL VANDU TESTS PASSED (V41)');
