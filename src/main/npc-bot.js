@@ -5483,6 +5483,18 @@ class NpcBot {
     return null;
   }
 
+  // V45: Kỳ Ngộ Hắc Thị Thương Nhân Vô Diện (ảnh Tiết 21/36, anh chốt
+  // 2026-11-06): 3 nút — "Mua Thái Sơn Lạc Đan (50k)", "Mua Bích Họa
+  // Bí Thuật (80k)", "Lỡ đi". Anh dặn gặp bảng này thì mua Bích Họa
+  // Bí Thuật. Bảng này KHÔNG có nút xanh lá cũng không có Dâng hương
+  // nên luật chung (v19) bấm hụt rồi chờ mãi — phải làm luật riêng.
+  // So theo chuỗi con vì nút còn hậu tố giá "(80k)".
+  vanduKyNgoMerchantButton(norm, btnNorm) {
+    if (!this.vanduIsKyNgoScreen(norm, btnNorm)) return null;
+    if ((btnNorm || []).some(x => x.includes('mua bich hoa bi thuat'))) return 'Mua Bích Họa Bí Thuật';
+    return null;
+  }
+
   // V27: chỉ bấm nút xanh TRONG ĐÚNG màn đang xử lý (article có msgId
   // mà vòng chính vừa quét được). Bản cũ quét 15 article gần nhất rồi
   // fallback toàn trang — khi màn Kỳ Ngộ đã xử lý xong (nút tắt) hoặc
@@ -5969,6 +5981,18 @@ class NpcBot {
       if (teaBtn) {
         await this.vanduClickButton(teaBtn);
         this.log('🍵 Vân Du: Kỳ Ngộ Tiên Tử Trà Hữu, bấm Thưởng trà');
+        await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
+        continue;
+      }
+
+      // Kỳ Ngộ Hắc Thị Thương Nhân — Mua Bích Họa Bí Thuật (v45, anh chốt
+      // 2026-11-06, ảnh Tiết 21/36): luôn mua Bích Họa Bí Thuật (80k),
+      // không mua Thái Sơn Lạc Đan (50k), không lỡ đi. Đặt trước handler
+      // Kỳ Ngộ chung vì bảng này không có nút xanh lá/Dâng hương.
+      const merchantBtn = this.vanduKyNgoMerchantButton(norm, btnNorm);
+      if (merchantBtn) {
+        await this.vanduClickButton(merchantBtn);
+        this.log('🛒 Vân Du: Kỳ Ngộ Hắc Thị Thương Nhân, mua Bích Họa Bí Thuật (80k)');
         await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
         continue;
       }

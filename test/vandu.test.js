@@ -506,3 +506,10 @@ console.log('ALL VANDU TESTS PASSED (V43)');
 // 1 lan; bam lap chi la du phong khi man chua doi sau cu bam. Case
 // mua 1 cai roi roi (danCount < 3, boughtThisVisit) giu nguyen.
 console.log('ALL VANDU TESTS PASSED (V44)');
+
+// V45 (anh 2026-11-06, bang Tiet 21/36 Ky Ngo Hac Thi Thuong Nhan Vo Dien):
+eq(bot.vanduKyNgoMerchantButton('tiet diem 21 36 ky ngo hac thi thuong nhan vo dien', ['mua thai son lac dan 50k', 'mua bich hoa bi thuat 80k', 'lo di']), 'Mua Bích Họa Bí Thuật', 'V45: bang thuong nhan Ky Ngo -> Mua Bich Hoa Bi Thuat');
+eq(bot.vanduKyNgoMerchantButton('tiet diem 21 36 ky ngo hac thi thuong nhan vo dien', ['mua thai son lac dan 50k', 'lo di']), null, 'V45: khong co nut Bich Hoa');
+eq(bot.vanduKyNgoMerchantButton('tiet diem 10 36 ky duyen mon cua vang sang ruc', ['mua bich hoa bi thuat 80k']), null, 'V45: man khong phai Ky Ngo thi khong mua Bich Hoa');
+eq(bot.vanduIsKyNgoScreen('tiet diem 21 36 ky ngo hac thi thuong nhan vo dien', ['mua thai son lac dan 50k', 'mua bich hoa bi thuat 80k', 'lo di']), true, 'V45: Ky Ngo Thuong Nhan nhan dien theo tieu de');
+console.log('ALL VANDU TESTS PASSED (V45)');
