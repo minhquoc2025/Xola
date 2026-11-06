@@ -513,3 +513,10 @@ eq(bot.vanduKyNgoMerchantButton('tiet diem 21 36 ky ngo hac thi thuong nhan vo d
 eq(bot.vanduKyNgoMerchantButton('tiet diem 10 36 ky duyen mon cua vang sang ruc', ['mua bich hoa bi thuat 80k']), null, 'V45: man khong phai Ky Ngo thi khong mua Bich Hoa');
 eq(bot.vanduIsKyNgoScreen('tiet diem 21 36 ky ngo hac thi thuong nhan vo dien', ['mua thai son lac dan 50k', 'mua bich hoa bi thuat 80k', 'lo di']), true, 'V45: Ky Ngo Thuong Nhan nhan dien theo tieu de');
 console.log('ALL VANDU TESTS PASSED (V45)');
+
+// V46 (anh 2026-11-06): hoi mau khong gioi han 1 lan/tran nua — mau
+// <= 50% thi xai dan, danh tiep ma tut duoi 50% nua thi xai tiep;
+// gioi han la so dan dang co (toi da 3, dong bo v42). La logic vong
+// tran nen khong test truc tiep o day; test tay: tran kho, mau tut
+// duoi 50% 2 lan thi thay 2 dong hoi mau (neu con dan).
+console.log('ALL VANDU TESTS PASSED (V46)');

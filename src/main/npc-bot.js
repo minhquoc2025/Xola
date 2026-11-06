@@ -5660,7 +5660,6 @@ class NpcBot {
     // Chỉ Vân Du: skillClickDelayMs là chung cho cả Luân Hồi/Bicanh nên
     // không đổi mặc định chung, cộng 1s riêng ở đây (cả sau hồi máu).
     const skillGapMs = (this.skillClickDelayMs || 1000) + 1000;
-    let healUsed = false;
     const startedAt = Date.now();
     while (this.isRunning && this.runId === runId) {
       if (Date.now() - startedAt > this.battleTimeoutMs) {
@@ -5676,13 +5675,17 @@ class NpcBot {
       const isBattle = norm.includes('trang thai chien truong') || norm.includes('dien bien hiep dau') ||
         this.vanduSkillOrder.some(s => btnNorm.some(b => b.includes(this.vanduNormalize(s))));
       if (!isBattle) return;
-      // Hồi máu bằng vật phẩm dưới skill, chỉ khi máu <= 50% và chưa dùng trong trận này.
+      // Hồi máu bằng vật phẩm dưới skill, chỉ khi máu <= 50%.
       // V27 (anh dặn boss Tiết 12/24/36 máu 50% thì hồi): luật này vốn đã
       // có nhưng chết từ 2 chỗ — nút thật trên màn chỉ ghi "Cửu Chuyển
       // Hoàn Hồn" (không có "Đan") nên tìm '...dan' không bao giờ trúng,
       // và máu người chơi đọc nhầm thành máu quái (xem vanduPlayerHpPct).
       // Giờ tìm theo 'cuu chuyen hoan hon' (trừ nút Mua ở shop), áp cho
-      // mọi trận kể cả boss 12/24/36, mỗi trận tối đa 1 lần.
+      // mọi trận kể cả boss 12/24/36.
+      // V46 (anh 2026-11-06): KHÔNG giới hạn 1 lần/trận nữa — máu tụt
+      // dưới 50% thì xài đan, đánh tiếp mà tụt dưới 50% nữa thì xài tiếp.
+      // Giới hạn là số đan đang có (tối đa 3, đồng bộ theo nút ở trên);
+      // hết đan thì không còn nút để bấm nên tự dừng.
       const hp = this.vanduPlayerHpPct(screen.text);
       const itemBtns = screen.buttons.filter(b => {
         const n = this.vanduNormalize(b);
@@ -5697,10 +5700,9 @@ class NpcBot {
         this.vanduDanCount = itemBtns.length;
         this.log(`💊 Vân Du: đồng bộ Đan ${this.vanduDanCount}/3 (theo nút trên màn battle)`);
       }
-      if (!healUsed && hp !== null && hp <= 50 && itemBtn) {
+      if (hp !== null && hp <= 50 && itemBtn) {
         const clicked = await this.vanduClickButton('Cửu Chuyển Hoàn Hồn');
         if (clicked) {
-          healUsed = true;
           this.log(`💊 Vân Du: hồi máu bằng Cửu Chuyển (HP ${hp}%, Tiết ${this.vanduNode || '?'})`);
           await this.delay(Math.max(1000, skillGapMs));
           continue;
