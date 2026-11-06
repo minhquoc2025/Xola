@@ -4913,6 +4913,17 @@ class NpcBot {
     return map[element] || null;
   }
 
+  // V36: các nút cửa quẻ trên màn đố Bát Quái (đủ 8 quẻ: Ly/Khảm/Khôn/
+  // Chấn/Đoài/Càn/Tốn/Cấn — Càn và Cấn chuẩn hoá đều thành "can") — dùng
+  // khi không đọc được đáp án thì chọn ngẫu nhiên 1 cửa thay vì dừng.
+  vanduPuzzleDoorButtons(buttons) {
+    const trigrams = ['ly', 'kham', 'khon', 'chan', 'doai', 'can', 'ton'];
+    return (buttons || []).filter(b => {
+      const n = this.vanduNormalize(b);
+      return trigrams.some(t => n.includes('cua ' + t));
+    });
+  }
+
   vanduSkillCooldown(buttonText) {
     const m = String(buttonText || '').match(/\((\d+)\)\s*$/);
     return m ? Number(m[1]) : null;
@@ -5982,8 +5993,9 @@ class NpcBot {
         continue;
       }
 
-      // Đố Bát Quái: đọc thơ trong ngoặc kép, map hành -> cửa. Không đoán
-      // được hành hoặc không thấy cửa đó thì dừng để tránh mở sai cửa.
+      // Đố Bát Quái: đọc thơ trong ngoặc kép, map hành -> cửa. V36: không
+      // đoán được đáp án thì chọn ngẫu nhiên 1 cửa thay vì dừng (anh chốt
+      // 2026-11-06); chỉ dừng khi màn không có nút cửa nào.
       if (/bát quái trận đố|bat quai tran do/i.test(text) || btnNorm.some(x => x.includes('cua ly') || x.includes('cua kham') || x.includes('cua khon') || x.includes('cua chan') || x.includes('cua doai') || x.includes('cua can') || x.includes('cua ton'))) {
         const element = this.vanduPuzzleElement(text);
         const door = element ? this.vanduPuzzleDoor(element) : null;
@@ -5992,8 +6004,19 @@ class NpcBot {
           await this.vanduClickButton(doorBtn);
           this.log(`🧩 Vân Du: đố Bát Quái, thơ hành ${element} -> ${doorBtn}`);
         } else {
-          this.log(`⛔ Vân Du: đố Bát Quái, không đoán được hành/cửa từ thơ (hành: ${element || '?'}) , dừng để tránh mở sai cửa.`);
-          break;
+          // V36 (anh chốt 2026-11-06, log 22:33:14): câu đố chưa đọc
+          // được đáp án thì chọn NGẪU NHIÊN 1 cửa thay vì dừng — đáp
+          // sai chỉ mở trận đánh bẫy, không chết ngay; dừng giữa chuyến
+          // thì mất cả chuyến. Chỉ dừng khi màn không có nút cửa nào.
+          const doorBtns = this.vanduPuzzleDoorButtons(buttons);
+          if (doorBtns.length > 0) {
+            const randomBtn = doorBtns[Math.floor(Math.random() * doorBtns.length)];
+            await this.vanduClickButton(randomBtn);
+            this.log(`🎲 Vân Du: đố Bát Quái, không đoán được hành/cửa từ thơ (hành: ${element || '?'}) — chọn ngẫu nhiên "${randomBtn}" thay vì dừng`);
+          } else {
+            this.log(`⛔ Vân Du: đố Bát Quái, không đoán được hành/cửa từ thơ (hành: ${element || '?'}) và không thấy nút cửa nào, dừng để tránh mở sai cửa.`);
+            break;
+          }
         }
         await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
         continue;

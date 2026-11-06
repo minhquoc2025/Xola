@@ -450,3 +450,10 @@ eq(bot.vanduKyNgoRescueButton('tiet diem 11 36 ky ngo ho phap phong thap co', ['
 eq(bot.vanduKyNgoRescueButton('tiet diem 8 36 ky ngo cuong nhan doan dinh', ['dat 50k thap', 'dat cuoc tat tay 150k', 'bo qua']), null, 'V34: bang cuoc khong co nut Cuu mang');
 eq(bot.vanduKyNgoRescueButton('tiet diem 5 36 cua canh mon tien thuong hac thi', ['cuu mang tien boi', 'mua cuu chuyen hoan hon dan']), null, 'V34: man khong phai Ky Ngo thi khong bam');
 console.log('ALL VANDU TESTS PASSED (V34)');
+
+// V36 (anh 2026-11-06, log 22:33:14): cau do chua doc duoc dap an thi
+// chon ngau nhien 1 cua thay vi dung — can loc dung cac nut cua que.
+eq(bot.vanduPuzzleDoorButtons(['Cửa Càn', 'Cửa Khôn', 'Cửa Tốn', 'Bắt Đầu Xuất Phát']), ['Cửa Càn', 'Cửa Khôn', 'Cửa Tốn'], 'V36: loc nut cua que, loai nut khac');
+eq(bot.vanduPuzzleDoorButtons(['Cửa Ly', 'Cửa Chấn']), ['Cửa Ly', 'Cửa Chấn'], 'V36: loc Ly/Chan');
+eq(bot.vanduPuzzleDoorButtons(['Mua Cửu Chuyển', 'Rời đi']), [], 'V36: khong co nut cua que');
+console.log('ALL VANDU TESTS PASSED (V36)');
