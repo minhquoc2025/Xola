@@ -196,7 +196,12 @@ function loadLuanHoiSettings() {
     const el = document.getElementById("button-delay-lh");
     if (el) el.value = savedDelay;
   }
-  ["luanhoi-total-runs", "luanhoi-target", "luanhoi-cmd", "button-delay-lh"].forEach(id => {
+  // Checkbox "Đi tiếp khi chưa thấy Mảnh": mặc định bật (hành vi cũ); chỉ
+  // tắt khi đã lưu "0".
+  const continueEl = document.getElementById("luanhoi-continue-noshard");
+  if (continueEl) continueEl.checked = localStorage.getItem("luanhoi-continue-noshard") !== "0";
+
+  ["luanhoi-total-runs", "luanhoi-target", "luanhoi-cmd", "button-delay-lh", "luanhoi-continue-noshard"].forEach(id => {
     const el = document.getElementById(id);
     if (el) {
       el.addEventListener("input", saveLuanHoiSettings);
@@ -239,6 +244,9 @@ function saveLuanHoiSettings() {
 
   const delayEl = document.getElementById("button-delay-lh");
   if (delayEl) localStorage.setItem("button-delay-lh", delayEl.value);
+
+  const continueEl = document.getElementById("luanhoi-continue-noshard");
+  if (continueEl) localStorage.setItem("luanhoi-continue-noshard", continueEl.checked ? "1" : "0");
 }
 
 function getLuanHoiConfig() {
@@ -254,6 +262,7 @@ function getLuanHoiConfig() {
     username: "", // Luân Hồi giờ check theo User ID, không dùng username nữa
     luanhoiTarget: parseInt(document.getElementById("luanhoi-target").value) || 10,
     luanhoiTotalRuns: (!isNaN(totalRunsVal) && totalRunsVal > 0) ? totalRunsVal : 0,
+    luanhoiContinueNoShard: document.getElementById("luanhoi-continue-noshard") ? document.getElementById("luanhoi-continue-noshard").checked : true,
     luanhoiCmd: (document.getElementById("luanhoi-cmd").value || "!luanhoi").trim(),
     buttonDelayMs: (parseFloat(document.getElementById("button-delay-lh").value) || 2) * 1000,
     luanhoiSkillNames: skills.length > 0
