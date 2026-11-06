@@ -5198,10 +5198,12 @@ class NpcBot {
   }
 
   vanduShopAction(danCount, boughtThisVisit, biTichDoneThisVisit) {
-    if (danCount >= 3) {
-      if (biTichDoneThisVisit) return 'roi-di';
-      return 'bi-tich';
-    }
+    // V44 (anh chốt 2026-11-06): đủ 3 đan thì cứ bấm Bí Tịch tới khi màn
+    // tự đổi, KHÔNG bấm rời — Bí Tịch bấm được vô hạn. Trước đây bấm Bí
+    // Tịch 1 lần rồi lần quét sau bấm Rời đi. biTichDoneThisVisit giữ lại
+    // trong chữ ký cho khỏi sửa chỗ gọi/test, nhưng luật mới không dùng
+    // nó nữa. Chưa đủ 3 đan thì vẫn như cũ: mua 1 cái rồi rời.
+    if (danCount >= 3) return 'bi-tich';
     if (boughtThisVisit) return 'roi-di';
     return 'mua-cuu-chuyen';
   }

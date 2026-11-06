@@ -65,7 +65,7 @@ eq(bot.vanduRerollRemaining('không có nút đổi', []), null, 'khong doc duoc
 
 // Shop
 eq(bot.vanduShopAction(3, false, false), 'bi-tich', 'shop: 3 dan -> Bi Tich');
-eq(bot.vanduShopAction(3, false, true), 'roi-di', 'shop: after Bi Tich -> Roi di');
+eq(bot.vanduShopAction(3, false, true), 'bi-tich', 'V44: du 3 dan, da bam Bi Tich van bam tiep, khong roi');
 eq(bot.vanduShopAction(1, false, false), 'mua-cuu-chuyen', 'shop: buy');
 eq(bot.vanduShopAction(1, true, false), 'roi-di', 'shop: already bought this visit -> Roi di');
 
@@ -499,3 +499,10 @@ eq(bot.vanduKyNgoTeaButton('tiet diem 10 36 ky duyen mon cua vang sang ruc', ['t
 // co luat rieng van trung nut xanh; luat rieng chi de chac hon.
 eq(bot.vanduIsKyNgoScreen('tiet diem 16 36 ky ngo tien tu tra huu', ['thuong tra', 'khong uong', 'doat am tra']), true, 'V43: Ky Ngo Tien Tu Tra Huu nhan dien theo tieu de');
 console.log('ALL VANDU TESTS PASSED (V43)');
+
+// V44 (anh chot 2026-11-06): du 3 dan thi cu bam Bi Tich toi khi man
+// tu doi, KHONG bam roi — Bi Tich bam duoc vo han. Anh noi them: moi
+// lan chi bam duoc 1 cai thoi la doi man hinh roi, nen thuong chi bam
+// 1 lan; bam lap chi la du phong khi man chua doi sau cu bam. Case
+// mua 1 cai roi roi (danCount < 3, boughtThisVisit) giu nguyen.
+console.log('ALL VANDU TESTS PASSED (V44)');
