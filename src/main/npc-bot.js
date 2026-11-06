@@ -6157,6 +6157,18 @@ class NpcBot {
       const doorButtons = buttons.filter(b => this.vanduElementOfDoor(b) !== null);
       const isDoor = norm.includes('nga re') || norm.includes('hay chon 1 cua') || doorButtons.length >= 2;
       if (isDoor && doorButtons.length > 0) {
+        // V39 (anh chốt 2026-11-06, log 09:34:24-26): thấy màn cửa tức là
+        // đã rời shop — reset cờ mua shop để lần vào shop sau luôn tính
+        // lại từ đầu, dù game có sửa cùng 1 message Discord cho bảng
+        // shop mới (khóa shop trùng khóa cũ nên cờ mua/bí tịch còn giữ
+        // nguyên, bot tưởng đã mua ở đây rồi mà rời luôn không mua).
+        // 3 case trong vanduShopAction giữ nguyên (test đã khóa sẵn).
+        if (shopKey !== '') {
+          shopKey = '';
+          shopBought = false;
+          shopBiTich = false;
+          this.log('🚪 Vân Du: đã rời shop (thấy màn cửa), reset cờ mua shop cho lần vào sau');
+        }
         const circuitBefore = this.vanduCircuit;
         const chosen = this.vanduChooseDoor(doorButtons, circuitBefore);
         if (chosen) {
