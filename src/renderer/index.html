@@ -435,8 +435,15 @@
       min-height: 0;
     }
 
+    /* V37: khung log cố định như trước — panel cũ cao 240px thì log còn
+       ~190px, log mới cuộn bên trong, không đẩy màn hình lên. Gốc lỗi:
+       v35 bỏ chiều cao cố định của panel dưới, mà #log-area là flex item
+       không có min-height: 0 nên không co lại dưới cỡ nội dung được —
+       mỗi dòng log mới làm khung cao thêm, đẩy cả màn hình lên. */
     #log-area {
       flex: 1;
+      min-height: 0;
+      max-height: 200px;
       background: #0a0a1a;
       border: 1px solid #1a1a3e;
       border-radius: 4px;
