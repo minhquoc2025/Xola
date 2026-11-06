@@ -488,3 +488,14 @@ console.log('ALL VANDU TESTS PASSED (V41)');
 // tiep. La logic vong tran nen khong test truc tiep o day; test tay:
 // xai dan trong tran (log dong bo), vao shop sau thay bot mua lai.
 console.log('ALL VANDU TESTS PASSED (V42)');
+
+// V43 (anh 2026-11-06, bang Tiet 16/36 Ky Ngo Tien Tu Tra Huu):
+eq(bot.vanduKyNgoTeaButton('tiet diem 16 36 ky ngo tien tu tra huu', ['thuong tra', 'khong uong', 'doat am tra']), 'Thưởng trà', 'V43: bang tra Ky Ngo -> Thuong tra');
+eq(bot.vanduKyNgoTeaButton('tiet diem 16 36 ky ngo tien tu tra huu', ['khong uong', 'doat am tra']), null, 'V43: khong co nut Thuong tra');
+eq(bot.vanduKyNgoTeaButton('tiet diem 10 36 ky duyen mon cua vang sang ruc', ['thuong tra']), null, 'V43: man khong phai Ky Ngo thi khong bam Thuong tra');
+// V43 (anh 2026-11-06): Ky Ngo chua biet cu bam o xanh la — handler
+// chung v19 da lam vay: man Ky Ngo nhan dien theo tieu de thi roi
+// vao nut xanh (thu lai moi vong quet), nen bang Tien Tu nay du khong
+// co luat rieng van trung nut xanh; luat rieng chi de chac hon.
+eq(bot.vanduIsKyNgoScreen('tiet diem 16 36 ky ngo tien tu tra huu', ['thuong tra', 'khong uong', 'doat am tra']), true, 'V43: Ky Ngo Tien Tu Tra Huu nhan dien theo tieu de');
+console.log('ALL VANDU TESTS PASSED (V43)');

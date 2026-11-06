@@ -5470,6 +5470,17 @@ class NpcBot {
     return null;
   }
 
+  // V43: Kỳ Ngộ Tiên Tử Trà Hữu (ảnh Tiết 16/36, anh chốt 2026-11-06):
+  // 3 nút — xanh "Thưởng trà", xám "Không uống", đỏ "Đoạt ấm trà".
+  // Anh dặn gặp bảng này thì bấm Thưởng trà. Luật chung (v19) bấm nút
+  // xanh lá cũng trúng nút này, nhưng luật chữ chắc hơn luật màu nên
+  // làm handler riêng theo đúng chữ, đặt trước handler chung (như v34).
+  vanduKyNgoTeaButton(norm, btnNorm) {
+    if (!this.vanduIsKyNgoScreen(norm, btnNorm)) return null;
+    if ((btnNorm || []).some(x => x === 'thuong tra')) return 'Thưởng trà';
+    return null;
+  }
+
   // V27: chỉ bấm nút xanh TRONG ĐÚNG màn đang xử lý (article có msgId
   // mà vòng chính vừa quét được). Bản cũ quét 15 article gần nhất rồi
   // fallback toàn trang — khi màn Kỳ Ngộ đã xử lý xong (nút tắt) hoặc
@@ -5944,6 +5955,18 @@ class NpcBot {
       if (rescueBtn) {
         await this.vanduClickButton(rescueBtn);
         this.log('🌿 Vân Du: Kỳ Ngộ Độc Kiếm Tiên, bấm Cứu mạng tiền bối');
+        await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
+        continue;
+      }
+
+      // Kỳ Ngộ Tiên Tử Trà Hữu — Thưởng trà (v43, anh chốt 2026-11-06,
+      // ảnh Tiết 16/36): luôn chọn ô xanh "Thưởng trà", không uống hộ,
+      // không đoạt ấm trà. Đặt trước handler Kỳ Ngộ chung để không phụ
+      // thuộc vào nhận diện màu nút.
+      const teaBtn = this.vanduKyNgoTeaButton(norm, btnNorm);
+      if (teaBtn) {
+        await this.vanduClickButton(teaBtn);
+        this.log('🍵 Vân Du: Kỳ Ngộ Tiên Tử Trà Hữu, bấm Thưởng trà');
         await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
         continue;
       }
