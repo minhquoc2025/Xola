@@ -5495,6 +5495,31 @@ class NpcBot {
     return null;
   }
 
+  // V47: Kỳ Ngộ Tiếng Khóc Trẻ Thơ Trong Sương Mù (ảnh Tiết 8/36, anh chốt
+  // 2026-11-06): chỉ thấy 1 nút "Cúi đầu thi lễ" (đứa trẻ áo trắng đầy
+  // máu đứng giữa đường mò sương). Anh dặn gặp bảng này thì bấm Cúi đầu
+  // thi lễ. Bảng này KHÔNG có nút xanh lá rõ ràng nên luật chung (v19)
+  // bấm hụt — phải làm luật riêng theo đúng chữ, đặt trước handler chung
+  // (như v45). Mạch Khắc neo Hỏa (tiến độ 1/5) trên màn đó giữ nguyên.
+  vanduKyNgoBowButton(norm, btnNorm) {
+    if (!this.vanduIsKyNgoScreen(norm, btnNorm)) return null;
+    if ((btnNorm || []).some(x => x === 'cui dau thi le')) return 'Cúi đầu thi lễ';
+    return null;
+  }
+
+  // V47: Kỳ Ngộ Thợ Săn Kho Báu Trọng Thương (ảnh Tiết 7/36, anh chốt
+  // 2026-11-06): 3 nút — xanh "Cứu chữa (Tốn 50% HP)", xanh dương
+  // "Đoạt bản đồ", xám "Bỏ mặc". Anh dặn gặp bảng này thì bấm Cứu chữa.
+  // Luật chung (v19) bấm nút xanh lá cũng trúng nút này, nhưng luật chữ
+  // chắc hơn luật màu nên làm handler riêng theo đúng chữ, đặt trước
+  // handler chung (như v34/v43). So theo chuỗi con vì nút còn hậu tố
+  // "(Tốn 50% HP)". Không chốt ngưỡng HP ở đây: màn mẫu HP 40%.
+  vanduKyNgoHealHunterButton(norm, btnNorm) {
+    if (!this.vanduIsKyNgoScreen(norm, btnNorm)) return null;
+    if ((btnNorm || []).some(x => x.includes('cuu chua'))) return 'Cứu chữa';
+    return null;
+  }
+
   // V27: chỉ bấm nút xanh TRONG ĐÚNG màn đang xử lý (article có msgId
   // mà vòng chính vừa quét được). Bản cũ quét 15 article gần nhất rồi
   // fallback toàn trang — khi màn Kỳ Ngộ đã xử lý xong (nút tắt) hoặc
@@ -5995,6 +6020,28 @@ class NpcBot {
       if (merchantBtn) {
         await this.vanduClickButton(merchantBtn);
         this.log('🛒 Vân Du: Kỳ Ngộ Hắc Thị Thương Nhân, mua Bích Họa Bí Thuật (80k)');
+        await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
+        continue;
+      }
+
+      // Kỳ Ngộ Tiếng Khóc Trẻ Thơ Trong Sương Mù — Cúi đầu thi lễ (v47, anh chốt 2026-11-06,
+      // ảnh Tiết 8/36): luôn bấm "Cúi đầu thi lễ". Đặt trước handler Kỳ Ngộ chung vì bảng
+      // này không có nút xanh lá rõ ràng.
+      const bowBtn = this.vanduKyNgoBowButton(norm, btnNorm);
+      if (bowBtn) {
+        await this.vanduClickButton(bowBtn);
+        this.log('🙏 Vân Du: Kỳ Ngộ Tiếng Khóc Trẻ Thơ, bấm Cúi đầu thi lễ');
+        await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
+        continue;
+      }
+
+      // Kỳ Ngộ Thợ Săn Kho Báu Trọng Thương — Cứu chữa (v47, anh chốt 2026-11-06,
+      // ảnh Tiết 7/36): luôn bấm "Cứu chữa (Tốn 50% HP)", không đoạt bản đồ, không bỏ mặc.
+      // Đặt trước handler Kỳ Ngộ chung để không phụ thuộc vào nhận diện màu nút.
+      const healHunterBtn = this.vanduKyNgoHealHunterButton(norm, btnNorm);
+      if (healHunterBtn) {
+        await this.vanduClickButton(healHunterBtn);
+        this.log('💚 Vân Du: Kỳ Ngộ Thợ Săn Kho Báu Trọng Thương, bấm Cứu chữa (tốn 50% HP)');
         await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
         continue;
       }

@@ -520,3 +520,16 @@ console.log('ALL VANDU TESTS PASSED (V45)');
 // tran nen khong test truc tiep o day; test tay: tran kho, mau tut
 // duoi 50% 2 lan thi thay 2 dong hoi mau (neu con dan).
 console.log('ALL VANDU TESTS PASSED (V46)');
+
+// V47 (anh 2026-11-06, bang Tiet 8/36 Ky Ngo Tieng Khoc Tre Tho Trong Suong Mu):
+eq(bot.vanduKyNgoBowButton('tiet diem 8 36 ky ngo tieng khoc tre tho trong suong mu', ['cui dau thi le']), 'Cúi đầu thi lễ', 'V47: bang tre tho Ky Ngo -> Cui dau thi le');
+eq(bot.vanduKyNgoBowButton('tiet diem 8 36 ky ngo tieng khoc tre tho trong suong mu', ['dang huong']), null, 'V47: khong co nut Cui dau thi le');
+eq(bot.vanduKyNgoBowButton('tiet diem 10 36 ky duyen mon cua vang sang ruc', ['cui dau thi le']), null, 'V47: man khong phai Ky Ngo thi khong bam Cui dau thi le');
+eq(bot.vanduIsKyNgoScreen('tiet diem 8 36 ky ngo tieng khoc tre tho trong suong mu', ['cui dau thi le']), true, 'V47: Ky Ngo Tieng Khoc Tre Tho nhan dien theo tieu de');
+// V47 (anh 2026-11-06, bang Tiet 7/36 Ky Ngo Tho San Kho Bau Trong Thuong):
+eq(bot.vanduKyNgoHealHunterButton('tiet diem 7 36 ky ngo tho san kho bau trong thuong', ['cuu chua ton 50 hp', 'doat ban do', 'bo mac']), 'Cứu chữa', 'V47: bang tho san Ky Ngo -> Cuu chua');
+eq(bot.vanduKyNgoHealHunterButton('tiet diem 7 36 ky ngo tho san kho bau trong thuong', ['doat ban do', 'bo mac']), null, 'V47: khong co nut Cuu chua');
+eq(bot.vanduKyNgoHealHunterButton('tiet diem 10 36 ky duyen mon cua vang sang ruc', ['cuu chua ton 50 hp']), null, 'V47: man khong phai Ky Ngo thi khong bam Cuu chua');
+eq(bot.vanduIsKyNgoScreen('tiet diem 7 36 ky ngo tho san kho bau trong thuong', ['cuu chua ton 50 hp', 'doat ban do', 'bo mac']), true, 'V47: Ky Ngo Tho San Kho Bau nhan dien theo tieu de');
+console.log('ALL VANDU TESTS PASSED (V47)');
+
