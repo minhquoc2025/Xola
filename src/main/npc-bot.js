@@ -6196,11 +6196,33 @@ class NpcBot {
             this.log(`🚪 Vân Du: chọn cửa "${chosen}"${circuitBefore ? ` (mạch ${circuitBefore.type}, sau ${circuitBefore.last || '?'})` : ''}`);
           }
         } else if (circuitBefore) {
-          // V11: đang có mạch mà không có cửa đúng thì không bấm, còn hơn
-          // bấm sai mạch. Log rõ cần hành nào để anh kiểm tra màn hình.
+          // V38 (anh báo 2026-11-06, log 08:51:50): kẹt "mạch sinh cần
+          // Thủy" trên màn cửa KHÔNG nhắc gì tới mạch (vd màn Khởi Đầu
+          // Tiết 1/36) — mạch bot đang giữ là mạch cũ đã reset (vd sau
+          // khi lùi về Tiết 1), game không mở mạch nào. Màn cửa mà không
+          // nhắc tới mạch thì tin là chưa vô mạch: xóa mạch cũ, chọn lại
+          // theo thứ tự ưu tiên lúc chưa có mạch thay vì kẹt mãi. Chỉ áp
+          // khi màn này không nhắc tới mạch (parsedCircuit null) — màn có
+          // ghi mạch thì giữ luật v11 (không bấm sai mạch).
           const need = circuitBefore.last ? this.vanduNextElement(circuitBefore.type, circuitBefore.last) : null;
-          if (need) this.log(`⛔ Vân Du: mạch ${circuitBefore.type} cần ${need} nhưng không có cửa ${need} trong [${doorButtons.join(', ')}], không bấm để tránh sai mạch`);
-          else this.log(`⛔ Vân Du: mạch ${circuitBefore.type} chưa biết hành hiện tại, không đoán cửa`);
+          if (!parsedCircuit) {
+            this.vanduCircuit = null;
+            this.vanduLastCircuitClick = null;
+            const fallback = this.vanduChooseDoor(doorButtons, null);
+            if (fallback) {
+              await this.vanduClickButton(fallback);
+              this.log(`🔄 Vân Du: màn cửa không nhắc tới mạch (chưa vô mạch) — xóa mạch ${circuitBefore.type} cũ, chọn cửa "${fallback}" theo thứ tự ưu tiên`);
+            } else {
+              this.log(`⛔ Vân Du: màn cửa không nhắc tới mạch mà cũng không chọn được cửa nào, dừng để tránh bấm sai`);
+              break;
+            }
+          } else if (need) {
+            // V11: đang có mạch mà không có cửa đúng thì không bấm, còn
+            // hơn bấm sai mạch. Log rõ cần hành nào để anh kiểm tra màn.
+            this.log(`⛔ Vân Du: mạch ${circuitBefore.type} cần ${need} nhưng không có cửa ${need} trong [${doorButtons.join(', ')}], không bấm để tránh sai mạch`);
+          } else {
+            this.log(`⛔ Vân Du: mạch ${circuitBefore.type} chưa biết hành hiện tại, không đoán cửa`);
+          }
         } else {
           this.log('⚠️ Vân Du: chỉ thấy cửa Tử Môn, không chọn theo luật (chờ màn hình mới)');
         }

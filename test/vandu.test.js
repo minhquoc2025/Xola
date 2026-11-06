@@ -457,3 +457,10 @@ eq(bot.vanduPuzzleDoorButtons(['Cửa Càn', 'Cửa Khôn', 'Cửa Tốn', 'Bắ
 eq(bot.vanduPuzzleDoorButtons(['Cửa Ly', 'Cửa Chấn']), ['Cửa Ly', 'Cửa Chấn'], 'V36: loc Ly/Chan');
 eq(bot.vanduPuzzleDoorButtons(['Mua Cửu Chuyển', 'Rời đi']), [], 'V36: khong co nut cua que');
 console.log('ALL VANDU TESTS PASSED (V36)');
+
+// V38 (anh 2026-11-06, log 08:51:50): man Khoi Dau Tiet 1/36 khong nhac
+// gi toi mach — mach bot dang giu la mach cu da reset; phai xoa mach
+// va chon theo thu tu uu tien luc chua co mach (Sinh trong [Canh, Sinh, Do]).
+eq(bot.vanduParseCircuit('Khởi Đầu Hành Trình: Tiết Điểm 1/36 — Thiên Sơn Tuyết Lãnh\nHãy chọn 1 cửa để dần bước vào hành trình 36 Tiết Điểm:\nBản Đồ Thiên Cơ (Tầm Nhìn 3 Bước)\n[Vị Trí Hiện Tại: Tiết Điểm 1/36]'), null, 'V38: man Khoi Dau khong nhac mach -> parse null');
+eq(bot.vanduChooseDoor(['🏺 Cảnh Môn', '🌿 Sinh Môn', '🌀 Đỗ Môn'], null), '🌿 Sinh Môn', 'V38: chua co mach, trong [Canh, Sinh, Do] thi chon Sinh');
+console.log('ALL VANDU TESTS PASSED (V38)');
