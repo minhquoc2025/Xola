@@ -482,3 +482,9 @@ console.log('ALL VANDU TESTS PASSED (V40)');
 // test truc tiep o day, can test tay: qua Tiet moi, skill dau tien
 // bam phai la skill dau trong config.
 console.log('ALL VANDU TESTS PASSED (V41)');
+
+// V42 (anh 2026-11-06): so dan dong bo theo so nut vat pham tren man
+// battle (1 nut = 1 dan dang co) — xai roi so dan tut, shop sau mua
+// tiep. La logic vong tran nen khong test truc tiep o day; test tay:
+// xai dan trong tran (log dong bo), vao shop sau thay bot mua lai.
+console.log('ALL VANDU TESTS PASSED (V42)');

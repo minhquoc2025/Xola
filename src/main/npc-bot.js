@@ -5659,10 +5659,19 @@ class NpcBot {
       // Giờ tìm theo 'cuu chuyen hoan hon' (trừ nút Mua ở shop), áp cho
       // mọi trận kể cả boss 12/24/36, mỗi trận tối đa 1 lần.
       const hp = this.vanduPlayerHpPct(screen.text);
-      const itemBtn = screen.buttons.find(b => {
+      const itemBtns = screen.buttons.filter(b => {
         const n = this.vanduNormalize(b);
         return n.includes('cuu chuyen hoan hon') && !n.includes('mua');
       });
+      const itemBtn = itemBtns[0];
+      // V42 (anh 2026-11-06): đồng bộ số đan theo số nút vật phẩm trên
+      // màn battle — game hiện 1 nút cho mỗi đan đang có. Trước đây bot
+      // chỉ cộng lúc mua, xài rồi không trừ, nên đủ 3/3 là không mua nữa
+      // dù đã xài hết; giờ xài xong số đan tụt, shop sau mua tiếp.
+      if (itemBtns.length !== this.vanduDanCount) {
+        this.vanduDanCount = itemBtns.length;
+        this.log(`💊 Vân Du: đồng bộ Đan ${this.vanduDanCount}/3 (theo nút trên màn battle)`);
+      }
       if (!healUsed && hp !== null && hp <= 50 && itemBtn) {
         const clicked = await this.vanduClickButton('Cửu Chuyển Hoàn Hồn');
         if (clicked) {
