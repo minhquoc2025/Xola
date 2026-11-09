@@ -566,3 +566,10 @@ eq(bot.vanduChooseBuff(['[Thuật] T [Thuật Tông - Lam]', '[Khí] K [Khí Tô
 bot.vanduNode = 15;
 eq(bot.vanduChooseBuff(['[Thuật] T [Thuật Tông - Vàng (Thần Thoại)]', '[Khí] K [Khí Tông - Lam]'], {}, {}, false, 'Thuật', null, 0).reason, 'counter', 'V50: Cuong The, Tiet 15, khac che (Thuat) van truoc');
 console.log('ALL VANDU TESTS PASSED (V50)');
+
+// V51 (anh 2026-11-09, bang Tiet 19/36 Ky Ngo Huyet Phong Luc To Su):
+eq(bot.vanduKyNgoCongratulateButton('tiet diem 19 36 ky ngo huyet phong luc to su', ['hy chuc', 'khieu chien', 'tu choi']), 'Hỷ chúc', 'V51: bang Huyet Phong Ky Ngo -> Hy chuc');
+eq(bot.vanduKyNgoCongratulateButton('tiet diem 19 36 ky ngo huyet phong luc to su', ['khieu chien', 'tu choi']), null, 'V51: khong co nut Hy chuc');
+eq(bot.vanduKyNgoCongratulateButton('tiet diem 10 36 ky duyen mon cua vang sang ruc', ['hy chuc']), null, 'V51: man khong phai Ky Ngo thi khong bam Hy chuc');
+eq(bot.vanduIsKyNgoScreen('tiet diem 19 36 ky ngo huyet phong luc to su', ['hy chuc', 'khieu chien', 'tu choi']), true, 'V51: Ky Ngo Huyet Phong Luc To Su nhan dien theo tieu de');
+console.log('ALL VANDU TESTS PASSED (V51)');

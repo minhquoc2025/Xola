@@ -5566,6 +5566,19 @@ class NpcBot {
     return null;
   }
 
+  // V51: Kỳ Ngộ Huyết Phong Lục Tổ Sư (ảnh Tiết 19/36, anh chốt
+  // 2026-11-09): 3 nút — xanh "Hỷ chúc", đỏ "Khiêu chiến", xám "Từ
+  // chối". Anh dặn gặp bảng này thì bấm Hỷ chúc, không khiêu chiến,
+  // không từ chối. Luật chung (v19) bấm nút xanh lá cũng trúng nút
+  // này, nhưng luật chữ chắc hơn luật màu nên làm handler riêng theo
+  // đúng chữ, đặt trước handler chung (như v34/v43/v48). Mạch Sinh
+  // neo Mộc (tiến độ 1/5) trên màn đó giữ nguyên.
+  vanduKyNgoCongratulateButton(norm, btnNorm) {
+    if (!this.vanduIsKyNgoScreen(norm, btnNorm)) return null;
+    if ((btnNorm || []).some(x => x === 'hy chuc')) return 'Hỷ chúc';
+    return null;
+  }
+
   // V27: chỉ bấm nút xanh TRONG ĐÚNG màn đang xử lý (article có msgId
   // mà vòng chính vừa quét được). Bản cũ quét 15 article gần nhất rồi
   // fallback toàn trang — khi màn Kỳ Ngộ đã xử lý xong (nút tắt) hoặc
@@ -6100,6 +6113,18 @@ class NpcBot {
       if (shareFoodBtn) {
         await this.vanduClickButton(shareFoodBtn);
         this.log('🍑 Vân Du: Kỳ Ngộ Song Sinh Cầu Tử, bấm Chia đồ ăn cho cả hai');
+        await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
+        continue;
+      }
+
+      // Kỳ Ngộ Huyết Phong Lục Tổ Sư — Hỷ chúc (v51, anh chốt
+      // 2026-11-09, ảnh Tiết 19/36): luôn chọn ô xanh "Hỷ chúc",
+      // không khiêu chiến, không từ chối. Đặt trước handler Kỳ Ngộ
+      // chung để không phụ thuộc vào nhận diện màu nút.
+      const congratBtn = this.vanduKyNgoCongratulateButton(norm, btnNorm);
+      if (congratBtn) {
+        await this.vanduClickButton(congratBtn);
+        this.log('🎉 Vân Du: Kỳ Ngộ Huyết Phong Lục Tổ Sư, bấm Hỷ chúc');
         await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
         continue;
       }
