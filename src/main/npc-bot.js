@@ -5732,6 +5732,16 @@ class NpcBot {
     return null;
   }
 
+  // V52: ngã rẽ sau Tiết 36 — "Hoàn Tất Nhận Thưởng (An Toàn)" vs "Xông
+  // Vào Vô Gian Thâm Uyên (37+)" (log 2026-11-09 09:55:59, anh chốt
+  // 2026-11-09): đánh xong 36 thì bấm Hoàn Tất Nhận Thưởng (An Toàn),
+  // không xông vào Vô Gian Thâm Uyên. Nhận diện bằng chính nút cần bấm
+  // (như luật Kỳ Duyên v21) — nút này chỉ có trên màn ngã rẽ cuối chuyến.
+  vanduFinishRewardButton(norm, btnNorm) {
+    if ((btnNorm || []).some(x => x.includes('hoan tat nhan thuong'))) return 'Hoàn Tất Nhận Thưởng (An Toàn)';
+    return null;
+  }
+
   async vanduBattleLoop(runId) {
     // V15: log luôn thứ tự đang dùng để anh kiểm tra cấu hình có vào bot không.
     this.log(`⚔️ Vân Du: vào trận (thứ tự: ${this.vanduSkillOrder.join(' -> ')})`);
@@ -5930,6 +5940,21 @@ class NpcBot {
         }
         await this.stop();
         return;
+      }
+
+      // Hết 36 Tiết — ngã rẽ nhận thưởng / vào Thâm Uyên (v52, anh chốt
+      // 2026-11-09, log 09:55:59): màn này có 2 nút — "Hoàn Tất Nhận
+      // Thưởng (An Toàn)" và "Xông Vào Vô Gian Thâm Uyên (37+)". Anh dặn
+      // đánh xong 36 thì bấm Hoàn Tất Nhận Thưởng (An Toàn), không xông
+      // vào Vô Gian Thâm Uyên. Đặt ngay sau handler Trở Về Giang Hồ vì
+      // đây cũng là màn cuối chuyến: bấm xong game hiện bảng thưởng rồi
+      // mới tới nút Trở Về Giang Hồ (handler trên đếm chuyến ở đó).
+      const finishBtn = this.vanduFinishRewardButton(norm, btnNorm);
+      if (finishBtn) {
+        await this.vanduClickButton(finishBtn);
+        this.log('🏆 Vân Du: hết 36 Tiết, bấm Hoàn Tất Nhận Thưởng (An Toàn), không vào Vô Gian Thâm Uyên');
+        await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
+        continue;
       }
 
       // Màn hình bắt đầu: nếu tool đã chọn cảnh giới thì chọn map tương ứng trước, rồi mới bấm xuất phát.

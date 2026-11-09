@@ -573,3 +573,9 @@ eq(bot.vanduKyNgoCongratulateButton('tiet diem 19 36 ky ngo huyet phong luc to s
 eq(bot.vanduKyNgoCongratulateButton('tiet diem 10 36 ky duyen mon cua vang sang ruc', ['hy chuc']), null, 'V51: man khong phai Ky Ngo thi khong bam Hy chuc');
 eq(bot.vanduIsKyNgoScreen('tiet diem 19 36 ky ngo huyet phong luc to su', ['hy chuc', 'khieu chien', 'tu choi']), true, 'V51: Ky Ngo Huyet Phong Luc To Su nhan dien theo tieu de');
 console.log('ALL VANDU TESTS PASSED (V51)');
+
+// V52 (anh 2026-11-09, log 09:55:59 — het 36 Tiet, nga re nhan thuong / vao Tham Uyen):
+eq(bot.vanduFinishRewardButton('', ['hip', 'vandu', 'xo la ba que', 'hoan tat nhan thuong an toan', 'xong vao vo gian tham uyen 37']), 'Hoàn Tất Nhận Thưởng (An Toàn)', 'V52: man het 36 -> Hoan Tat Nhan Thuong (An Toan)');
+eq(bot.vanduFinishRewardButton('', ['hip', 'vandu', 'xo la ba que', 'xong vao vo gian tham uyen 37']), null, 'V52: khong co nut Hoan Tat Nhan Thuong');
+eq(bot.vanduFinishRewardButton('', ['bat dau xuat phat', 'mua ve']), null, 'V52: man khac khong bam Hoan Tat');
+console.log('ALL VANDU TESTS PASSED (V52)');
