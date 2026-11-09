@@ -6,18 +6,14 @@ window.addEventListener('DOMContentLoaded', () => {
   initWebview();
   loadLogs();
   loadLuanHoiSettings();
-  loadOtherUserIds();
+  loadSharedUserId();
   startStatsPolling();
   const vanduRealmEl = document.getElementById('vandu-realm');
   if (vanduRealmEl) {
     const savedRealm = localStorage.getItem('vanduRealm') || '';
     if (savedRealm) vanduRealmEl.value = savedRealm;
   }
-  const vanduUserIdEl = document.getElementById('userid-vandu');
-  if (vanduUserIdEl) {
-    const savedUserId = localStorage.getItem('userid-vandu') || '';
-    if (savedUserId) vanduUserIdEl.value = savedUserId;
-  }
+  // (Ô User ID riêng của tab Vân Du đã bỏ — dùng userid-shared trong modal ⚙️.)
   // V24: Số lần đi Vân Du, như ô cùng tên ở tab Luân Hồi.
   const vanduTotalTripsEl = document.getElementById('vandu-total-trips');
   if (vanduTotalTripsEl) {
@@ -162,7 +158,7 @@ function getNpcConfig() {
   const comboArray = normalizeSkillOrder(configuredOrder);
   return {
     mode: 'npc',
-    userId: (document.getElementById('userid') ? document.getElementById('userid').value : '').replace(/[^0-9]/g, ''),
+    userId: getSharedUserId(),
     username: '', // NPC giờ check theo User ID, không dùng username nữa
     npcNumber: parseInt(document.getElementById('npc-number').value) || 1,
     totalBattles: parseInt(document.getElementById('total-battles').value) || 5,
@@ -190,11 +186,6 @@ function loadLuanHoiSettings() {
     const el = document.getElementById("luanhoi-target");
     if (el) el.value = savedTarget;
   }
-  const savedUserId = localStorage.getItem("userid-lh");
-  if (savedUserId !== null) {
-    const el = document.getElementById("userid-lh");
-    if (el) el.value = savedUserId;
-  }
   const savedCmd = localStorage.getItem("luanhoi-cmd");
   if (savedCmd !== null) {
     const el = document.getElementById("luanhoi-cmd");
@@ -205,8 +196,7 @@ function loadLuanHoiSettings() {
     const el = document.getElementById("button-delay-lh");
     if (el) el.value = savedDelay;
   }
-
-  ["luanhoi-total-runs", "luanhoi-target", "userid-lh", "luanhoi-cmd", "button-delay-lh"].forEach(id => {
+  ["luanhoi-total-runs", "luanhoi-target", "luanhoi-cmd", "button-delay-lh"].forEach(id => {
     const el = document.getElementById(id);
     if (el) {
       el.addEventListener("input", saveLuanHoiSettings);
@@ -215,18 +205,26 @@ function loadLuanHoiSettings() {
   });
 }
 
-// Các tab còn lại trước đây không lưu username (chỉ có giá trị mặc định trong
-// HTML), nên đổi sang User ID thì phải lưu ID lại, không thì mỗi lần mở app
-// lại phải nhập lại. Dùng cùng 1 key = id của ô nhập, giống userid-lh.
-function loadOtherUserIds() {
-  ["userid", "userid-bicanh", "userid-dianguc", "userid-upgrade"].forEach(id => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    const saved = localStorage.getItem(id);
-    if (saved !== null) el.value = saved;
-    el.addEventListener("input", () => localStorage.setItem(id, el.value));
-    el.addEventListener("change", () => localStorage.setItem(id, el.value));
-  });
+// User ID dùng chung cho cả 6 mode (anh chốt 2026-11-06): 1 ô duy nhất trong
+// modal Cấu hình (⚙️), thay cho 6 ô riêng mỗi tab (thêm từng ô lâu mà nhập
+// lại 6 lần). Lưu localStorage key "userid-shared". Lần đầu mở app mà chưa
+// có thì lấy từ ô cũ đã lưu (ưu tiên userid-lh vì đó là tab anh hay dùng)
+// để khỏi nhập lại.
+function getSharedUserId() {
+  const el = document.getElementById("userid-shared");
+  return el ? el.value.replace(/[^0-9]/g, "") : "";
+}
+
+function loadSharedUserId() {
+  const el = document.getElementById("userid-shared");
+  if (!el) return;
+  let saved = localStorage.getItem("userid-shared");
+  if (saved === null) {
+    saved = localStorage.getItem("userid-lh") || localStorage.getItem("userid-vandu") || localStorage.getItem("userid") || localStorage.getItem("userid-bicanh") || localStorage.getItem("userid-dianguc") || localStorage.getItem("userid-upgrade") || "";
+  }
+  el.value = saved;
+  el.addEventListener("input", () => localStorage.setItem("userid-shared", el.value));
+  el.addEventListener("change", () => localStorage.setItem("userid-shared", el.value));
 }
 
 function saveLuanHoiSettings() {
@@ -235,9 +233,6 @@ function saveLuanHoiSettings() {
 
   const targetEl = document.getElementById("luanhoi-target");
   if (targetEl) localStorage.setItem("luanhoi-target", targetEl.value);
-
-  const userIdEl = document.getElementById("userid-lh");
-  if (userIdEl) localStorage.setItem("userid-lh", userIdEl.value);
 
   const cmdEl = document.getElementById("luanhoi-cmd");
   if (cmdEl) localStorage.setItem("luanhoi-cmd", cmdEl.value);
@@ -255,7 +250,7 @@ function getLuanHoiConfig() {
   return {
     mode: "luanhoi",
     luanhoi: true,
-    userId: (document.getElementById("userid-lh") ? document.getElementById("userid-lh").value : "").replace(/[^0-9]/g, ""),
+    userId: getSharedUserId(),
     username: "", // Luân Hồi giờ check theo User ID, không dùng username nữa
     luanhoiTarget: parseInt(document.getElementById("luanhoi-target").value) || 10,
     luanhoiTotalRuns: (!isNaN(totalRunsVal) && totalRunsVal > 0) ? totalRunsVal : 0,
@@ -282,12 +277,8 @@ function getVanduConfig() {
     'Nguyên Anh': 'Tây Vực Sa Mạc',
     'Hóa Thần': 'Thiên Sơn Tuyết Lãnh',
   };
-  const vanduUserIdEl = document.getElementById('userid-vandu');
-  const vanduUserId = vanduUserIdEl ? (vanduUserIdEl.value || '').replace(/[^0-9]/g, '') : '';
-  if (vanduUserIdEl) {
-    if (vanduUserId) localStorage.setItem('userid-vandu', vanduUserId);
-    else localStorage.removeItem('userid-vandu');
-  }
+  // User ID dùng chung (userid-shared trong modal ⚙️) như 5 mode kia —
+  // ô riêng của tab Vân Du đã bỏ, dùng chung 1 ô trong modal (port 2026-11-09).
   // V24: Số lần đi, cùng cách tính như Luân Hồi (nhập > 0 mới có giới
   // hạn, để trống/0 thì bot giữ dừng sau 1 chuyến như cũ).
   const vanduTotalTripsEl = document.getElementById('vandu-total-trips');
@@ -304,7 +295,7 @@ function getVanduConfig() {
     // V3: Vân Du dùng User ID như các chức năng kia, không dùng tên nữa.
     // username để rỗng để bot không rơi về lọc theo tên.
     username: '',
-    userId: vanduUserId,
+    userId: getSharedUserId(),
     vanduCmd: (document.getElementById('vandu-cmd').value || '!vandu').trim(),
     buttonDelayMs: (parseFloat(document.getElementById('vandu-delay').value) || 2) * 1000,
     vanduRealm: vanduRealm,
@@ -318,7 +309,7 @@ function getVanduConfig() {
 function getBicanhConfig() {
   return {
     mode: 'bicanh',
-    userId: (document.getElementById('userid-bicanh') ? document.getElementById('userid-bicanh').value : '').replace(/[^0-9]/g, ''),
+    userId: getSharedUserId(),
     username: '', // Bicanh giờ check theo User ID, không dùng username nữa
     bicanhCmd: (document.getElementById('bicanh-cmd').value || '!bicanh').trim(),
     bicanhSkillOrder: normalizeSkillOrder(localStorage.getItem('bicanhSkillOrder') || ''),
@@ -341,11 +332,10 @@ function getUpgradeConfig() {
   const delaySec = delayEl ? (parseFloat(delayEl.value) || 2) : 2;
   const countEl = document.getElementById('spam-count');
   const countVal = countEl ? (parseInt(countEl.value) || 10) : 10;
-  const userIdEl = document.getElementById('userid-upgrade');
   const cmd = SPAM_CMDS[type] || SPAM_CMDS.hp;
   return {
     mode: 'upgrade',
-    userId: ((userIdEl && userIdEl.value) || '').replace(/[^0-9]/g, ''),
+    userId: getSharedUserId(),
     username: '', // Upgrade/Spam giờ dùng User ID, không dùng username nữa
     upgradeType: Object.prototype.hasOwnProperty.call(SPAM_CMDS, type) ? type : 'hp',
     upgradeCmd: cmd,
@@ -375,7 +365,7 @@ function getDiangucConfig() {
   return {
     mode: 'dianguc',
     dianguc: true,
-    userId: (document.getElementById('userid-dianguc') ? document.getElementById('userid-dianguc').value : '').replace(/[^0-9]/g, ''),
+    userId: getSharedUserId(),
     username: '', // Địa Ngục giờ check theo User ID, không dùng username nữa
     diangucCmd: (document.getElementById('dianguc-cmd').value || '!dianguc').trim(),
     luanhoiSkillNames: resolvedSkills,
@@ -394,6 +384,16 @@ function getActiveConfig() {
   return currentMode === 'luanhoi' ? getLuanHoiConfig() : getNpcConfig();
 }
 
+// V53: không cho START mode nào khi chưa nhập User ID (anh chốt 2026-11-09):
+// chạy không ID thì bot không lọc được màn của mình, dễ mất lượt oan (Vân Du
+// mất 1/6 vé ngày, Luân Hồi mất 1 lượt chạy). Chặn ở nút START (cả 6 mode đi
+// chung qua toggleBot) để user thấy ngay trong log, kèm hướng dẫn mở ⚙️.
+function requireUserIdForStart() {
+  if (getSharedUserId()) return true;
+  appendLog('⛔ Chưa nhập User ID nên không START được — bấm ⚙️ mở Cấu hình, nhập User ID Discord rồi START lại.');
+  return false;
+}
+
 async function toggleBot() {
   if (isNpcRunning) {
     window.api.botStop(0);
@@ -401,6 +401,7 @@ async function toggleBot() {
     appendLog('[BOT] ⏹ Stopped');
   } else {
     if (!isWebviewRegistered) return;
+    if (!requireUserIdForStart()) return;
     const config = getActiveConfig();
     await window.api.botUpdateConfig(0, config);
     window.api.botStart(0);
@@ -439,19 +440,20 @@ function toggleSkillModal() {
   }
 }
 
+// V53: list skill chia 4 cột cho gọn (anh chốt 2026-11-09) — trước đây 2 cột
+// (trái 1–17, phải 18–33) nên modal dài, kéo mỏi. Chia đều theo STT: mỗi cột
+// 9 skill (cột cuối 6), đọc xuống từng cột như cũ.
 function buildSkillGrid() {
-  const left = document.getElementById('skill-grid-left');
-  const right = document.getElementById('skill-grid-right');
-  if (!left || !right) return;
-  left.innerHTML = '';
-  right.innerHTML = '';
-  const half = Math.ceil(ALL_SKILLS.length / 2);
+  const cols = [0, 1, 2, 3].map(i => document.getElementById('skill-grid-' + i));
+  if (cols.some(c => !c)) return;
+  cols.forEach(c => { c.innerHTML = ''; });
+  const per = Math.ceil(ALL_SKILLS.length / 4);
   for (let i = 0; i < ALL_SKILLS.length; i++) {
     const sk = ALL_SKILLS[i];
     const div = document.createElement('div');
     div.className = 'skill-item';
     div.innerHTML = `<span class="stt">${sk.stt}</span><span class="skill-name">${sk.name}</span><span class="skill-cat">${sk.cat}</span>`;
-    (i < half ? left : right).appendChild(div);
+    cols[Math.floor(i / per)].appendChild(div);
   }
 }
 
@@ -517,6 +519,10 @@ function saveSkillOrder() {
   const delayInput = document.getElementById('skill-click-delay');
   const status = document.getElementById('skill-order-status');
   if (!status) return;
+
+  // User ID dùng chung cũng lưu ở đây (dù đã lưu live theo từng phím gõ).
+  const sharedUserIdEl = document.getElementById('userid-shared');
+  if (sharedUserIdEl) localStorage.setItem('userid-shared', sharedUserIdEl.value);
 
   let delayMs = getSkillClickDelayMs();
   if (delayInput) {

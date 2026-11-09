@@ -549,16 +549,18 @@
       </div>
       <div id="skill-modal"
            style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:1000;justify-content:center;align-items:center;">
-        <div style="background:#1a1a2e;border:2px solid #e94560;border-radius:12px;padding:20px;width:90%;max-width:800px;max-height:85vh;overflow-y:auto;">
+        <div style="background:#1a1a2e;border:2px solid #e94560;border-radius:12px;padding:20px;width:90%;max-width:1100px;max-height:85vh;overflow-y:auto;">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
             <h3 style="color:#e94560;margin:0;">⚔️ CẤU HÌNH SKILL BICANH</h3>
             <button onclick="toggleSkillModal()"
                     style="background:none;border:none;color:#eee;font-size:22px;cursor:pointer;">✕</button>
           </div>
           <p style="color:#aaa;font-size:11px;margin-bottom:10px;">Nhập STT cách nhau bởi dấu phẩy, ví dụ: <b style="color:#4ecca3;">3,4,5,9</b></p>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:15px;">
-            <div id="skill-grid-left"></div>
-            <div id="skill-grid-right"></div>
+          <div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:12px;margin-bottom:15px;">
+            <div id="skill-grid-0"></div>
+            <div id="skill-grid-1"></div>
+            <div id="skill-grid-2"></div>
+            <div id="skill-grid-3"></div>
           </div>
           <div style="margin-bottom:10px;">
             <label style="color:#eee;font-size:12px;">Combo có sẵn: </label>
@@ -584,6 +586,13 @@
                    step="100"
                    style="width:100%;padding:8px 10px;background:#0a0a1a;border:1px solid #1a1a4e;border-radius:6px;color:#eee;font-size:14px;outline:none;box-sizing:border-box;">
           </div>
+          <div style="margin-bottom:15px;">
+            <label style="color:#eee;font-size:12px;">User ID Discord (dùng chung cho cả 6 mode): </label>
+            <input id="userid-shared"
+                   type="text"
+                   placeholder="ID Discord (dãy số)"
+                   style="width:100%;padding:8px 10px;background:#0a0a1a;border:1px solid #1a1a4e;border-radius:6px;color:#eee;font-size:14px;outline:none;box-sizing:border-box;">
+          </div>
           <div style="display:flex;gap:10px;justify-content:flex-end;">
             <button onclick="saveSkillOrder()"
                     style="background:#1a5a2e;color:#fff;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:13px;">💾 Lưu</button>
@@ -603,13 +612,6 @@
                     style="width: 100%;"
                     class="btn-start"
                     onclick="toggleBot()">▶ START</button>
-          </div>
-          <div class="config-field">
-            <label for="userid">User ID</label>
-            <input id="userid"
-                   type="text"
-                   value=""
-                   placeholder="ID Discord (dãy số)">
           </div>
           <div class="config-field">
             <label for="npc-number">NPC Number</label>
@@ -676,13 +678,6 @@
                     onclick="toggleBot()">▶ START</button>
           </div>
           <div class="config-field">
-            <label for="userid-lh">User ID</label>
-            <input id="userid-lh"
-                   type="text"
-                   value=""
-                   placeholder="ID Discord (dãy số)">
-          </div>
-          <div class="config-field">
             <label for="luanhoi-target">Tầng Dừng (Target)</label>
             <!-- 1 input duy nhất: gõ số tự do, bấm mũi tên xuống để chọn
                  nhanh 1 mức preset trong datalist (50-300). Dùng type="text"
@@ -745,13 +740,6 @@
                     onclick="toggleBot()">▶ START</button>
           </div>
           <div class="config-field">
-            <label for="userid-dianguc">User ID</label>
-            <input id="userid-dianguc"
-                   type="text"
-                   value=""
-                   placeholder="ID Discord (dãy số)">
-          </div>
-          <div class="config-field">
             <label for="dianguc-cmd">Lệnh tham gia</label>
             <input id="dianguc-cmd"
                    type="text"
@@ -780,13 +768,6 @@
                     onclick="toggleBot()">▶ START</button>
           </div>
           <div class="config-field">
-            <label for="userid-bicanh">User ID</label>
-            <input id="userid-bicanh"
-                   type="text"
-                   value=""
-                   placeholder="ID Discord (dãy số)">
-          </div>
-          <div class="config-field">
             <label for="bicanh-cmd">Lệnh</label>
             <input id="bicanh-cmd"
                    type="text"
@@ -804,12 +785,6 @@
                     style="width: 100%;"
                     class="btn-start"
                     onclick="toggleBot()">▶ START</button>
-          </div>
-          <div class="config-field">
-            <label for="userid-vandu">User ID</label>
-            <input id="userid-vandu"
-                   type="text"
-                   placeholder="ID Discord (chỉ số)">
           </div>
           <div class="config-field">
             <label for="vandu-cmd">Lệnh Tham Gia</label>
@@ -862,13 +837,6 @@
                     style="width: 100%;"
                     class="btn-start"
                     onclick="toggleBot()">▶ START</button>
-          </div>
-          <div class="config-field">
-            <label for="userid-upgrade">User ID</label>
-            <input id="userid-upgrade"
-                   type="text"
-                   value=""
-                   placeholder="ID Discord (dãy số)">
           </div>
           <div class="config-field">
             <label for="spam-count">Số lần gửi</label>
