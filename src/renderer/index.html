@@ -371,8 +371,18 @@
       border-bottom: 1px solid #1a2a4e;
     }
 
+    /* V55 (anh 2026-11-10): vật phẩm rơi nhiều thì #items-list phải cuộn
+       bên trong, không đẩy panel lên. Cùng gốc lỗi v37: .stats-section-body
+       là flex item (của .stats-section, flex column) mà không có
+       min-height: 0 nên không co lại dưới cỡ nội dung được — mỗi dòng
+       .item-row mới làm khung cao thêm, đẩy #stats-panel rồi cả
+       #control-panel lên, ép màn Discord phía trên. Thêm min-height: 0
+       là đủ vì chuỗi flex đã kín (stats-bottom flex:1 + min-height:0,
+       stats-panel min-height:0 + overflow auto, control-panel max 44vh).
+       Áp cho cả 2 body dùng class này (Vật Phẩm Rơi + Trận Gần Nhất). */
     .stats-section-body {
       flex: 1;
+      min-height: 0;
       overflow-y: auto;
       font-size: 11px;
     }
