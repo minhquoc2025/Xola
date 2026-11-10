@@ -478,6 +478,149 @@ async function testBicanhDoesNotReclickJustUsedSkillAfterSkips() {
   console.log('Bicanh does not reclick just used skill after skips passed');
 }
 
+// 14. Focus màn battle mới (anh 2026-11-10): DOM dài quá game sinh message
+// battle mới, bot phải focus màn mới nhất sau !bicanh chứa User ID.
+// Fake DOM: article có id/innerHTML (chứa userId)/buttons, document chia
+// sẻ 1 sandbox window để focus và click thấy cùng trạng thái.
+const BICANH_FOCUS_UID = '1354743950086242366';
+function focusButton(text, opts = {}) {
+  const btn = {
+    textContent: text,
+    disabled: !!opts.disabled,
+    offsetParent: opts.hidden ? null : {},
+    clicked: false,
+    click() { btn.clicked = true; },
+  };
+  return btn;
+}
+function focusArticle(id, text, html, buttons, attrs = {}) {
+  const article = {
+    id,
+    textContent: text,
+    innerHTML: html,
+    _attrs: { ...attrs },
+    _buttons: buttons,
+    getAttribute(name) { return this._attrs[name] === undefined ? null : this._attrs[name]; },
+    setAttribute(name, value) { this._attrs[name] = String(value); },
+    removeAttribute(name) { delete this._attrs[name]; },
+    querySelectorAll(sel) {
+      if (String(sel).includes('button')) return this._buttons;
+      return [];
+    },
+  };
+  return article;
+}
+function focusSandbox(articles) {
+  const windowObj = {};
+  const documentObj = {
+    querySelectorAll(sel) {
+      if (String(sel).includes('data-bicanh-focus')) {
+        return articles.filter(a => a.getAttribute('data-bicanh-focus') === 'true');
+      }
+      if (String(sel).includes('article')) return articles;
+      return [];
+    },
+    getElementById(id) { return articles.find(a => a.id === id) || null; },
+  };
+  return { document: documentObj, window: windowObj };
+}
+function focusBattleArticles() {
+  const skill = 'Hư Không Đại Na Di';
+  const old1 = focusArticle('old1', 'Bí Cảnh tầng 5 Quất Bất Lực', `<@!${BICANH_FOCUS_UID}> Bí Cảnh tầng 5`, [focusButton(skill)]);
+  const cmd1 = focusArticle('cmd1', '!bicanh', `avatars/${BICANH_FOCUS_UID}/abc.png !bicanh`, []);
+  const batA = focusArticle('batA', 'Bí Cảnh tầng 6', `<@!${BICANH_FOCUS_UID}> Bí Cảnh tầng 6`, [focusButton(skill)]);
+  const batB = focusArticle('batB', 'Bí Cảnh tầng 6', `<@!${BICANH_FOCUS_UID}> Bí Cảnh tầng 6`, [focusButton(skill)]);
+  return { old1, cmd1, batA, batB, skill };
+}
+function focusBot(articles, sandbox) {
+  const bot = new NpcBot({
+    executeJavaScript: (script) => vm.runInNewContext(script, sandbox),
+  }, 1);
+  bot.userId = BICANH_FOCUS_UID;
+  bot.username = '';
+  bot._bicanhMsgBaseline = 1;
+  return bot;
+}
+
+async function testBicanhFocusPicksLatestPostAnchorBattle() {
+  const { old1, cmd1, batA, batB } = focusBattleArticles();
+  const sandbox = focusSandbox([old1, cmd1, batA, batB]);
+  const bot = focusBot([old1, cmd1, batA, batB], sandbox);
+  const focused = await bot.bicanhFocusBattle();
+  if (focused !== 'batB') throw new Error('focus phải chọn màn battle mới nhất sau !bicanh, thực tế: ' + focused);
+  if (sandbox.window.botBicanhFocusMsgId !== 'batB') throw new Error('focus phải ghi window.botBicanhFocusMsgId = batB');
+  if (batB.getAttribute('data-bicanh-focus') !== 'true') throw new Error('màn focus phải được đánh dấu data-bicanh-focus');
+  if (batA.getAttribute('data-bicanh-focus') === 'true') throw new Error('màn cũ không được giữ dấu focus');
+  console.log('Bicanh focus picks latest post-anchor battle passed');
+}
+
+async function testBicanhFocusSkipsOtherPlayerAndNonSkillScreens() {
+  const { old1, cmd1, batA, skill } = focusBattleArticles();
+  const other = focusArticle('other', 'Bí Cảnh tầng 6', 'Bí Cảnh tầng 6 người khác', [focusButton(skill)]);
+  const noSkill = focusArticle('noskill', 'Bí Cảnh tầng 6', `<@!${BICANH_FOCUS_UID}> Bí Cảnh tầng 6`, [focusButton('Tiếp Tục')]);
+  const sandbox = focusSandbox([old1, cmd1, batA, other, noSkill]);
+  const bot = focusBot([old1, cmd1, batA, other, noSkill], sandbox);
+  const focused = await bot.bicanhFocusBattle();
+  if (focused !== 'batA') throw new Error('focus phải bỏ qua màn người khác và màn không có nút skill, thực tế: ' + focused);
+  console.log('Bicanh focus skips other-player and non-skill screens passed');
+}
+
+async function testBicanhFocusReturnsNullBeforeAnchorAndWithoutUserId() {
+  const { old1, cmd1 } = focusBattleArticles();
+  const sandbox = focusSandbox([old1, cmd1]);
+  const bot = focusBot([old1, cmd1], sandbox);
+  if ((await bot.bicanhFocusBattle()) !== null) throw new Error('chưa có màn battle sau !bicanh thì focus phải null');
+  let execCalls = 0;
+  const noIdBot = new NpcBot({ executeJavaScript: () => { execCalls++; return 0; } }, 1);
+  noIdBot.userId = '';
+  if ((await noIdBot.bicanhFocusBattle()) !== null) throw new Error('không có User ID thì focus phải null');
+  if (execCalls !== 0) throw new Error('không có User ID thì không được quét DOM tìm focus');
+  console.log('Bicanh focus returns null before anchor and without userId passed');
+}
+
+async function testBicanhClickPrefersFocusedArticle() {
+  const { cmd1, batA, batB, skill } = focusBattleArticles();
+  const sandbox = focusSandbox([cmd1, batA, batB]);
+  const bot = focusBot([cmd1, batA, batB], sandbox);
+  bot._bicanhMsgBaseline = 0;
+  bot.peekBicanhEphemeralDetail = async () => null;
+  bot.dismissEphemeralMessages = async () => {};
+  const logs = [];
+  bot.log = (...args) => logs.push(args.join(' '));
+  const result = await bot.clickNextBicanhSkill(skill);
+  if (!result || !result.clicked) throw new Error('clickNext phải bấm được skill, thực tế: ' + JSON.stringify(result));
+  if (!batB._buttons[0].clicked) throw new Error('click phải rơi vào nút skill ở màn focus mới nhất (batB)');
+  if (batA._buttons[0].clicked) throw new Error('click không được rơi vào màn battle cũ (batA)');
+  if (!logs.some((line) => line.includes('focus màn battle mới'))) throw new Error('đổi focus phải log 1 dòng, log thực tế: ' + JSON.stringify(logs));
+  console.log('Bicanh click prefers focused article passed');
+}
+
+async function testBicanhClickFallsBackWhenFocusStale() {
+  const { cmd1, batA, batB, skill } = focusBattleArticles();
+  batB._buttons[0].disabled = true;
+  const sandbox = focusSandbox([cmd1, batA, batB]);
+  sandbox.window.botBicanhFocusMsgId = 'batB';
+  const bot = new NpcBot({
+    executeJavaScript: (script) => vm.runInNewContext(script, sandbox),
+  }, 1);
+  bot.userId = '';
+  bot.username = '';
+  bot.peekBicanhEphemeralDetail = async () => null;
+  bot.dismissEphemeralMessages = async () => {};
+  const result = await bot.clickNextBicanhSkill(skill);
+  if (!result || !result.clicked) throw new Error('focus cũ mất nút thì phải rơi xuống quét cũ và bấm được, thực tế: ' + JSON.stringify(result));
+  if (!batA._buttons[0].clicked) throw new Error('fallback phải bấm nút skill ở màn cũ (batA)');
+  console.log('Bicanh click falls back when focus stale passed');
+}
+
+async function testBicanhUserIdConfig() {
+  const bot = new NpcBot({ executeJavaScript: () => 0 }, 1);
+  if (bot.userId !== '') throw new Error('userId mặc định phải rỗng');
+  bot.updateConfig({ userId: BICANH_FOCUS_UID });
+  if (bot.userId !== BICANH_FOCUS_UID) throw new Error('updateConfig phải nhận userId');
+  console.log('Bicanh userId config passed');
+}
+
 testBicanhWaitTurnRetriesPreviousSkill()
   .then(testPeekBicanhEphemeralKind)
   .then(testPeekBicanhEphemeralDetail)
@@ -491,6 +634,12 @@ testBicanhWaitTurnRetriesPreviousSkill()
   .then(testBicanhDuplicateWaitTurnDoesNotStepBackTwice)
   .then(testBicanhNotFoundDoesNotDecrementCooldown)
   .then(testBicanhDoesNotReclickJustUsedSkillAfterSkips)
+  .then(testBicanhFocusPicksLatestPostAnchorBattle)
+  .then(testBicanhFocusSkipsOtherPlayerAndNonSkillScreens)
+  .then(testBicanhFocusReturnsNullBeforeAnchorAndWithoutUserId)
+  .then(testBicanhClickPrefersFocusedArticle)
+  .then(testBicanhClickFallsBackWhenFocusStale)
+  .then(testBicanhUserIdConfig)
   .catch((error) => {
     console.error(error);
     process.exitCode = 1;

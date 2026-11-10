@@ -64,7 +64,7 @@ class NpcBot {
     this.tuLuyenAfterTarget = true;
     this._tuLuyenActive = false;
     this.username = '';
-    this.userId = '';
+    this.userId = ''; // Bicanh focus: User ID Discord, để nhận màn battle của mình khi game sinh DOM mới (xem bicanhFocusBattle)
     this.mode = 'npc';
     this.luanhoi = false;
     this.luanhoiTarget = 10;
@@ -4271,6 +4271,10 @@ class NpcBot {
 
     this.log('\n=== ⚔️ BICANH MODE ===');
     this._bicanhMsgBaseline = await this.exec("(() => document.querySelectorAll('[role=\"article\"]').length)()");
+    // Focus màn battle mới: chạy mới thì xóa focus cũ (màn battle của lần
+    // chạy trước), focus sẽ được tìm lại từ tin nhắn !bicanh ở dưới.
+    this._bicanhFocusMsgId = null;
+    await this.exec("(() => { window.botBicanhFocusMsgId = ''; document.querySelectorAll('[data-bicanh-focus=\"true\"]').forEach(m => m.removeAttribute('data-bicanh-focus')); })()");
     this.log('Gửi lệnh !bicanh...');
     await this.sendChat(this.bicanhCmd);
     await this.delay(this.rand(2000, 3000));
@@ -4582,7 +4586,70 @@ class NpcBot {
       })()`);
    }
 
-   // Click skill bicanh theo tên. Trả về { clicked, waitTurn, wrongPerson, cooldownDetail, skipCurrent }:
+   // Focus màn battle mới của Bí Cảnh (anh 2026-11-10): DOM kéo dài quá
+  // thì game tự sinh message battle mới, bot bấm theo màn cũ sẽ trượt.
+  // Tính từ tin nhắn !bicanh: neo là tin nhắn !bicanh của chính mình gần
+  // nhất (text chứa lệnh + innerHTML chứa User ID), chỉ xét các message
+  // sau neo đó. Message battle nào sau neo mà chứa User ID của mình
+  // (trong innerHTML, kể cả khi text hiển thị không ghi tên) + có nút
+  // skill thì đó là màn battle đang chạy — focus vào nó để
+  // clickNextBicanhSkill bấm đúng màn. Không có User ID thì giữ cách cũ
+  // (lọc theo username), không focus. Trả về msg id đang focus, hoặc null
+  // khi chưa thấy màn nào.
+  async bicanhFocusBattle() {
+    const userId = this.userId || '';
+    if (!userId) return null;
+    const skillNames = (this.luanhoiSkillNames || []).filter(Boolean);
+    const normalized = skillNames.map(name => String(name || '').normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '').replace(/\u0111/gi, 'd').replace(/\u01A1/gi, 'o').replace(/\u01B0/gi, 'u')
+      .toLowerCase().replace(/\s+/g, ' ').trim());
+    return await this.exec(`(() => {
+        const userId = ${JSON.stringify(userId)};
+        const cmd = ${JSON.stringify(this.bicanhCmd || '!bicanh')};
+        const baseline = ${JSON.stringify(this._bicanhMsgBaseline || 0)};
+        const skillNames = ${JSON.stringify(normalized)};
+        const norm = value => String(value || '').normalize('NFD')
+          .replace(/[\\u0300-\\u036f]/g, '').replace(/\\u0111/gi, 'd').replace(/\\u01A1/gi, 'o').replace(/\\u01B0/gi, 'u')
+          .toLowerCase().replace(/\\s+/g, ' ').trim();
+        const msgs = Array.from(document.querySelectorAll('[role="article"]'));
+        // Neo: tin nhắn !bicanh của chính mình gần nhất. Không thấy neo
+        // (tin nhắn đã trôi khỏi DOM) thì lùi về dùng baseline = số
+        // article trước khi gửi lệnh, như isBicanhBattleReady.
+        const cmdNorm = norm(cmd);
+        let anchor = -1;
+        for (let i = msgs.length - 1; i >= 0; i--) {
+          const m = msgs[i];
+          if (!norm(m.textContent || '').includes(cmdNorm)) continue;
+          if (!(m.innerHTML || '').includes(userId)) continue;
+          anchor = i;
+          break;
+        }
+        const list = anchor >= 0 ? msgs.slice(anchor + 1) : msgs.slice(baseline);
+        for (let i = list.length - 1; i >= 0; i--) {
+          const msg = list[i];
+          if (msg.getAttribute && msg.getAttribute('data-bot-ephemeral') === 'true') continue;
+          const html = msg.innerHTML || '';
+          if (!html.includes(userId)) continue;
+          const btns = msg.querySelectorAll('button, [role="button"]');
+          let hasSkill = false;
+          for (const btn of btns) {
+            if (btn.disabled) continue;
+            if (btn.offsetParent === null) continue;
+            const clean = norm(btn.textContent);
+            if (!clean) continue;
+            if (skillNames.some(name => name && (clean === name || clean.includes(name)))) { hasSkill = true; break; }
+          }
+          if (!hasSkill) continue;
+          document.querySelectorAll('[data-bicanh-focus="true"]').forEach(m => m.removeAttribute('data-bicanh-focus'));
+          msg.setAttribute('data-bicanh-focus', 'true');
+          window.botBicanhFocusMsgId = msg.id || '';
+          return msg.id || '';
+        }
+        return null;
+      })()`);
+  }
+
+  // Click skill bicanh theo tên. Trả về { clicked, waitTurn, wrongPerson, cooldownDetail, skipCurrent }:
    // waitTurn = true nghĩa là trước khi click skill này, game còn sót tin nhắn
    // "Đợi lượt trước xử lý xong đã!" — tức skill ở lượt trước chưa được tính,
    // và tin nhắn đó đã được dismiss ở đây. Loop phải lùi về skill trước đó để
@@ -4614,6 +4681,17 @@ class NpcBot {
     if (cooldownDetail && cooldownDetail.skill === skillName) {
       return { clicked: null, waitTurn: false, wrongPerson: false, cooldownDetail, skipCurrent: true };
     }
+    // Focus màn battle mới (chỉ khi đã nhập User ID): game sinh DOM mới
+    // thì màn battle mới nhất của mình sau !bicanh là màn đang chạy — tìm
+    // lại trước mỗi lần bấm để click không trượt sang màn cũ. Log chỉ khi
+    // focus đổi sang màn khác.
+    if (this.userId) {
+      const focused = await this.bicanhFocusBattle();
+      if (focused && focused !== this._bicanhFocusMsgId) {
+        this._bicanhFocusMsgId = focused;
+        this.log('🎯 Bicanh: focus màn battle mới của mình (sau !bicanh)');
+      }
+    }
     const username = this.username || '';
     const userId = this.userId || '';
     const nameNoD = skillName.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -4623,6 +4701,27 @@ class NpcBot {
       .toLowerCase();
 
     const clicked = await this.exec(`(() => {
+       const nameNoD = ${JSON.stringify(nameNoD)};
+       // Màn battle đang focus (bicanhFocusBattle): bấm skill trong đúng
+       // màn đó trước; màn focus cũ/mất nút thì rơi xuống quét cũ ở dưới.
+       const focusId = window.botBicanhFocusMsgId || '';
+       if (focusId) {
+         const focusMsg = document.getElementById(focusId);
+         if (focusMsg) {
+           const focusBtns = focusMsg.querySelectorAll('button, [role="button"]');
+           for (const btn of focusBtns) {
+             if (btn.disabled) continue;
+             const raw = (btn.textContent || '').trim();
+             if (!raw || /[@|!]/.test(raw)) continue;
+             const clean = raw.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\u0111/g,'d').replace(/\u0110/g,'d').toLowerCase();
+             if (clean === nameNoD || clean.includes(nameNoD)) {
+               btn.disabled = false;
+               btn.click();
+               return raw;
+             }
+           }
+         }
+       }
        const isOwnedGameMessage = (text, userName, keywords = []) => {
          const rawText = String(text || '');
          const normalizedText = rawText.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\u0111/g, 'd').replace(/\u0110/g, 'd').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -4641,7 +4740,6 @@ class NpcBot {
        };
        const username = ${JSON.stringify(username)};
        const userId = ${JSON.stringify(userId)};
-       const nameNoD = ${JSON.stringify(nameNoD)};
        const msgs = document.querySelectorAll('[role="article"]');
        const recent = Array.from(msgs).slice(-40).reverse();
        for (const msg of recent) {
