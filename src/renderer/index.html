@@ -273,6 +273,17 @@
     }
 
     /* === Stats Panel === */
+    /* V56 (anh 2026-11-10): v55 chưa đủ — đo thực tế (7 món -> 30 món):
+       #items-list cao 133 -> 570px mà KHÔNG cuộn trong (scrollHeight =
+       clientHeight), #stats-panel phình 290 -> 727px, #control-panel chạm
+       trần 44vh rồi cuộn CẢ panel (controlScrollH 740px), màn Discord bị
+       ép từ 654 -> 519px. Gốc lỗi: min-height: 0 của v55 chỉ có tác dụng
+       khi chuỗi flex có chiều cao xác định để co lại, mà #stats-panel cao
+       theo nội dung (flex line lấy theo item cao nhất) nên không có điểm
+       neo nào cả. Thêm max-height: 300px làm điểm neo — bằng chiều cao tự
+       nhiên của #npc-panel (~290px) nên panel không bao giờ cao hơn hàng
+       của nó; khi nội dung dài hơn, panel dừng ở 300px và chuỗi min-height: 0
+       bên dưới mới có cái để co lại, 2 body cuộn trong. */
     #stats-panel {
       flex: 2 1 420px;
       min-width: 320px;
@@ -284,6 +295,7 @@
       gap: 6px;
       overflow-y: auto;
       min-height: 0;
+      max-height: 300px;
     }
 
     .stats-top {
@@ -343,9 +355,13 @@
       color: #c084fc;
     }
 
+    /* V56: hàng grid lấy theo chiều cao của khung (1fr) chứ không theo nội
+       dung — không có dòng này thì hàng auto sẽ phình theo danh sách món
+       dài nhất, 2 section không co lại được và body không cuộn trong. */
     .stats-bottom {
       display: grid;
       grid-template-columns: 1fr 1fr;
+      grid-template-rows: minmax(0, 1fr);
       gap: 6px;
       flex: 1;
       min-height: 0;
