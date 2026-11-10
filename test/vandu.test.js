@@ -579,3 +579,18 @@ eq(bot.vanduFinishRewardButton('', ['hip', 'vandu', 'xo la ba que', 'hoan tat nh
 eq(bot.vanduFinishRewardButton('', ['hip', 'vandu', 'xo la ba que', 'xong vao vo gian tham uyen 37']), null, 'V52: khong co nut Hoan Tat Nhan Thuong');
 eq(bot.vanduFinishRewardButton('', ['bat dau xuat phat', 'mua ve']), null, 'V52: man khac khong bam Hoan Tat');
 console.log('ALL VANDU TESTS PASSED (V52)');
+
+// V54 (anh 2026-11-10, log 07:45:12 — bot dừng nhầm ngay màn Tử Môn mới
+// ở chuyến 3, dù màn đó chưa bấm lần nào): bản ghi bấm cửa mạch chỉ cộng
+// dồn khi đúng màn đó + đúng vị trí mạch + đúng cửa đó. Đếm Sinh→Thổ ở
+// chuyến trước không được lọt sang màn Tử Môn chuyến sau.
+const botV54 = new NpcBot({ executeJavaScript() {} }, 1);
+const recV54 = { msgId: 'M1', circuitKey: 'khac:Mộc', door: 'sinh mon', element: 'Thổ', count: 3 };
+eq(botV54.vanduSameCircuitClick(recV54, 'M1', 'khac:Mộc', 'sinh mon', 'Thổ'), true, 'V54: dung man, dung mach, dung cua -> khop');
+eq(botV54.vanduSameCircuitClick(recV54, 'M1', 'khac:Mộc', 'tu mon', 'Thổ'), false, 'V54: Sinh vs Tu cung hanh Tho nhung khac cua -> khong khop (chot log 07:45:12)');
+eq(botV54.vanduSameCircuitClick(recV54, 'M1', 'sinh:Hỏa', 'sinh mon', 'Thổ'), false, 'V54: mach khac vi tri -> khong khop');
+eq(botV54.vanduSameCircuitClick(recV54, 'M2', 'khac:Mộc', 'sinh mon', 'Thổ'), false, 'V54: man khac msgId -> khong khop');
+eq(botV54.vanduSameCircuitClick(recV54, 'M1', 'khac:Mộc', 'sinh mon', 'Thủy'), false, 'V54: hanh khac -> khong khop');
+eq(botV54.vanduSameCircuitClick(null, 'M1', 'khac:Mộc', 'sinh mon', 'Thổ'), false, 'V54: khong co ban ghi -> khong khop');
+eq(botV54.vanduSameCircuitClick({ msgId: 'M1', element: 'Thổ', count: 3 }, 'M1', 'khac:Mộc', 'tu mon', 'Thổ'), false, 'V54: ban ghi cu (v32, khong co circuitKey/door) khong khop — khong dung dem cu');
+console.log('ALL VANDU TESTS PASSED (V54)');

@@ -105,6 +105,8 @@ class NpcBot {
     // màn mà tiến độ game vẫn ngắn hơn mạch bot tự tiến thì cú bấm chưa
     // vào, phải trả mạch về theo game rồi bấm lại cửa đó, thay vì kẹt
     // "cần hành tiếp theo" trong khi cửa cần bấm vẫn còn trên màn.
+    // V54: bản ghi thêm circuitKey + door (xem vanduSameCircuitClick) và
+    // reset ở cuối chuyến, để đếm cũ không lọt sang màn/chuyến mới.
     this.vanduLastCircuitClick = null;
     // V16: Số lần đi, khởi tạo 0, chỉ tăng khi bấm Trở Về Giang Hồ.
     // V24: thêm giới hạn như Luân Hồi (luanhoiTotalRuns): ô "Số lần đi"
@@ -4787,6 +4789,19 @@ class NpcBot {
     return /THIÊN CƠ HOÀN MỸ|thông trọn vẹn mạch/i.test(String(text || ''));
   }
 
+  // V54 (log 2026-11-10 07:45:12): bản ghi cú bấm cửa mạch chỉ có nghĩa
+  // trên ĐÚNG màn đó — cùng msgId, cùng vị trí mạch trước cú bấm
+  // (circuitKey "loại:hành"), cùng cửa (door) và cùng hành. Trước v54
+  // chỉ so msgId + hành nên đếm của chuyến trước (vd Sinh→Thổ ở chuyến 2)
+  // lọt sang chuyến 3 rồi dừng nhầm ngay màn cửa mới, dù màn đó chưa bấm
+  // lần nào. Sinh/Tử cùng hành Thổ nhưng là 2 cửa khác nhau nên phải so
+  // cả cửa; mạch khác vị trí cũng là màn khác, không cộng dồn.
+  vanduSameCircuitClick(prev, msgId, circuitKey, door, element) {
+    if (!prev) return false;
+    return prev.msgId === msgId && prev.circuitKey === circuitKey &&
+      prev.door === door && prev.element === element;
+  }
+
   // V11: gộp mạch đọc từ màn hình vào mạch bot đang giữ, nhưng KHÔNG cho
   // màn hình cũ làm tụt mạch. Màn hình chỉ ghi neo mạch (vd chỉ [Kim]) trong
   // khi bot đã tự tiến tới [Kim, Mộc] là màn cũ, phải giữ [Kim, Mộc]. Chỉ
@@ -5920,6 +5935,7 @@ class NpcBot {
           this.vanduDanCount = 0;
           this.vanduCircuit = null;
           this.vanduCircuitMsgId = null;
+          this.vanduLastCircuitClick = null; // V54: đếm bấm cửa mạch là theo màn, chuyến mới thì đếm lại từ đầu (trước đây sót, đếm chuyến trước lọt sang chuyến sau)
           this.vanduCounterPicks = 0;
           this.vanduSectCounts = {};
           this.vanduOwnedBuffs = {};
@@ -6404,9 +6420,14 @@ class NpcBot {
           // đổi màn (mạch vẫn đứng yên) thì dừng, để anh bấm tay thay vì
           // bấm mãi vào nút đã chết. Bấm tay xong bấm START lại là chạy
           // tiếp từ màn mới.
+          // V54: "cùng màn" phải là cùng msgId + cùng vị trí mạch trước
+          // cú bấm + cùng cửa — chỉ so msgId + hành thì đếm cũ lọt sang
+          // màn mới (log 07:45:12: dừng ngay màn Tử Môn mới dù chưa bấm).
+          const circuitKey = circuitBefore && circuitBefore.last ? `${circuitBefore.type}:${circuitBefore.last}` : null;
+          const chosenDoor = this.vanduNormalize(chosen);
           const prevClick = this.vanduLastCircuitClick;
-          if (circuitBefore && circuitBefore.last && prevClick &&
-              prevClick.msgId === screen.msgId && prevClick.element === chosenElement &&
+          if (circuitBefore && circuitBefore.last && prevClick && circuitKey &&
+              this.vanduSameCircuitClick(prevClick, screen.msgId, circuitKey, chosenDoor, chosenElement) &&
               prevClick.count >= 3) {
             this.log(`⛔ Vân Du: đã bấm ${chosen} ${prevClick.count} lần mà màn không đổi (mạch ${circuitBefore.type} vẫn ${circuitBefore.last}), dừng để anh bấm tay rồi bấm START lại`);
             break;
@@ -6418,11 +6439,16 @@ class NpcBot {
               this.vanduCircuit = advanced;
               // V32: ghi lại cú bấm để lần quét sau biết mà trả mạch về
               // nếu màn không đổi (cú bấm chưa vào game, xem merge).
+              // V54: ghi cả vị trí mạch trước cú bấm + cửa đã bấm, để lần
+              // quét sau chỉ cộng dồn khi đúng màn đó, đúng mạch đó, đúng
+              // cửa đó — màn mới/mạch mới/cửa khác thì đếm lại từ 1.
               const prev = this.vanduLastCircuitClick;
               this.vanduLastCircuitClick = {
                 msgId: screen.msgId,
+                circuitKey,
+                door: chosenDoor,
                 element: advanced.last,
-                count: (prev && prev.msgId === screen.msgId && prev.element === advanced.last) ? prev.count + 1 : 1,
+                count: (prev && this.vanduSameCircuitClick(prev, screen.msgId, circuitKey, chosenDoor, advanced.last)) ? prev.count + 1 : 1,
               };
               this.log(`🚪 Vân Du: chọn cửa "${chosen}" — mạch ${circuitBefore.type} tiến ${circuitBefore.last} -> ${advanced.last}, bước tiếp là ${this.vanduNextElement(advanced.type, advanced.last)}`);
             } else {
