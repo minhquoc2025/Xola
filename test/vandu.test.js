@@ -130,6 +130,14 @@ eq(bot.vanduCurrentMap('Đại Vùng Đang Chọn: 🌿 Thanh Vân TrấnThôn t
 eq(bot.vanduCurrentMap('Đại Vùng Đang Chọn: 🌿 Thiên Sơn Tuyết Lãnh\nMô tả'), 'Thiên Sơn Tuyết Lãnh', 'current map Thien Son');
 eq(bot.vanduCurrentMap('không có dòng đại vùng'), '', 'khong co dong -> rong');
 
+// V56 (2026-11-11, log anh gửi): đoạn text sau mốc có thể chứa cả 5 tên map
+// (dropdown đang mở / list map) — phải lấy tên XUẤT HIỆN SỚM NHẤT sau mốc
+// (chính là giá trị đang chọn), không lấy theo thứ tự cố định trong list.
+// Kiểu cũ luôn trả Thanh Vân Trấn đầu tiên dù game đang chọn Thiên Sơn.
+eq(bot.vanduCurrentMap('Đại Vùng Đang Chọn: 🌿 Thiên Sơn Tuyết Lãnh\nThanh Vân Trấn Vạn Sơn Liên Mạch Đông Hải Tiên Đảo Tây Vực Sa Mạc'), 'Thiên Sơn Tuyết Lãnh', 'V56: Thien Son dung ngay sau moc, Thanh Van dung sau -> Thien Son');
+eq(bot.vanduCurrentMap('Đại Vùng Đang Chọn: Thanh Vân Trấn\nThiên Sơn Tuyết Lãnh Vạn Sơn Liên Mạch'), 'Thanh Vân Trấn', 'V56: Thanh Van dung ngay sau moc -> Thanh Van');
+eq(bot.vanduCurrentMap('Đại Vùng Đang Chọn: 🌿 Vạn Sơn Liên Mạch\nThanh Vân Trấn Thiên Sơn Tuyết Lãnh'), 'Vạn Sơn Liên Mạch', 'V56: Van Son dung ngay sau moc -> Van Son');
+
 // V8 (2026-11-05): không có mạch, ưu tiên Thương -> Sinh -> Cảnh -> Kinh
 eq(bot.vanduChooseDoor(['Hưu Môn', 'Kinh Môn'], null), 'Kinh Môn', 'no circuit: Kinh truoc Huu (bang moi)');
 eq(bot.vanduChooseDoor(['Cảnh Môn', 'Kinh Môn'], null), 'Cảnh Môn', 'no circuit: Canh truoc Kinh');

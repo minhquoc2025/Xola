@@ -89,6 +89,7 @@ class NpcBot {
     this.vanduRealm = '';
     this.vanduMap = '';
     this.vanduMapPicked = false;
+    this.vanduMapPickTries = 0; // V56: số lần đã thử bấm chọn map trong chuyến này
     // V15: đây chỉ là mặc định khi chưa có cấu hình; thứ tự thật lấy từ
     // config.vanduSkillNames (ô cấu hình chung bicanhSkillOrder) qua updateConfig.
     this.vanduSkillOrder = ['Phá Giáp', 'Băng Phong', 'Hư Không Đại Na Di', 'Kim Đan Phá Sát', 'Băng Phong', 'Vạn Kiếm Quy Tông'];
@@ -5314,15 +5315,23 @@ class NpcBot {
   // tách tên map với đoạn mô tả phía sau, nên đọc thành "Thanh Vân TrấnThôn
   // trấn thanh bình..." — tên sai thì bấm kiểu gì cũng không trúng, đúng lỗi
   // test 2026-11-04 16:23.
+  // V56: trả về tên map XUẤT HIỆN SỚM NHẤT sau mốc (chứ không kiểm tra theo
+  // thứ tự cố định trong list — kiểu cũ luôn trả Thanh Vân Trấn đầu tiên
+  // whenever đoạn text sau mốc chứa cả 5 tên map, vd lúc dropdown đang mở,
+  // dù game đang chọn Thiên Sơn Tuyết Lãnh. Giá trị chọn mới là tên đứng ngay
+  // sau mốc, nên tên sớm nhất trong text mới là map đang chọn thật.
   vanduCurrentMap(text) {
     const raw = String(text || '');
     const idx = raw.indexOf('Đại Vùng Đang Chọn');
     const hay = idx >= 0 ? raw.slice(idx) : raw;
     const maps = ['Thanh Vân Trấn', 'Vạn Sơn Liên Mạch', 'Đông Hải Tiên Đảo', 'Tây Vực Sa Mạc', 'Thiên Sơn Tuyết Lãnh'];
+    let best = '';
+    let bestIdx = Infinity;
     for (const map of maps) {
-      if (hay.includes(map)) return map;
+      const i = hay.indexOf(map);
+      if (i >= 0 && i < bestIdx) { bestIdx = i; best = map; }
     }
-    return '';
+    return best;
   }
 
   vanduTargetMap() {
@@ -5874,6 +5883,7 @@ class NpcBot {
     this.vanduSectCounts = {};
     this.vanduOwnedBuffs = {};
     this.vanduMapPicked = false;
+    this.vanduMapPickTries = 0; // V56: đếm lại mỗi chuyến (xem handler màn bắt đầu)
     let shopKey = '';
     let lastUnrecognized = '';
     let shopBought = false;
@@ -5940,6 +5950,7 @@ class NpcBot {
           this.vanduSectCounts = {};
           this.vanduOwnedBuffs = {};
           this.vanduMapPicked = false;
+          this.vanduMapPickTries = 0; // V56: chuyến mới thì đếm lại từ đầu
           shopKey = '';
           lastUnrecognized = '';
           shopBought = false;
@@ -5983,35 +5994,40 @@ class NpcBot {
           const currentMap = this.vanduCurrentMap(text);
           if (currentMap && this.vanduNormalize(currentMap) === this.vanduNormalize(targetMap)) {
             this.vanduMapPicked = true;
-          } else if (currentMap) {
-            const opened = (await this.vanduClickButton(currentMap)) || (await this.vanduClickExactText(currentMap));
-            if (opened) {
-              this.log(`🗺️ Vân Du: mở danh sách map (đang chọn ${currentMap}, cần ${targetMap})`);
-              await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
-              const picked = (await this.vanduClickButton(targetMap)) || (await this.vanduClickExactText(targetMap));
-              if (picked) {
-                this.vanduMapPicked = true;
-                this.log(`🗺️ Vân Du: đã chọn map ${targetMap} theo cảnh giới ${this.vanduRealm || ''}`);
-              } else {
-                this.log(`⛔ Vân Du: không bấm được map ${targetMap} trong danh sách, dừng để tránh vào sai map. Hãy chọn tay map rồi START lại với list để trống.`);
-                break;
-              }
-              await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
-              continue;
-            } else {
-              this.log(`⛔ Vân Du: không mở được danh sách map (đang ${currentMap}, cần ${targetMap}), dừng để tránh vào sai map. Hãy chọn tay map rồi START lại với list để trống.`);
+            this.log(`🗺️ Vân Du: map đang chọn đã là ${targetMap}, bấm Bắt Đầu`);
+          } else {
+            // V56 (2026-11-11, log anh gửi 07:33/07:39/07:46): bấm chọn map
+            // trả về tên nút (truthy) KHÔNG có nghĩa là game đã đổi map —
+            // 3 chuyến đều log "đã chọn map Thiên Sơn Tuyết Lãnh" nhưng nhật
+            // ký game toàn Thanh Vân Trấn. Nên KHÔNG đánh dấu đã chọn sau cú
+            // bấm nữa: bấm xong thì quét lại màn, chỉ tin khi game hiện đúng
+            // map đích; thử tối đa 3 lần rồi dừng chứ không vào sai map.
+            if ((this.vanduMapPickTries || 0) >= 3) {
+              this.log(`⛔ Vân Du: đã thử chọn map ${targetMap} 3 lần mà game vẫn đang ở ${currentMap || 'không đọc được map'}, dừng để tránh vào sai map. Hãy chọn tay map rồi START lại với list để trống.`);
               break;
             }
-          } else {
-            const picked = (await this.vanduClickButton(targetMap)) || (await this.vanduClickExactText(targetMap));
-            if (picked) {
-              this.vanduMapPicked = true;
-              this.log(`🗺️ Vân Du: đã chọn map ${targetMap}`);
+            this.vanduMapPickTries = (this.vanduMapPickTries || 0) + 1;
+            let clicked = null;
+            if (currentMap) {
+              const opened = (await this.vanduClickButton(currentMap)) || (await this.vanduClickExactText(currentMap));
+              if (!opened) {
+                this.log(`⛔ Vân Du: không mở được danh sách map (đang ${currentMap}, cần ${targetMap}), dừng để tránh vào sai map. Hãy chọn tay map rồi START lại với list để trống.`);
+                break;
+              }
+              this.log(`🗺️ Vân Du: mở danh sách map (đang chọn ${currentMap}, cần ${targetMap})`);
               await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
-              continue;
+              clicked = (await this.vanduClickButton(targetMap)) || (await this.vanduClickExactText(targetMap));
+            } else {
+              clicked = (await this.vanduClickButton(targetMap)) || (await this.vanduClickExactText(targetMap));
             }
-            this.log(`⛔ Vân Du: không thấy map ${targetMap} để bấm, dừng để tránh vào sai map.`);
-            break;
+            if (clicked) {
+              this.log(`🗺️ Vân Du: đã bấm chọn map ${targetMap} (lần ${this.vanduMapPickTries}/3), chờ game xác nhận...`);
+            } else {
+              this.log(`⛔ Vân Du: không bấm được map ${targetMap} trong danh sách, dừng để tránh vào sai map. Hãy chọn tay map rồi START lại với list để trống.`);
+              break;
+            }
+            await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
+            continue;
           }
         }
         if (!(await this.vanduClickButton('Bắt Đầu Xuất Phát'))) await this.vanduClickExactText('Bắt Đầu Xuất Phát');
