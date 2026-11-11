@@ -5,6 +5,7 @@
 // vanduLoop bằng màn hình giả: exec luôn trả truthy khi bấm (giống click
 // DOM thật), còn "sự thật của game" nằm ở màn scan trả về.
 const path = require('path');
+const vm = require('node:vm');
 const { NpcBot } = require(path.join(__dirname, '..', 'src', 'main', 'npc-bot.js'));
 
 function eq(actual, expected, msg) {
@@ -251,6 +252,110 @@ async function runBot(screens, countResult, failTargeted) {
     const firstTargetPick = calls.find((c) => c.needle === 'thien son tuyet lanh' && c.fn !== 'count');
     eq(firstTargetPick && firstTargetPick.fn, 'option', 'D: bam map dich thu option khoanh trong popout truoc');
     eq(bot.isRunning, false, 'D: het chuyen thi dung');
+  }
+
+  // F + G (V61 review, 2026-11-11): các test A–E chỉ lái vanduLoop bằng
+  // stub exec (trả truthy theo tên hàm), KHÔNG chạy câu query DOM thật —
+  // nên v60 sai selector [role=option] mà test vẫn pass. Hai test này
+  // chạy JS thật của helper trong fake DOM (vm + document giả) để bắt
+  // đúng lỗi đó.
+  // Fake DOM tối thiểu: phần tử có role/class/text, parentElement,
+  // closest, querySelectorAll, isVisible (offsetParent/getClientRects),
+  // click ghi lại. textContent = chữ của mình + chữ các con (như DOM thật).
+  function fakeEl(opts) {
+    const el = {
+      _role: opts.role || null,
+      _cls: opts.cls || '',
+      _own: opts.text || '',
+      _parent: opts.parent || null,
+      _children: [],
+      _innerHTML: opts.html || '',
+      disabled: false,
+      clicked: false,
+      offsetParent: opts.visible === false ? null : {},
+      getClientRects() { return opts.visible === false ? [] : [{}]; },
+      get textContent() { return this._own + this._children.map((c) => c.textContent).join(''); },
+      get innerHTML() { return this._innerHTML; },
+      get parentElement() { return this._parent; },
+      getAttribute(name) { return name === 'role' ? this._role : name === 'class' ? this._cls : null; },
+      closest(sel) {
+        let p = this;
+        while (p) { if (fakeMatches(p, sel)) return p; p = p._parent; }
+        return null;
+      },
+      querySelectorAll(sel) {
+        const out = [];
+        const walk = (node) => { for (const c of node._children) { if (fakeMatches(c, sel)) out.push(c); walk(c); } };
+        walk(this);
+        return out;
+      },
+      click() { this.clicked = true; },
+    };
+    for (const c of opts.children || []) { c._parent = el; el._children.push(c); }
+    return el;
+  }
+  function fakeMatches(el, sel) {
+    if (sel === '*') return true;
+    const parts = String(sel).split(',').map((s) => s.trim());
+    return parts.some((part) => {
+      const rm = part.match(/\[role="([^"]+)"\]/);
+      if (rm && el._role !== rm[1]) return false;
+      const cm = part.match(/\[class\*="([^"]+)"\]/);
+      if (cm && !(el._cls || '').includes(cm[1])) return false;
+      const hm = part.match(/\[aria-haspopup="([^"]+)"\]/);
+      if (hm) return false;
+      if (!rm && !cm && !hm) return false;
+      return true;
+    });
+  }
+  function fakeDocFrom(roots) {
+    const all = [];
+    const walk = (node) => { all.push(node); for (const c of node._children) walk(c); };
+    for (const r of roots) walk(r);
+    return { querySelectorAll(sel) { return all.filter((el) => fakeMatches(el, sel)); } };
+  }
+  function domBot(fakeDoc) {
+    const bot = new NpcBot({ executeJavaScript() {} }, 1);
+    bot.userId = '';
+    bot.exec = async (js) => vm.runInNewContext(String(js), { document: fakeDoc });
+    return bot;
+  }
+
+  // F: kênh có 2 trigger cùng hiện "Thanh Vân Trấn" (màn cũ + màn mới) —
+  // helper phải bấm trigger MỚI NHẤT (cuối DOM), không phải cũ nhất.
+  {
+    const oldTrigger = fakeEl({ role: 'combobox', text: 'Thanh Vân Trấn' });
+    const newTrigger = fakeEl({ role: 'combobox', text: 'Thanh Vân Trấn' });
+    const bot = domBot(fakeDocFrom([oldTrigger, newTrigger]));
+    const got = await bot.vanduClickMapTrigger('Thanh Vân Trấn');
+    if (!got) throw new Error('F: trigger phai bam duoc');
+    if (!newTrigger.clicked) throw new Error('F: phai bam trigger MOI NHAT (man moi)');
+    if (oldTrigger.clicked) throw new Error('F: khong duoc bam trigger CU (man cu)');
+    console.log('Vân Du map trigger picks newest combobox passed');
+  }
+
+  // G: span chữ trong tin nhắn cũ SÂU HƠN label trong listbox (đúng lỗi
+  // log 09:54/10:06) — bấm option phải trúng label trong listbox, không
+  // trúng span chữ; và đếm option thật phải >= 1 khi dropdown đang mở.
+  {
+    const decoy = fakeEl({ text: 'Thiên Sơn Tuyết Lãnh' });
+    const deep1 = fakeEl({ children: [decoy] });
+    const deep2 = fakeEl({ children: [deep1] });
+    const deep3 = fakeEl({ children: [deep2] });
+    const article = fakeEl({ role: 'article', html: 'tin nhan cu', children: [deep3] });
+    const label = fakeEl({ text: 'Thiên Sơn Tuyết Lãnh' });
+    const desc = fakeEl({ text: 'Cảnh Giới: Hóa Thần+' });
+    const row = fakeEl({ cls: 'option_abc', children: [label, desc] });
+    const listbox = fakeEl({ role: 'listbox', children: [row] });
+    const bot = domBot(fakeDocFrom([article, listbox]));
+    const got = await bot.vanduClickMapOption('Thiên Sơn Tuyết Lãnh');
+    if (!got) throw new Error('G: option phai bam duoc');
+    if (!label.clicked) throw new Error('G: phai bam label trong listbox, khong phai span chu');
+    if (decoy.clicked) throw new Error('G: khong duoc bam span chu trong tin nhan cu (decoy sau hon)');
+    const cnt = await bot.vanduCountMapOptions('Thiên Sơn Tuyết Lãnh');
+    if (!cnt || cnt.options < 1) throw new Error('G: dem option that phai >= 1 khi dropdown dang mo, thuc te: ' + JSON.stringify(cnt));
+    if (cnt.exact < 2) throw new Error('G: dem khop dung phai thay ca label lan decoy, thuc te: ' + JSON.stringify(cnt));
+    console.log('Vân Du map option scoped in listbox passed');
   }
 
   console.log('Vân Du map-verify checks passed');

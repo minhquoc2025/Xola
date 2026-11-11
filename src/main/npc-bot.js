@@ -5777,14 +5777,17 @@ class NpcBot {
         return cands.length ? cands[0].el : null;
       };
       // (1) listbox mà combobox trỏ tới — vùng chứa các ô chọn thật.
-      for (const box of document.querySelectorAll('[role="listbox"]')) {
-        if (!isVisible(box)) continue;
+      // Duyệt ngược (mới trước): popout cũ (nếu còn trong DOM) không
+      // chứa tên map đích nên sẽ trượt, nhưng mới-trước vẫn là thiên
+      // hướng đúng. Không kiểm tra isVisible ở container — container
+      // position:fixed có offsetParent null dù con bên trong vẫn bấm
+      // được; deepestIn đã lọc từng ứng viên theo isVisible.
+      for (const box of Array.from(document.querySelectorAll('[role="listbox"]')).reverse()) {
         const hit = deepestIn(box);
         if (hit) { hit.disabled = false; hit.click(); return hit.textContent.trim(); }
       }
       // (2) popout chứa dropdown (class Discord đặt tên có "popout").
-      for (const pop of document.querySelectorAll('[class*="popout"]')) {
-        if (!isVisible(pop)) continue;
+      for (const pop of Array.from(document.querySelectorAll('[class*="popout"]')).reverse()) {
         const hit = deepestIn(pop);
         if (hit) { hit.disabled = false; hit.click(); return hit.textContent.trim(); }
       }
@@ -5812,6 +5815,9 @@ class NpcBot {
   // map đang chọn. Bấm theo chữ có thể trúng span chữ trong tin nhắn cũ
   // (cùng lỗi V60 ở trên) nên trigger-first, rồi mới fallback ExactText/
   // ClickButton như cũ.
+  // V61 review (2026-11-11): duyệt NGƯỢC, bấm trigger MỚI NHẤT — code
+  // cũ bấm trigger đầu tiên trong DOM (cũ nhất), mở dropdown của tin
+  // nhắn cũ mà game không nhận.
   async vanduClickMapTrigger(needle) {
     const needleNorm = this.vanduNormalize(needle);
     const userId = this.userId || '';
@@ -5820,7 +5826,14 @@ class NpcBot {
       const userId = ${JSON.stringify(userId)};
       const nd = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\u0111\u0110\u00D0\u00F0]/g, 'd').replace(/[\u01A1\u01A0\u00F8\u00D8]/g, 'o').replace(/[\u01B0\u01AF]/g, 'u').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
       const isVisible = el => el && !el.disabled && el.offsetParent !== null && el.getClientRects().length > 0;
-      for (const el of document.querySelectorAll('[role="combobox"], [aria-haspopup="listbox"]')) {
+      // V61 review (2026-11-11): MỚI NHẤT thắng — kênh có nhiều màn start
+      // cũ, mỗi màn một trigger hiện cùng tên map đang chọn ("Thanh Vân
+      // Trấn"). querySelectorAll trả theo thứ tự DOM (cũ trước, mới sau)
+      // nên code cũ bấm trigger CŨ nhất, mở dropdown của tin nhắn cũ mà
+      // game không nhận. Duyệt ngược để bấm trigger của màn mới nhất.
+      const triggers = Array.from(document.querySelectorAll('[role="combobox"], [aria-haspopup="listbox"]'));
+      for (let i = triggers.length - 1; i >= 0; i--) {
+        const el = triggers[i];
         if (!isVisible(el)) continue;
         const raw = (el.textContent || '').trim();
         if (!raw || raw.length > 120) continue;
