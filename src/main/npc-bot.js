@@ -5732,6 +5732,38 @@ class NpcBot {
     })()`);
   }
 
+  // V57: đếm có bao nhiêu phần tử đang hiện khớp đúng tên map / chứa tên map
+  // (chỉ đọc, không bấm). Dùng để biết sau cú mở thì dropdown có thật sự mở
+  // ra không: 0/0 nghĩa là tên map đích không có trong DOM — bấm tiếp cũng
+  // chỉ trúng phần tử ảo. Trả null khi exec lỗi/đọc không ra (bên gọi sẽ bỏ
+  // qua chẩn đoán và bấm như cũ thay vì dừng oan).
+  async vanduCountMapOptions(needle) {
+    const needleNorm = this.vanduNormalize(needle);
+    const userId = this.userId || '';
+    const res = await this.exec(`(() => { // vanduCountMapOptions
+      const needle = ${JSON.stringify(needleNorm)};
+      const userId = ${JSON.stringify(userId)};
+      const nd = value => String(value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/[\\u0111\\u0110\\u00D0\\u00F0]/g, 'd').replace(/[\\u01A1\\u01A0\\u00F8\\u00D8]/g, 'o').replace(/[\\u01B0\\u01AF]/g, 'u').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      const isVisible = el => el && !el.disabled && el.offsetParent !== null && el.getClientRects().length > 0;
+      let exact = 0, contains = 0;
+      for (const el of document.querySelectorAll('*')) {
+        if (!isVisible(el)) continue;
+        const raw = (el.textContent || '').trim();
+        if (!raw || raw.length > 120) continue;
+        if (userId) {
+          const art = el.closest('[role="article"]');
+          if (art && !(art.innerHTML || '').includes(userId)) continue;
+        }
+        const n = nd(raw);
+        if (n === needle) exact++;
+        else if (n.includes(needle)) contains++;
+      }
+      return exact + '/' + contains;
+    })()`);
+    const m = String(res || '').match(/(\d+)\/(\d+)/);
+    return m ? { exact: Number(m[1]), contains: Number(m[2]) } : null;
+  }
+
   // V23 (log 2026-11-05 09:40:58): bảng cuối PHÁN XÉT THIÊN CƠ vừa hiện
   // thì nút Trở Về Giang Hồ có thể chưa bấm được ngay (Discord mới
   // render / nút đang disabled), mà code cũ chỉ thử 1 lần rồi dừng luôn
@@ -6002,6 +6034,12 @@ class NpcBot {
             // ký game toàn Thanh Vân Trấn. Nên KHÔNG đánh dấu đã chọn sau cú
             // bấm nữa: bấm xong thì quét lại màn, chỉ tin khi game hiện đúng
             // map đích; thử tối đa 3 lần rồi dừng chứ không vào sai map.
+            // V57 (log 08:32 cùng ngày: 3 lần bấm đều không ăn, bot dừng
+            // đúng nhưng vẫn chưa vào được Thiên Sơn): bấm chọn map thử
+            // ExactText TRƯỚC — tên hiển thị của ô select/option đúng bằng
+            // tên map, còn bấm theo chuỗi con (ClickButton) có thể trúng
+            // container dòng "Đại Vùng Đang Chọn: ..." hay khối mô tả chứa
+            // tên map (bấm trúng nhưng game không đổi gì — đúng lỗi V5).
             if ((this.vanduMapPickTries || 0) >= 3) {
               this.log(`⛔ Vân Du: đã thử chọn map ${targetMap} 3 lần mà game vẫn đang ở ${currentMap || 'không đọc được map'}, dừng để tránh vào sai map. Hãy chọn tay map rồi START lại với list để trống.`);
               break;
@@ -6009,16 +6047,29 @@ class NpcBot {
             this.vanduMapPickTries = (this.vanduMapPickTries || 0) + 1;
             let clicked = null;
             if (currentMap) {
-              const opened = (await this.vanduClickButton(currentMap)) || (await this.vanduClickExactText(currentMap));
+              const opened = (await this.vanduClickExactText(currentMap)) || (await this.vanduClickButton(currentMap));
               if (!opened) {
                 this.log(`⛔ Vân Du: không mở được danh sách map (đang ${currentMap}, cần ${targetMap}), dừng để tránh vào sai map. Hãy chọn tay map rồi START lại với list để trống.`);
                 break;
               }
               this.log(`🗺️ Vân Du: mở danh sách map (đang chọn ${currentMap}, cần ${targetMap})`);
               await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
-              clicked = (await this.vanduClickButton(targetMap)) || (await this.vanduClickExactText(targetMap));
+              // V57: đếm xem tên map đích có thật trong DOM không sau cú mở
+              // — 0/0 nghĩa là dropdown chưa mở ra, bấm tiếp cũng chỉ trúng
+              // phần tử ảo nên dừng luôn cho rõ lý do thay vì thử 3 lần.
+              const opt = await this.vanduCountMapOptions(targetMap);
+              if (opt) {
+                this.log(`🔍 Vân Du: sau khi mở list, tên ${targetMap} khớp đúng ${opt.exact} chỗ, chứa tên ${opt.contains} chỗ`);
+                if (opt.exact === 0 && opt.contains === 0) {
+                  this.log(`⛔ Vân Du: mở danh sách map rồi mà không thấy tên ${targetMap} đâu, dừng để tránh bấm hụt. Hãy chọn tay map rồi START lại với list để trống.`);
+                  break;
+                }
+              } else {
+                this.log(`⚠️ Vân Du: không đếm được option map, vẫn thử bấm ${targetMap}`);
+              }
+              clicked = (await this.vanduClickExactText(targetMap)) || (await this.vanduClickButton(targetMap));
             } else {
-              clicked = (await this.vanduClickButton(targetMap)) || (await this.vanduClickExactText(targetMap));
+              clicked = (await this.vanduClickExactText(targetMap)) || (await this.vanduClickButton(targetMap));
             }
             if (clicked) {
               this.log(`🗺️ Vân Du: đã bấm chọn map ${targetMap} (lần ${this.vanduMapPickTries}/3), chờ game xác nhận...`);
