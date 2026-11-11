@@ -5732,6 +5732,71 @@ class NpcBot {
     })()`);
   }
 
+  // V60 (log 09:54, 2026-11-11): bấm chọn map phải trúng đúng ô option
+  // [role=option] trong dropdown của Discord — bấm theo chữ (ExactText/
+  // ClickButton) chọn phần tử SÂU NHẤT khớp tên, mà chữ tên map nằm trong
+  // nhiều span chữ ở tin nhắn cũ (kênh càng chơi lâu càng nhiều), nên cú
+  // bấm toàn rơi vào span chữ trong tin nhắn (bấm ảo, game không đổi map;
+  // 🔍 14/7 ngay từ lần mở đầu, 3 lần bấm không đổi gì). Option thật có
+  // role=option, span chữ thì không — nhắm đúng role là hết bấm ảo.
+  // Chữ trong ô option là tên map + dòng "Cảnh Giới: ..." nên so bằng
+  // "đúng tên hoặc tên đứng đầu" thay vì so bằng tuyệt đối.
+  async vanduClickMapOption(needle) {
+    const needleNorm = this.vanduNormalize(needle);
+    const userId = this.userId || '';
+    return await this.exec(`(() => { // vanduClickMapOption
+      const needle = ${JSON.stringify(needleNorm)};
+      const userId = ${JSON.stringify(userId)};
+      const nd = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\u0111\u0110\u00D0\u00F0]/g, 'd').replace(/[\u01A1\u01A0\u00F8\u00D8]/g, 'o').replace(/[\u01B0\u01AF]/g, 'u').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      const isVisible = el => el && !el.disabled && el.offsetParent !== null && el.getClientRects().length > 0;
+      for (const el of document.querySelectorAll('[role="option"]')) {
+        if (!isVisible(el)) continue;
+        const raw = (el.textContent || '').trim();
+        if (!raw || raw.length > 120) continue;
+        const n = nd(raw);
+        if (n !== needle && !n.startsWith(needle + ' ')) continue;
+        if (userId) {
+          const art = el.closest('[role="article"]');
+          if (art && !(art.innerHTML || '').includes(userId)) continue;
+        }
+        el.disabled = false;
+        el.click();
+        return raw;
+      }
+      return null;
+    })()`);
+  }
+
+  // V60: mở danh sách map bằng đúng trigger của ô select Discord
+  // ([role=combobox], có thể có aria-haspopup=listbox) — trigger hiện tên
+  // map đang chọn. Bấm theo chữ có thể trúng span chữ trong tin nhắn cũ
+  // (cùng lỗi V60 ở trên) nên trigger-first, rồi mới fallback ExactText/
+  // ClickButton như cũ.
+  async vanduClickMapTrigger(needle) {
+    const needleNorm = this.vanduNormalize(needle);
+    const userId = this.userId || '';
+    return await this.exec(`(() => { // vanduClickMapTrigger
+      const needle = ${JSON.stringify(needleNorm)};
+      const userId = ${JSON.stringify(userId)};
+      const nd = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\u0111\u0110\u00D0\u00F0]/g, 'd').replace(/[\u01A1\u01A0\u00F8\u00D8]/g, 'o').replace(/[\u01B0\u01AF]/g, 'u').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      const isVisible = el => el && !el.disabled && el.offsetParent !== null && el.getClientRects().length > 0;
+      for (const el of document.querySelectorAll('[role="combobox"], [aria-haspopup="listbox"]')) {
+        if (!isVisible(el)) continue;
+        const raw = (el.textContent || '').trim();
+        if (!raw || raw.length > 120) continue;
+        if (!nd(raw).includes(needle)) continue;
+        if (userId) {
+          const art = el.closest('[role="article"]');
+          if (art && !(art.innerHTML || '').includes(userId)) continue;
+        }
+        el.disabled = false;
+        el.click();
+        return raw;
+      }
+      return null;
+    })()`);
+  }
+
   // V57: đếm có bao nhiêu phần tử đang hiện khớp đúng tên map / chứa tên map
   // (chỉ đọc, không bấm). Dùng để biết sau cú mở thì dropdown có thật sự mở
   // ra không: 0/0 nghĩa là tên map đích không có trong DOM — bấm tiếp cũng
@@ -5745,7 +5810,7 @@ class NpcBot {
       const userId = ${JSON.stringify(userId)};
       const nd = value => String(value || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/[\\u0111\\u0110\\u00D0\\u00F0]/g, 'd').replace(/[\\u01A1\\u01A0\\u00F8\\u00D8]/g, 'o').replace(/[\\u01B0\\u01AF]/g, 'u').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
       const isVisible = el => el && !el.disabled && el.offsetParent !== null && el.getClientRects().length > 0;
-      let exact = 0, contains = 0;
+      let exact = 0, contains = 0, options = 0;
       for (const el of document.querySelectorAll('*')) {
         if (!isVisible(el)) continue;
         const raw = (el.textContent || '').trim();
@@ -5757,11 +5822,17 @@ class NpcBot {
         const n = nd(raw);
         if (n === needle) exact++;
         else if (n.includes(needle)) contains++;
+        // V60: đếm riêng ô option thật [role=option] khớp tên map (tên
+        // đứng đầu, sau là dòng "Cảnh Giới: ...") — để phân biệt dropdown
+        // đã mở thật (option > 0) với chỉ thấy chữ trùng trong tin nhắn
+        // cũ (exact cao nhưng option = 0, đúng log 09:54: 14/7 mà bấm
+        // không ăn).
+        if (el.getAttribute('role') === 'option' && (n === needle || n.startsWith(needle + ' '))) options++;
       }
-      return exact + '/' + contains;
+      return exact + '/' + contains + '/' + options;
     })()`);
-    const m = String(res || '').match(/(\d+)\/(\d+)/);
-    return m ? { exact: Number(m[1]), contains: Number(m[2]) } : null;
+    const m = String(res || '').match(/(\d+)\/(\d+)(?:\/(\d+))?/);
+    return m ? { exact: Number(m[1]), contains: Number(m[2]), options: m[3] !== undefined ? Number(m[3]) : null } : null;
   }
 
   // V23 (log 2026-11-05 09:40:58): bảng cuối PHÁN XÉT THIÊN CƠ vừa hiện
@@ -6047,7 +6118,11 @@ class NpcBot {
             this.vanduMapPickTries = (this.vanduMapPickTries || 0) + 1;
             let clicked = null;
             if (currentMap) {
-              const opened = (await this.vanduClickExactText(currentMap)) || (await this.vanduClickButton(currentMap));
+              // V60 (log 09:54, 2026-11-11): mở list bằng trigger
+              // [role=combobox] TRƯỚC — bấm theo chữ có thể trúng span chữ
+              // trong tin nhắn cũ (kênh càng nhiều chữ tên map càng dễ
+              // trúng), bấm ảo mà dropdown không mở.
+              const opened = (await this.vanduClickMapTrigger(currentMap)) || (await this.vanduClickExactText(currentMap)) || (await this.vanduClickButton(currentMap));
               if (!opened) {
                 this.log(`⛔ Vân Du: không mở được danh sách map (đang ${currentMap}, cần ${targetMap}), dừng để tránh vào sai map. Hãy chọn tay map rồi START lại với list để trống.`);
                 break;
@@ -6057,19 +6132,34 @@ class NpcBot {
               // V57: đếm xem tên map đích có thật trong DOM không sau cú mở
               // — 0/0 nghĩa là dropdown chưa mở ra, bấm tiếp cũng chỉ trúng
               // phần tử ảo nên dừng luôn cho rõ lý do thay vì thử 3 lần.
-              const opt = await this.vanduCountMapOptions(targetMap);
+              let opt = await this.vanduCountMapOptions(targetMap);
               if (opt) {
-                this.log(`🔍 Vân Du: sau khi mở list, tên ${targetMap} khớp đúng ${opt.exact} chỗ, chứa tên ${opt.contains} chỗ`);
+                this.log(`🔍 Vân Du: sau khi mở list, tên ${targetMap} khớp đúng ${opt.exact} chỗ, chứa tên ${opt.contains} chỗ${opt.options != null ? `, option thật ${opt.options} chỗ` : ''}`);
                 if (opt.exact === 0 && opt.contains === 0) {
                   this.log(`⛔ Vân Du: mở danh sách map rồi mà không thấy tên ${targetMap} đâu, dừng để tránh bấm hụt. Hãy chọn tay map rồi START lại với list để trống.`);
                   break;
                 }
+                // V60: không thấy option thật (chỉ thấy chữ trùng trong
+                // tin nhắn cũ) nghĩa là cú mở vừa rồi bấm ảo — thử mở lại
+                // bằng trigger một lần rồi mới bấm chọn; vẫn bấm chọn như
+                // cũ sau đó (option-first trả null nếu dropdown chưa mở,
+                // fallback ExactText rồi poll sẽ quyết định).
+                if (opt.options === 0) {
+                  this.log(`⚠️ Vân Du: mở list rồi mà không thấy option thật của ${targetMap} (chỉ thấy chữ trong tin nhắn), thử mở lại bằng trigger...`);
+                  await this.vanduClickMapTrigger(currentMap);
+                  await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
+                  opt = await this.vanduCountMapOptions(targetMap);
+                  if (opt) this.log(`🔍 Vân Du: sau khi mở lại, tên ${targetMap} khớp đúng ${opt.exact} chỗ, chứa tên ${opt.contains} chỗ${opt.options != null ? `, option thật ${opt.options} chỗ` : ''}`);
+                }
               } else {
                 this.log(`⚠️ Vân Du: không đếm được option map, vẫn thử bấm ${targetMap}`);
               }
-              clicked = (await this.vanduClickExactText(targetMap)) || (await this.vanduClickButton(targetMap));
+              // V60: bấm chọn map bằng option [role=option] TRƯỚC — đó mới
+              // là ô chọn thật trong dropdown; bấm theo chữ có thể trúng
+              // span chữ trong tin nhắn cũ (log 09:54).
+              clicked = (await this.vanduClickMapOption(targetMap)) || (await this.vanduClickExactText(targetMap)) || (await this.vanduClickButton(targetMap));
             } else {
-              clicked = (await this.vanduClickExactText(targetMap)) || (await this.vanduClickButton(targetMap));
+              clicked = (await this.vanduClickMapOption(targetMap)) || (await this.vanduClickExactText(targetMap)) || (await this.vanduClickButton(targetMap));
             }
             if (clicked) {
               this.log(`🗺️ Vân Du: đã bấm chọn map ${targetMap} (lần ${this.vanduMapPickTries}/3), chờ game xác nhận...`);
