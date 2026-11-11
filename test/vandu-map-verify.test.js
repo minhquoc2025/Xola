@@ -96,7 +96,7 @@ async function runBot(screens, countResult, failTargeted) {
     // nhắn cũ (log 09:54).
     has(logs, 'sau khi mở list, tên Thiên Sơn Tuyết Lãnh khớp đúng 1 chỗ, chứa tên 2 chỗ', 'A: phai log dem option');
     const firstTargetPick = calls.find((c) => c.needle === 'thien son tuyet lanh' && c.fn !== 'count');
-    eq(firstTargetPick && firstTargetPick.fn, 'option', 'A: bam map dich thu option [role=option] truoc (V60)');
+    eq(firstTargetPick && firstTargetPick.fn, 'option', 'A: bam map dich thu option khoanh trong popout truoc (V60/V61)');
     const firstOpen = calls.find((c) => c.needle === 'thanh van tran');
     eq(firstOpen && firstOpen.fn, 'trigger', 'A: mo list thu trigger [role=combobox] truoc (V60)');
   }
@@ -149,7 +149,7 @@ async function runBot(screens, countResult, failTargeted) {
     eq(bot.isRunning, false, 'B: dung bot sau khi break');
     has(logs, 'sau khi mở list, tên Thiên Sơn Tuyết Lãnh khớp đúng 1 chỗ', 'B: phai log dem option moi lan mo');
     const firstTargetPick = calls.find((c) => c.needle === 'thien son tuyet lanh' && c.fn !== 'count');
-    eq(firstTargetPick && firstTargetPick.fn, 'option', 'B: bam map dich thu option [role=option] truoc (V60)');
+    eq(firstTargetPick && firstTargetPick.fn, 'option', 'B: bam map dich thu option khoanh trong popout truoc (V60/V61)');
   }
 
   // C (V57, log 08:32 của anh): mở list rồi mà tên map đích không có trong
@@ -187,7 +187,7 @@ async function runBot(screens, countResult, failTargeted) {
     ], '14/7/0', true);
     has(logs, 'option thật 0 chỗ', 'E: phai log so option that = 0');
     has(logs, 'không thấy option thật', 'E: phai canh bao khong thay option that');
-    has(logs, 'thử mở lại bằng trigger', 'E: phai thu mo lai bang trigger khi khong thay option');
+    lacks(logs, 'thử mở lại bằng trigger', 'E: v61 bo khoi mo lai — mo lai se dong dropdown dang mo (log 10:06)');
     has(logs, 'đã thử chọn map Thiên Sơn Tuyết Lãnh 3 lần', 'E: phai log dung sau 3 lan thu');
     lacks(logs, '🚀 Vân Du: Bắt Đầu Xuất Phát', 'E: khong duoc xuat phat khi map chua dung');
     eq(bot.vanduMapPickTries, 3, 'E: dung 3 lan thu');
@@ -195,12 +195,15 @@ async function runBot(screens, countResult, failTargeted) {
     eq(bot.isRunning, false, 'E: dung bot sau khi break');
   }
 
-  // D (V60, log 09:54 của anh — trường hợp chính): kênh đã đầy chữ
-  // Thiên Sơn (🔍 14/7 ngay từ lần mở đầu) nên bấm theo chữ toàn trúng
-  // span chữ trong tin nhắn cũ — bấm ảo, game không đổi map, poll cũng
-  // vô ích vì cú bấm chưa bao giờ ăn. Bot phải mở list bằng trigger
-  // [role=combobox] và bấm chọn bằng option [role=option]; bấm theo chữ
-  // ở đây được mô phỏng là trả tên nút (truthy) nhưng KHÔNG đổi map.
+  // D (V60, log 09:54 của anh — trường hợp chính, V61 khoanh trong
+  // popout thay vì [role=option]): kênh đã đầy chữ Thiên Sơn (🔍 14/7
+  // ngay từ lần mở đầu) nên bấm theo chữ toàn trúng span chữ trong tin
+  // nhắn cũ — bấm ảo, game không đổi map, poll cũng vô ích vì cú bấm
+  // chưa bao giờ ăn. Bot phải mở list bằng trigger [role=combobox] và
+  // bấm chọn bằng option khoanh trong popout ([role=listbox] trước);
+  // bấm theo chữ ở đây được mô phỏng là trả tên nút (truthy) nhưng
+  // KHÔNG đổi map. Và chỉ mở list 1 lần — mở lại sẽ đóng dropdown
+  // đang mở (log 10:06).
   {
     const bot = new NpcBot({ executeJavaScript() {} }, 1);
     bot.updateConfig({ mode: 'vandu', vanduCmd: '!vandu', username: 'Test', userId: '', vanduRealm: 'Hóa Thần', vanduMap: 'Thiên Sơn Tuyết Lãnh' });
@@ -244,8 +247,9 @@ async function runBot(screens, countResult, failTargeted) {
     eq(bot.vanduMapPickTries, 1, 'D: bam 1 lan thi map an');
     const firstOpen = calls.find((c) => c.needle === 'thanh van tran');
     eq(firstOpen && firstOpen.fn, 'trigger', 'D: mo list thu trigger [role=combobox] truoc');
+    eq(calls.filter((c) => c.fn === 'trigger').length, 1, 'D: chi mo list 1 lan, khong mo lai (v61: mo lai se dong dropdown)');
     const firstTargetPick = calls.find((c) => c.needle === 'thien son tuyet lanh' && c.fn !== 'count');
-    eq(firstTargetPick && firstTargetPick.fn, 'option', 'D: bam map dich thu option [role=option] truoc');
+    eq(firstTargetPick && firstTargetPick.fn, 'option', 'D: bam map dich thu option khoanh trong popout truoc');
     eq(bot.isRunning, false, 'D: het chuyen thi dung');
   }
 

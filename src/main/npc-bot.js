@@ -5732,15 +5732,17 @@ class NpcBot {
     })()`);
   }
 
-  // V60 (log 09:54, 2026-11-11): bấm chọn map phải trúng đúng ô option
-  // [role=option] trong dropdown của Discord — bấm theo chữ (ExactText/
-  // ClickButton) chọn phần tử SÂU NHẤT khớp tên, mà chữ tên map nằm trong
-  // nhiều span chữ ở tin nhắn cũ (kênh càng chơi lâu càng nhiều), nên cú
-  // bấm toàn rơi vào span chữ trong tin nhắn (bấm ảo, game không đổi map;
-  // 🔍 14/7 ngay từ lần mở đầu, 3 lần bấm không đổi gì). Option thật có
-  // role=option, span chữ thì không — nhắm đúng role là hết bấm ảo.
-  // Chữ trong ô option là tên map + dòng "Cảnh Giới: ..." nên so bằng
-  // "đúng tên hoặc tên đứng đầu" thay vì so bằng tuyệt đối.
+  // V61 (log 10:06, 2026-11-11): V60 sai giả định — ô option của Discord
+  // KHÔNG có role=option (option thật luôn 0 chỗ dù dropdown đã mở), và
+  // khối "mở lại bằng trigger" còn tệ hơn: trigger bấm lần 2 ĐÓNG dropdown
+  // đang mở (🔍 tụt 14/7 -> 12/1 sau cú mở lại), nên cú bấm chọn sau đó
+  // chỉ còn trúng span chữ. Vì vậy: (1) bỏ hẳn khối mở lại; (2) bấm chọn
+  // phải khoanh đúng trong POPOUT của dropdown — tìm [role=listbox] trước
+  // (combobox trỏ tới nó), rồi [class*=popout], rồi [class*=option] —
+  // trong mỗi vùng chỉ bấm phần tử sâu nhất khớp đúng tên map (hoặc tên
+  // đứng đầu + dòng "Cảnh Giới: ..."), click sẽ nổi bọt lên handler của
+  // ô chọn. Span chữ trong tin nhắn nằm ngoài popout nên không bao giờ
+  // thắng nữa, kênh có bẩn cỡ nào cũng vậy.
   async vanduClickMapOption(needle) {
     const needleNorm = this.vanduNormalize(needle);
     const userId = this.userId || '';
@@ -5749,19 +5751,57 @@ class NpcBot {
       const userId = ${JSON.stringify(userId)};
       const nd = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\u0111\u0110\u00D0\u00F0]/g, 'd').replace(/[\u01A1\u01A0\u00F8\u00D8]/g, 'o').replace(/[\u01B0\u01AF]/g, 'u').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
       const isVisible = el => el && !el.disabled && el.offsetParent !== null && el.getClientRects().length > 0;
-      for (const el of document.querySelectorAll('[role="option"]')) {
-        if (!isVisible(el)) continue;
+      const matches = el => {
         const raw = (el.textContent || '').trim();
-        if (!raw || raw.length > 120) continue;
+        if (!raw || raw.length > 120) return false;
         const n = nd(raw);
-        if (n !== needle && !n.startsWith(needle + ' ')) continue;
-        if (userId) {
-          const art = el.closest('[role="article"]');
-          if (art && !(art.innerHTML || '').includes(userId)) continue;
+        return n === needle || n.startsWith(needle + ' ');
+      };
+      const ownedOk = el => {
+        if (!userId) return true;
+        const art = el.closest('[role="article"]');
+        return !art || (art.innerHTML || '').includes(userId);
+      };
+      const deepestIn = root => {
+        const cands = [];
+        const all = Array.from(root.querySelectorAll('*'));
+        all.unshift(root);
+        for (const el of all) {
+          if (!isVisible(el) || !matches(el) || !ownedOk(el)) continue;
+          let depth = 0;
+          let q = el;
+          while (q.parentElement) { depth++; q = q.parentElement; }
+          cands.push({ el, depth });
         }
-        el.disabled = false;
-        el.click();
-        return raw;
+        cands.sort((a, b) => b.depth - a.depth);
+        return cands.length ? cands[0].el : null;
+      };
+      // (1) listbox mà combobox trỏ tới — vùng chứa các ô chọn thật.
+      for (const box of document.querySelectorAll('[role="listbox"]')) {
+        if (!isVisible(box)) continue;
+        const hit = deepestIn(box);
+        if (hit) { hit.disabled = false; hit.click(); return hit.textContent.trim(); }
+      }
+      // (2) popout chứa dropdown (class Discord đặt tên có "popout").
+      for (const pop of document.querySelectorAll('[class*="popout"]')) {
+        if (!isVisible(pop)) continue;
+        const hit = deepestIn(pop);
+        if (hit) { hit.disabled = false; hit.click(); return hit.textContent.trim(); }
+      }
+      // (3) ô có class chứa "option" ở bất cứ đâu (fallback khi không
+      // tìm được listbox/popout) — vẫn khoanh theo chữ, không bấm bừa.
+      const opts = Array.from(document.querySelectorAll('[class*="option"]')).filter(isVisible).filter(matches).filter(ownedOk);
+      if (opts.length) {
+        let best = opts[0], bestDepth = -1;
+        for (const el of opts) {
+          let depth = 0;
+          let q = el;
+          while (q.parentElement) { depth++; q = q.parentElement; }
+          if (depth > bestDepth) { bestDepth = depth; best = el; }
+        }
+        best.disabled = false;
+        best.click();
+        return best.textContent.trim();
       }
       return null;
     })()`);
@@ -5822,12 +5862,15 @@ class NpcBot {
         const n = nd(raw);
         if (n === needle) exact++;
         else if (n.includes(needle)) contains++;
-        // V60: đếm riêng ô option thật [role=option] khớp tên map (tên
-        // đứng đầu, sau là dòng "Cảnh Giới: ...") — để phân biệt dropdown
-        // đã mở thật (option > 0) với chỉ thấy chữ trùng trong tin nhắn
-        // cũ (exact cao nhưng option = 0, đúng log 09:54: 14/7 mà bấm
-        // không ăn).
-        if (el.getAttribute('role') === 'option' && (n === needle || n.startsWith(needle + ' '))) options++;
+        // V61: đếm riêng ô option thật khớp tên map nằm trong popout của
+        // dropdown ([role=listbox] hoặc [class*=popout] hoặc phần tử có
+        // class chứa "option") — V60 đếm [role=option] nên luôn 0 vì
+        // Discord không đặt role đó cho ô chọn (log 10:06: option thật
+        // 0 chỗ dù dropdown đã mở). Số này > 0 mới là dropdown đã mở
+        // thật; = 0 mà exact cao thì chỉ là chữ trùng trong tin nhắn cũ.
+        const inPopout = el.closest('[role="listbox"], [class*="popout"]');
+        const isOptClass = (el.getAttribute('class') || '').includes('option');
+        if ((inPopout || isOptClass) && (n === needle || n.startsWith(needle + ' '))) options++;
       }
       return exact + '/' + contains + '/' + options;
     })()`);
@@ -6132,31 +6175,26 @@ class NpcBot {
               // V57: đếm xem tên map đích có thật trong DOM không sau cú mở
               // — 0/0 nghĩa là dropdown chưa mở ra, bấm tiếp cũng chỉ trúng
               // phần tử ảo nên dừng luôn cho rõ lý do thay vì thử 3 lần.
-              let opt = await this.vanduCountMapOptions(targetMap);
+              const opt = await this.vanduCountMapOptions(targetMap);
               if (opt) {
                 this.log(`🔍 Vân Du: sau khi mở list, tên ${targetMap} khớp đúng ${opt.exact} chỗ, chứa tên ${opt.contains} chỗ${opt.options != null ? `, option thật ${opt.options} chỗ` : ''}`);
                 if (opt.exact === 0 && opt.contains === 0) {
                   this.log(`⛔ Vân Du: mở danh sách map rồi mà không thấy tên ${targetMap} đâu, dừng để tránh bấm hụt. Hãy chọn tay map rồi START lại với list để trống.`);
                   break;
                 }
-                // V60: không thấy option thật (chỉ thấy chữ trùng trong
-                // tin nhắn cũ) nghĩa là cú mở vừa rồi bấm ảo — thử mở lại
-                // bằng trigger một lần rồi mới bấm chọn; vẫn bấm chọn như
-                // cũ sau đó (option-first trả null nếu dropdown chưa mở,
-                // fallback ExactText rồi poll sẽ quyết định).
+                // V61: option thật = 0 (chỉ thấy chữ trùng trong tin nhắn)
+                // thì chỉ log cảnh báo, KHÔNG mở lại bằng trigger nữa —
+                // v60 mở lại đã chứng minh là hại: trigger bấm lần 2
+                // ĐÓNG dropdown đang mở (🔍 tụt 14/7 -> 12/1, log 10:06).
                 if (opt.options === 0) {
-                  this.log(`⚠️ Vân Du: mở list rồi mà không thấy option thật của ${targetMap} (chỉ thấy chữ trong tin nhắn), thử mở lại bằng trigger...`);
-                  await this.vanduClickMapTrigger(currentMap);
-                  await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
-                  opt = await this.vanduCountMapOptions(targetMap);
-                  if (opt) this.log(`🔍 Vân Du: sau khi mở lại, tên ${targetMap} khớp đúng ${opt.exact} chỗ, chứa tên ${opt.contains} chỗ${opt.options != null ? `, option thật ${opt.options} chỗ` : ''}`);
+                  this.log(`⚠️ Vân Du: mở list rồi mà không thấy option thật của ${targetMap} (chỉ thấy chữ trong tin nhắn), vẫn thử bấm chọn...`);
                 }
               } else {
                 this.log(`⚠️ Vân Du: không đếm được option map, vẫn thử bấm ${targetMap}`);
               }
-              // V60: bấm chọn map bằng option [role=option] TRƯỚC — đó mới
-              // là ô chọn thật trong dropdown; bấm theo chữ có thể trúng
-              // span chữ trong tin nhắn cũ (log 09:54).
+              // V61: bấm chọn map bằng option khoanh trong popout TRƯỚC
+              // (vanduClickMapOption) — bấm theo chữ có thể trúng span chữ
+              // trong tin nhắn cũ (log 09:54).
               clicked = (await this.vanduClickMapOption(targetMap)) || (await this.vanduClickExactText(targetMap)) || (await this.vanduClickButton(targetMap));
             } else {
               clicked = (await this.vanduClickMapOption(targetMap)) || (await this.vanduClickExactText(targetMap)) || (await this.vanduClickButton(targetMap));
