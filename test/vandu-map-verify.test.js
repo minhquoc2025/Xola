@@ -65,12 +65,15 @@ async function runBot(screens, countResult) {
 }
 
 (async () => {
-  // A: bấm lần 1 không ăn (game vẫn Thanh Vân), bấm lần 2 ăn (game hiện
-  // Thiên Sơn) -> chỉ bấm Bắt Đầu SAU khi quét thấy Thiên Sơn.
+  // A (V59, log 09:41 chuyến 2 của anh): cú bấm lần 1 ĐÃ ăn nhưng game
+  // sửa dòng "Đại Vùng Đang Chọn" chậm — màn quét ngay sau cú bấm vẫn đọc
+  // Thanh Vân, edit chỉ về ở lần quét thứ 2 sau bấm. Bot phải chờ poll
+  // (quét lại tối đa 3 lần) thay vì tính là bấm hụt.
   {
     const { bot, logs, calls } = await runBot([
       startScreen('Thanh Vân Trấn'),
       startScreen('Thanh Vân Trấn'),
+      startScreen('Thiên Sơn Tuyết Lãnh'),
       startScreen('Thiên Sơn Tuyết Lãnh'),
       tripEndScreen,
     ]);
@@ -80,8 +83,9 @@ async function runBot(screens, countResult) {
     const iVerified = logs.findIndex((l) => l.includes('map đang chọn đã là'));
     const iDepart = logs.findIndex((l) => l.includes('🚀 Vân Du: Bắt Đầu Xuất Phát'));
     eq(iVerified >= 0 && iDepart > iVerified, true, 'A: Bat Dau phai sau dong xac nhan map');
-    eq(bot.vanduMapPickTries, 2, 'A: 2 lan bam thi map moi an');
+    eq(bot.vanduMapPickTries, 1, 'A: poll xac nhan ngay o lan bam 1, khong can bam lan 2');
     lacks(logs, 'đã chọn map Thiên Sơn Tuyết Lãnh theo cảnh giới', 'A: khong duoc log kieu cu (tin cum bam)');
+    lacks(logs, 'quét lại vẫn thấy', 'A: poll da thay map dung, khong duoc log bam hut');
     eq(bot.isRunning, false, 'A: het chuyen thi dung');
     // V57: bấm map thử ExactText trước, và log chẩn đoán số option sau khi mở.
     has(logs, 'sau khi mở list, tên Thiên Sơn Tuyết Lãnh khớp đúng 1 chỗ, chứa tên 2 chỗ', 'A: phai log dem option');
@@ -91,17 +95,48 @@ async function runBot(screens, countResult) {
     eq(firstOpen && firstOpen.fn, 'exact', 'A: mo list thu ExactText truoc');
   }
 
-  // B: bấm 3 lần mà game vẫn Thanh Vân -> dừng, KHÔNG bấm Bắt Đầu.
-  // Đây đúng là 3 chuyến 07:33/07:39/07:46 trong log anh gửi — code cũ đi
-  // luôn Thanh Vân, code mới phải dừng lại.
+  // A2 (V59): poll lần 1 quét 3 lần vẫn Thanh Vân (edit chưa về) -> bot
+  // thử bấm lại lần 2, poll lần 2 thấy Thiên Sơn -> đi luôn, không dừng oan.
+  {
+    const { bot, logs } = await runBot([
+      startScreen('Thanh Vân Trấn'),
+      startScreen('Thanh Vân Trấn'),
+      startScreen('Thanh Vân Trấn'),
+      startScreen('Thanh Vân Trấn'),
+      startScreen('Thanh Vân Trấn'),
+      startScreen('Thanh Vân Trấn'),
+      startScreen('Thiên Sơn Tuyết Lãnh'),
+      startScreen('Thiên Sơn Tuyết Lãnh'),
+      tripEndScreen,
+    ]);
+    has(logs, 'quét lại vẫn thấy Thanh Vân Trấn, thử lại', 'A2: phai log thu lai sau poll lan 1 that bai');
+    has(logs, 'map đang chọn đã là Thiên Sơn Tuyết Lãnh', 'A2: phai xac nhan map truoc khi xuat phat');
+    has(logs, 'Bắt Đầu Xuất Phát', 'A2: phai bam Bat Dau sau khi xac nhan');
+    eq(bot.vanduMapPickTries, 2, 'A2: bam 2 lan thi map moi an');
+    eq(bot.isRunning, false, 'A2: het chuyen thi dung');
+  }
+
+  // B: bấm 3 lần, poll sau mỗi lần quét 3 lần vẫn Thanh Vân -> dừng,
+  // KHÔNG bấm Bắt Đầu. Đây đúng là 3 chuyến 07:33/07:39/07:46 trong log
+  // anh gửi — code cũ đi luôn Thanh Vân, code mới phải dừng lại.
   {
     const { bot, logs, calls } = await runBot([
       startScreen('Thanh Vân Trấn'),
       startScreen('Thanh Vân Trấn'),
       startScreen('Thanh Vân Trấn'),
       startScreen('Thanh Vân Trấn'),
+      startScreen('Thanh Vân Trấn'),
+      startScreen('Thanh Vân Trấn'),
+      startScreen('Thanh Vân Trấn'),
+      startScreen('Thanh Vân Trấn'),
+      startScreen('Thanh Vân Trấn'),
+      startScreen('Thanh Vân Trấn'),
+      startScreen('Thanh Vân Trấn'),
+      startScreen('Thanh Vân Trấn'),
+      startScreen('Thanh Vân Trấn'),
     ]);
     has(logs, 'đã thử chọn map Thiên Sơn Tuyết Lãnh 3 lần', 'B: phai log dung sau 3 lan thu');
+    has(logs, 'quét lại vẫn thấy Thanh Vân Trấn, thử lại', 'B: phai log thu lai sau moi poll that bai');
     lacks(logs, '🚀 Vân Du: Bắt Đầu Xuất Phát', 'B: khong duoc xuat phat khi map chua dung');
     eq(bot.vanduMapPickTries, 3, 'B: dung 3 lan thu');
     eq(bot.vanduMapPicked, false, 'B: khong duoc danh dau da chon');

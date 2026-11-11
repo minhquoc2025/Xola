@@ -6077,7 +6077,32 @@ class NpcBot {
               this.log(`⛔ Vân Du: không bấm được map ${targetMap} trong danh sách, dừng để tránh vào sai map. Hãy chọn tay map rồi START lại với list để trống.`);
               break;
             }
-            await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
+            // V59 (log 09:41 chuyến 2, 2026-11-11): cú bấm chọn map ĐÃ ăn
+            // nhưng game sửa dòng "Đại Vùng Đang Chọn" trong tin nhắn chậm
+            // — sau cú bấm lần 1, số chỗ khớp đúng tên map trong DOM nhảy
+            // 2 → 14 (edit đã về) mà màn quét 2s sau vẫn đọc Thanh Vân,
+            // nên bot tưởng bấm hụt rồi dừng oan sau 3 lần, trong khi ảnh
+            // chụp sau đó cho thấy Thiên Sơn đã được chọn (✓). Từ giờ sau
+            // mỗi cú bấm thì quét lại tối đa 3 lần, cách nhau 2s (tổng
+            // ~6s): thấy đúng map đích ở lần nào thì đi luôn; hết 3 lần
+            // quét vẫn sai map mới tính là bấm hụt và thử lại.
+            let confirmed = false;
+            for (let poll = 1; poll <= 3; poll++) {
+              await this.delay(2000);
+              if (!this.isRunning || this.runId !== runId) return;
+              const again = await this.vanduScanLatest();
+              if (!again) break;
+              const againMap = this.vanduCurrentMap(again.text || '');
+              if (againMap && this.vanduNormalize(againMap) === this.vanduNormalize(targetMap)) {
+                this.vanduMapPicked = true;
+                this.log(`🗺️ Vân Du: map đang chọn đã là ${targetMap}, bấm Bắt Đầu`);
+                confirmed = true;
+                break;
+              }
+            }
+            if (!confirmed) {
+              this.log(`🗺️ Vân Du: đã bấm chọn map ${targetMap} (lần ${this.vanduMapPickTries}/3), quét lại vẫn thấy ${currentMap || 'không đọc được map'}, thử lại...`);
+            }
             continue;
           }
         }
