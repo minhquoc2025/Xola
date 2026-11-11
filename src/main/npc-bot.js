@@ -116,6 +116,7 @@ class NpcBot {
     this.vanduTripCount = 0;
     this.vanduTotalTrips = 0;
     this.vanduLastKyNgoFailMsgId = null; // V27: chống spam log Kỳ Ngộ
+    this.vanduLastShopFailMsgId = null; // V62: chống spam log bấm shop thất bại
     // V17: số lượt buff đã lấy theo bảng khắc chế trong chuyến này (chỉ
     // tiêu 5). Reset mỗi chuyến ở đầu vanduLoop, không reset mỗi bảng.
     this.vanduCounterPicks = 0;
@@ -4731,13 +4732,18 @@ class NpcBot {
     // V22 (màn Tiết 10/36): hành đã xong game ghi "[✓ Mộc]" (có dấu tick)
     // và neo mạch ghi "MỘC" viết hoa — cả hai đều phải nhận ra Mộc, nên
     // tuốt dấu tick/ký hiệu đầu và so không phân biệt hoa/thường.
-    const progressMatch = raw.match(/Mạch Tương (?:Sinh|Khắc)[^\\n]*?((?:\[[^\]]+\]\s*(?:→|->)\s*)*\[[^\]]+\])/);
+    const progressMatch = raw.match(/Mạch Tương (?:Sinh|Khắc)[^\n]*?((?:\[[^\]]+\][^\[\n]*?(?:→|->)\s*)*\[[^\]]+\])/);
     let known = [];
     let fromProgress = false;
     if (progressMatch) {
       const parts = progressMatch[1].match(/\[([^\]]+)\]/g) || [];
       for (const part of parts) {
-        const cleaned = part.replace(/[\[\]]/g, '').replace(/^[✓✔✅★\s*]+/, '').trim();
+        // V62 (ảnh Tiết 10/36): game ghi "[🌿 Mộc] ✓ → [🔥 Hỏa] ✓" —
+        // emoji hành nằm TRONG ngoặc, tick nằm NGOÀI, nên tuốt cả ký hiệu
+        // đầu không phải chữ (emoji/tick/sao) trước khi so tên hành; và
+        // giữa ngoặc với mũi tên có thể có tick/khoảng trắng, không chỉ
+        // khoảng trắng như regex cũ.
+        const cleaned = part.replace(/[\[\]]/g, '').replace(/^[^\p{L}]+/u, '').trim();
         const el = canon(cleaned);
         if (el) known.push(el);
         else break;
@@ -6510,7 +6516,17 @@ class NpcBot {
       }
 
       // Shop Tiên Thương (mở khi chọn Cảnh Môn).
-      const isShop = btnNorm.some(b => b.includes('mua cuu chuyen')) || norm.includes('tien thuong');
+      // V62 (anh báo 2026-11-11, ảnh Tiết 10/36): màn cửa sau khi rời shop
+      // có dòng recap "Đạo hữu rời khỏi lều buôn Tiên Thương an toàn..."
+      // nên điều kiện cũ norm.includes('tien thuong') nhận nhầm màn cửa
+      // thành shop. Shop thật luôn có nút hành động của nó (Mua/Bí Tịch),
+      // hoặc — sau khi mua xong nút Mua có thể biến mất — nút Rời đi của
+      // shop kèm chữ Tiên Thương. Màn cửa chỉ có 3 nút cửa nên không lọt.
+      // V62b: cú bấm shop thất bại thì log 1 lần/màn — trước đây im lặng
+      // rồi quét lại mãi, đúng triệu chứng đơ ở màn này.
+      const hasShopBtn = btnNorm.some(b => b.includes('mua cuu chuyen') || b.includes('bi tich'));
+      const hasShopLeave = btnNorm.some(b => b.includes('roi di tiep tuc hanh trinh'));
+      const isShop = hasShopBtn || (norm.includes('tien thuong') && hasShopLeave);
       if (isShop) {
         const key = (screen.msgId || '') + '|' + text.slice(0, 80);
         if (key !== shopKey) { shopKey = key; shopBought = false; shopBiTich = false; }
@@ -6521,12 +6537,18 @@ class NpcBot {
             this.vanduDanCount++;
             shopBought = true;
             this.log(`🛒 Vân Du: mua Cửu Chuyển Hoàn Hồn Đan (${this.vanduDanCount}/3)`);
+          } else if (this.vanduLastShopFailMsgId !== screen.msgId) {
+            this.vanduLastShopFailMsgId = screen.msgId;
+            this.log('⚠️ Vân Du: shop, không bấm được nút Mua Cửu Chuyển trên màn này, chờ màn mới (không bấm bừa)');
           }
         } else if (action === 'bi-tich') {
           const clicked = await this.vanduClickButton('Bí Tịch Thượng Cổ');
           if (clicked) {
             shopBiTich = true;
             this.log('📜 Vân Du: đủ 3 Cửu Chuyển, bấm Bí Tịch Thượng Cổ rồi chơi tiếp theo mạch');
+          } else if (this.vanduLastShopFailMsgId !== screen.msgId) {
+            this.vanduLastShopFailMsgId = screen.msgId;
+            this.log('⚠️ Vân Du: shop, không bấm được nút Bí Tịch Thượng Cổ trên màn này, chờ màn mới (không bấm bừa)');
           }
         } else {
           await this.vanduClickButton('Rời đi tiếp tục hành trình');
