@@ -6103,6 +6103,20 @@ class NpcBot {
       // thành mạch theo walkthrough là "THIÊN CƠ HOÀN MỸ!" (5/5).
       if (this.vanduIsCircuitComplete(text)) this.vanduCircuit = null;
 
+      // V58 (anh chốt 2026-11-11, ảnh Tiết 32/36): sau khi mạch Sinh hoàn
+      // thành (THIÊN CƠ HOÀN MỸ 5/5), game hiện bảng Trận Đồ Ngũ Hành kèm
+      // Dị Biến Cô Ma Loạn Vũ, 2 nút "Tụng siêu độ vong hồn" (xanh) và
+      // "Đi tiếp". Anh dặn gặp màn này thì bấm Tụng siêu độ vong hồn.
+      // Đặt TRƯỚC các handler cửa/Kỳ Ngộ chung vì màn này không có nút
+      // cửa hay Dâng hương — để handler chung xử lý thì nó chờ màn mới mãi.
+      // Nhận diện bằng chính nút cần bấm.
+      if (btnNorm.some(x => x.includes('tung sieu do vong hon'))) {
+        await this.vanduClickButton('Tụng siêu độ vong hồn');
+        this.log('🕯️ Vân Du: Dị Biến Cô Ma Loạn Vũ, bấm Tụng siêu độ vong hồn');
+        await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
+        continue;
+      }
+
       // Bảng Tiếp Tục Tiến Sâu: sau thua boss (về checkpoint) và sau giải đố
       // đúng (sang chặng kế) đều dùng nút này. V1 Vân Du chưa xử lý nên kẹt.
       if (btnNorm.some(x => x.includes('tiep tuc tien sau'))) {
