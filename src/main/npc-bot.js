@@ -5009,7 +5009,12 @@ class NpcBot {
     // Trước đây Cường Thể cố tình không đưa vào vì chưa xác nhận; bảng này
     // chốt luôn, nên thêm. Cuồng Thể (Huyền Giáp) trước đó cũng là Thuật,
     // nên Huyền Giáp về Thuật là nhất quán cả hai bảng.
-    if (raw.includes('Cường Thể') || raw.includes('Huyền Giáp')) return 'Thuật';
+    // V66 (anh chot 2026-11-12): ten dung la "Cương Thể", khong phai
+    // "Cường Thể" — code cu chi check "Cường Thể" nen gap quai Cương Thể
+    // that thi counter ve null, bot roi ve tui cu (Thuat 5, Van 1 vang,
+    // Khi 1 vang) thay vi bang v50. Giu "Cường Thể" lam alias phong khi
+    // co bang ghi cach cu.
+    if (raw.includes('Cương Thể') || raw.includes('Cường Thể') || raw.includes('Huyền Giáp')) return 'Thuật';
     if (raw.includes('Cuồng Thể')) return 'Thuật';
     if (raw.includes('Cuồng Bạo')) return 'Khí';
     if (raw.includes('Huyết Tế') || raw.includes('Huyết Ma')) return 'Kiếm';
@@ -5280,7 +5285,7 @@ class NpcBot {
     const buckets = [];
     const counterPicksSoFar = Number(counterPicks) || 0;
     // V50 (anh 2026-11-06): túi 12 buff theo quái đang đánh — 6 khắc chế
-    // + 5 Thuật + 1 Vận vàng; riêng quái Cường Thể (khắc chế là Thuật)
+    // + 5 Thuật + 1 Vận vàng; riêng quái Cương Thể (khắc chế là Thuật)
     // thì 6 Thuật + 5 Khí + 1 Vận vàng. (Trước đây: 5 khắc chế + 5 Thuật
     // + 1 Vận vàng + 1 Khí vàng.) Vận vẫn chỉ lấy vàng; Khí 5 lấy mọi độ
     // hiếm (vàng trước). Chưa đọc được quái thì giữ túi cũ (Thuật 5,

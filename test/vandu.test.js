@@ -92,10 +92,12 @@ eq(bot.vanduChooseDoor(['Khai Môn', 'Kinh Môn'], { type: 'khac', last: 'Hỏa'
 // V2: bảng khắc chế
 // V7 (bảng 2026-11-05): Cường Thể / Huyền Giáp -> Thuật
 eq(bot.vanduCounterSectFromText('quái [Cường Thể] X'), 'Thuật', 'Cuong The -> Thuat');
+eq(bot.vanduCounterSectFromText('quái [Cương Thể] X'), 'Thuật', 'Cuong The (o) -> Thuat');
 eq(bot.vanduCounterSectFromText('quái [Huyền Giáp] X'), 'Thuật', 'Huyen Giap -> Thuat');
 eq(bot.vanduCounterSectFromText('quái [Cuồng Thể] X'), 'Thuật', 'Cuong The (cu) -> Thuat');
 eq(bot.vanduCounterSectFromText('đã chém gục [Hư Ảo] Băng Tuyết Dạ Báo'), 'Ma', 'Hu Ao -> Ma');
 eq(bot.vanduCounterSectFromText('quái [Cuồng Bạo] X'), 'Khí', 'Cuong Bao -> Khi');
+eq(bot.vanduCounterSectFromText('quái [Huyết Tế] X'), 'Kiếm', 'Huyet Te -> Kiem');
 eq(bot.vanduCounterSectFromText('quái lạ không tên'), null, 'quai la -> null');
 eq(bot.vanduChooseBuff(['[Ma] Độc Cô Bảo Môn [Ma Tông - Lam]', '[Ma] Ma Hóa Cuồng Nộ [Ma Tông - Tím (Cực Phẩm)]', '[Khí] Kim Cang [Khí Tông - Vàng (Thần Thoại)]'], { Ma: 1, Khí: 0 }, {}, true, 'Ma').buttonText, '[Ma] Ma Hóa Cuồng Nộ [Ma Tông - Tím (Cực Phẩm)]', 'counter Ma: Tim thang Lam, thang vang Khi');
 // V2: đố Bát Quái
