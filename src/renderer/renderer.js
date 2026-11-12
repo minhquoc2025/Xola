@@ -163,7 +163,7 @@ function getNpcConfig() {
     username: '', // NPC giờ check theo User ID, không dùng username nữa
     npcNumber: parseInt(document.getElementById('npc-number').value) || 1,
     totalBattles: parseInt(document.getElementById('total-battles').value) || 5,
-    cooldownMs: (parseInt(document.getElementById('cooldown-seconds').value) || 120) * 1000,
+    cooldownMs: 80 * 1000, // Cooldown NPC cố định 80s — bỏ khỏi giao diện (v76)
     autoClimb: document.getElementById('auto-climb').checked,
     targetMaxNpc: parseInt(document.getElementById('target-max-npc').value) || 60,
     tuLuyen: document.getElementById('tu-luyen').checked,

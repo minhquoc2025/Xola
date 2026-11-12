@@ -954,12 +954,12 @@ body {
                    max="99">
           </div>
           <div class="config-field">
-            <label for="cooldown-seconds">Cooldown (sec)</label>
-            <input id="cooldown-seconds"
+            <label for="target-max-npc">Target NPC</label>
+            <input id="target-max-npc"
                    type="number"
-                   value="80"
-                   min="10"
-                   max="600">
+                   value="60"
+                   min="1"
+                   max="999">
           </div>
           <div class="config-field">
             <label for="total-battles">Total Battles</label>
@@ -970,31 +970,26 @@ body {
                    max="999">
           </div>
           <div class="config-field">
-            <label style="color:#ff2d78;font-weight:600;font-size:7px;">AUTO CLIMB</label>
-
-            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-              <input id="auto-climb"
-                     type="checkbox"
-                     style="width:13px;height:13px;">
-              <span style="font-size:8px;color:#ccc;">Bật</span>
-            </label>
-          </div>
-          <div class="config-field">
-            <label for="target-max-npc">Target NPC</label>
-            <input id="target-max-npc"
-                   type="number"
-                   value="60"
-                   min="1"
-                   max="999">
-          </div>
-          <div class="config-field">
-            <label style="color:#ff2d78;font-weight:600;font-size:7px;">TU LUYỆN</label>
-            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-              <input id="tu-luyen"
-                     type="checkbox"
-                     style="width:13px;height:13px;">
-              <span style="font-size:8px;color:#ccc;">Sau mỗi trận</span>
-            </label>
+            <div style="display:flex;gap:16px;">
+              <div>
+                <label style="color:#ff2d78;font-weight:600;font-size:7px;">AUTO CLIMB</label>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                  <input id="auto-climb"
+                         type="checkbox"
+                         style="width:13px;height:13px;">
+                  <span style="font-size:8px;color:#ccc;">Bật</span>
+                </label>
+              </div>
+              <div>
+                <label style="color:#ff2d78;font-weight:600;font-size:7px;">TU LUYỆN</label>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                  <input id="tu-luyen"
+                         type="checkbox"
+                         style="width:13px;height:13px;">
+                  <span style="font-size:8px;color:#ccc;">Sau mỗi trận</span>
+                </label>
+              </div>
+            </div>
           </div>
         </div>
       </div>
