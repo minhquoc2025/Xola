@@ -95,6 +95,7 @@ class NpcBot {
     this.vanduSkillOrder = ['Phá Giáp', 'Băng Phong', 'Hư Không Đại Na Di', 'Kim Đan Phá Sát', 'Băng Phong', 'Vạn Kiếm Quy Tông'];
     this.vanduSkillIdx = 0;
     this.vanduNode = 0;
+    this.vanduLastBuffNode = 0; // V69: Tiết lúc chọn buff gần nhất (xem vanduIsBossByFlow)
     this.vanduDanCount = 0;
     this.vanduCircuit = null;
     // V22: msgId của màn cuối cùng đã dùng để đặt/gộp mạch, để phân biệt
@@ -5450,6 +5451,19 @@ class NpcBot {
     return n.includes('vuc canh') || n.includes('manh co khi');
   }
 
+  // V69 (2026-11-12, log 10:57:43): boss vẫn không hồi dù đã có v68 —
+  // màn battle lúc đánh không mang chữ Vực Cảnh / Mảnh Cổ Khí (2 chữ đó
+  // nằm ở màn chuyển trước trận, không nằm ở màn battle lúc đánh), và
+  // màn battle cũng không ghi Tiết Điểm 12/36, nên cả 2 cơ chế v68 đều
+  // không kích hoạt. Nhận boss theo luồng game thay vì chữ trên màn:
+  // trận bắt đầu ngay sau bảng buff ở Tiết 11/23/35 là boss 12/24/36
+  // (boss chen vào không qua màn cửa — walkthrough bước 21). Nhầm thì
+  // cũng chỉ hồi sớm ở ngưỡng 50% như luật cũ trước v64, không bấm bừa.
+  vanduIsBossByFlow() {
+    const n = this.vanduNode;
+    return (n === 11 || n === 23 || n === 35) && this.vanduLastBuffNode === n;
+  }
+
   // V65 (anh 2026-11-12, anh Tiet 13/36): dem so buff trong tui tu
   // chinh man hien tai — man Loi Kiep hien "8 The Buff", bang cong
   // huong hien "Tui Buff 4/12". Tra ve null neu man khong ghi so.
@@ -6114,6 +6128,7 @@ class NpcBot {
     // không đổi mặc định chung, cộng 1s riêng ở đây (cả sau hồi máu).
     const skillGapMs = (this.skillClickDelayMs || 1000) + 1000;
     const startedAt = Date.now();
+    let noHealLogged = false; // V69: log chẩn đoán không-hồi 1 lần/trận
     while (this.isRunning && this.runId === runId) {
       if (Date.now() - startedAt > this.battleTimeoutMs) {
         this.vanduLog('⚠️ Vân Du: trận quá lâu, quay lại vòng quét chính');
@@ -6160,7 +6175,17 @@ class NpcBot {
       }
       // V68: boss thì ngưỡng 50% kể cả khi số Tiết đọc được còn lag
       // (màn boss có chữ Vực Cảnh / Mảnh Cổ Khí, xem vanduIsBossBattle).
-      const healThreshold = this.vanduIsBossBattle(screen.text) ? 50 : this.vanduHealThreshold(this.vanduNode);
+      // V69: thêm nhận diện theo luồng (trận sau bảng buff ở Tiết
+      // 11/23/35 là boss 12/24/36) vì màn battle lúc đánh không mang
+      // 2 chữ đó — log 10:57:43 vẫn không hồi dù đã có v68.
+      const isBossBattle = this.vanduIsBossBattle(screen.text) || this.vanduIsBossByFlow();
+      const healThreshold = isBossBattle ? 50 : this.vanduHealThreshold(this.vanduNode);
+      // V69: chẩn đoán — máu <50% ở vùng chuyển boss (Tiết 11/23/35)
+      // mà không hồi thì log 1 lần/trận để lần sau biết bot đã thấy gì.
+      if (hp !== null && hp < 50 && (this.vanduNode === 11 || this.vanduNode === 23 || this.vanduNode === 35) && !(hp < healThreshold && itemBtn) && !noHealLogged) {
+        noHealLogged = true;
+        this.vanduLog(`💊 Vân Du: máu ${hp}% <50% nhưng không hồi (ngưỡng ${healThreshold}, đan ${itemBtns.length}/3, boss=${isBossBattle ? 'có' : 'không'}, Tiết ${this.vanduNode || '?'})`);
+      }
       if (hp !== null && hp < healThreshold && itemBtn) {
         const clicked = await this.vanduClickButton('Cửu Chuyển Hoàn Hồn');
         if (clicked) {
@@ -6222,6 +6247,7 @@ class NpcBot {
     if (!this.isRunning || this.runId !== runId) return;
     this.vanduSkillIdx = 0;
     this.vanduNode = 0;
+    this.vanduLastBuffNode = 0; // V69: reset theo chuyến như vanduNode
     this.vanduDanCount = 0;
     this.vanduCircuit = null;
     // V22: reset luôn msgId mạch theo chuyến, để màn đầu chuyến nào cũng
@@ -6297,6 +6323,7 @@ class NpcBot {
           // nhưng GIỮ vanduTripCount để đếm tiếp tới giới hạn.
           this.vanduSkillIdx = 0;
           this.vanduNode = 0;
+          this.vanduLastBuffNode = 0; // V69: reset theo chuyến như vanduNode
           this.vanduDanCount = 0;
           this.vanduCircuit = null;
           this.vanduCircuitMsgId = null;
@@ -6848,6 +6875,9 @@ class NpcBot {
             if (isNewBuff && choice.reason === 'counter') this.vanduCounterPicks = (this.vanduCounterPicks || 0) + 1;
             const reasonTag = choice.reason ? ` [${choice.reason}]` : '';
             this.vanduLog(`✨ Vân Du: chọn buff "${clicked}"${reasonTag}`);
+            // V69: ghi Tiết lúc chọn buff — trận sau bảng buff ở Tiết
+            // 11/23/35 là boss 12/24/36 (boss chen vào không qua màn cửa).
+            this.vanduLastBuffNode = this.vanduNode;
             picked = true;
           } else {
             break;
