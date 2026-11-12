@@ -908,6 +908,16 @@ body {
                    placeholder="ID Discord (dãy số)"
                    style="width:100%;padding:8px 10px;background:#050510;border:1px solid rgba(0,255,255,.25);border-radius:6px;color:#eee;font-size:14px;outline:none;box-sizing:border-box;">
           </div>
+          <div style="margin-bottom:15px;">
+            <label style="color:#eee;font-size:12px;">Delay (sec) — dùng chung cho tất cả mode (Luân Hồi, Vân Du, Spam): </label>
+            <input id="delay-shared"
+                   type="number"
+                   value="2"
+                   min="0.5"
+                   max="10"
+                   step="0.5"
+                   style="width:100%;padding:8px 10px;background:#050510;border:1px solid rgba(0,255,255,.25);border-radius:6px;color:#eee;font-size:14px;outline:none;box-sizing:border-box;">
+          </div>
           <div style="display:flex;gap:10px;justify-content:flex-end;">
             <button onclick="saveSkillOrder()"
                     style="background:#00c853;color:#fff;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:13px;">💾 Lưu</button>
@@ -1032,15 +1042,6 @@ body {
                    type="text"
                    value="!luanhoi">
           </div>
-          <div class="config-field">
-            <label for="button-delay-lh">Delay (sec)</label>
-            <input id="button-delay-lh"
-                   type="number"
-                   value="3"
-                   min="0.5"
-                   max="10"
-                   step="0.5">
-          </div>
           <div class="config-field full">
             <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
               <input id="luanhoi-continue-noshard"
@@ -1117,15 +1118,6 @@ body {
                    value="!vandu">
           </div>
           <div class="config-field">
-            <label for="vandu-delay">Delay (sec)</label>
-            <input id="vandu-delay"
-                   type="number"
-                   value="2"
-                   min="0.5"
-                   max="10"
-                   step="0.5">
-          </div>
-          <div class="config-field">
             <label for="vandu-total-trips">Số lần đi</label>
             <input id="vandu-total-trips"
                    type="number"
@@ -1169,15 +1161,6 @@ body {
                    value="10"
                    min="1"
                    max="9999">
-          </div>
-          <div class="config-field">
-            <label for="upgrade-delay">Delay (sec)</label>
-            <input id="upgrade-delay"
-                   type="number"
-                   value="2"
-                   min="0.1"
-                   max="60"
-                   step="0.1">
           </div>
           <div class="config-field full">
             <label for="upgrade-type">Loại spam</label>

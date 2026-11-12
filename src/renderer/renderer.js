@@ -7,6 +7,7 @@ window.addEventListener('DOMContentLoaded', () => {
   loadLogs();
   loadLuanHoiSettings();
   loadSharedUserId();
+  loadSharedDelay();
   startStatsPolling();
   const vanduRealmEl = document.getElementById('vandu-realm');
   if (vanduRealmEl) {
@@ -191,17 +192,12 @@ function loadLuanHoiSettings() {
     const el = document.getElementById("luanhoi-cmd");
     if (el) el.value = savedCmd;
   }
-  const savedDelay = localStorage.getItem("button-delay-lh");
-  if (savedDelay !== null) {
-    const el = document.getElementById("button-delay-lh");
-    if (el) el.value = savedDelay;
-  }
   // Checkbox "Đi tiếp khi chưa thấy Mảnh": mặc định bật (hành vi cũ); chỉ
   // tắt khi đã lưu "0".
   const continueEl = document.getElementById("luanhoi-continue-noshard");
   if (continueEl) continueEl.checked = localStorage.getItem("luanhoi-continue-noshard") !== "0";
 
-  ["luanhoi-total-runs", "luanhoi-target", "luanhoi-cmd", "button-delay-lh", "luanhoi-continue-noshard"].forEach(id => {
+  ["luanhoi-total-runs", "luanhoi-target", "luanhoi-cmd", "luanhoi-continue-noshard"].forEach(id => {
     const el = document.getElementById(id);
     if (el) {
       el.addEventListener("input", saveLuanHoiSettings);
@@ -232,6 +228,26 @@ function loadSharedUserId() {
   el.addEventListener("change", () => localStorage.setItem("userid-shared", el.value));
 }
 
+// Delay (sec) dùng chung cho tất cả mode (anh chốt 2026-11-12): 1 ô duy
+// nhất trong modal Cấu hình (⚙️), thay cho 3 ô riêng (Luân Hồi 3s, Vân Du
+// 2s, Spam 2s). Lưu localStorage key "delay-shared". Mặc định 2s (giá trị
+// mặc định của bot + 2/3 mode); Luân Hồi trước là 3s nên giờ sẽ nhanh hơn
+// 1s nếu không chỉnh lại trong modal.
+function getSharedDelayMs() {
+  const el = document.getElementById("delay-shared");
+  const sec = el ? parseFloat(el.value) : NaN;
+  return (Number.isFinite(sec) && sec > 0 ? sec : 2) * 1000;
+}
+
+function loadSharedDelay() {
+  const el = document.getElementById("delay-shared");
+  if (!el) return;
+  const saved = localStorage.getItem("delay-shared");
+  if (saved !== null) el.value = saved;
+  el.addEventListener("input", () => localStorage.setItem("delay-shared", el.value));
+  el.addEventListener("change", () => localStorage.setItem("delay-shared", el.value));
+}
+
 function saveLuanHoiSettings() {
   const totalRunsEl = document.getElementById("luanhoi-total-runs");
   if (totalRunsEl) localStorage.setItem("luanhoi-total-runs", totalRunsEl.value);
@@ -241,9 +257,6 @@ function saveLuanHoiSettings() {
 
   const cmdEl = document.getElementById("luanhoi-cmd");
   if (cmdEl) localStorage.setItem("luanhoi-cmd", cmdEl.value);
-
-  const delayEl = document.getElementById("button-delay-lh");
-  if (delayEl) localStorage.setItem("button-delay-lh", delayEl.value);
 
   const continueEl = document.getElementById("luanhoi-continue-noshard");
   if (continueEl) localStorage.setItem("luanhoi-continue-noshard", continueEl.checked ? "1" : "0");
@@ -264,7 +277,7 @@ function getLuanHoiConfig() {
     luanhoiTotalRuns: (!isNaN(totalRunsVal) && totalRunsVal > 0) ? totalRunsVal : 0,
     luanhoiContinueNoShard: document.getElementById("luanhoi-continue-noshard") ? document.getElementById("luanhoi-continue-noshard").checked : true,
     luanhoiCmd: (document.getElementById("luanhoi-cmd").value || "!luanhoi").trim(),
-    buttonDelayMs: (parseFloat(document.getElementById("button-delay-lh").value) || 2) * 1000,
+    buttonDelayMs: getSharedDelayMs(),
     luanhoiSkillNames: skills.length > 0
       ? skills
       : ["Vạn Kiếm Quy Tông", "Hỗn Nguyên Hộ Thể", "Kiếm Khí Xung Thiên", "Thái Cực Dưỡng Sinh"],
@@ -306,7 +319,7 @@ function getVanduConfig() {
     username: '',
     userId: getSharedUserId(),
     vanduCmd: (document.getElementById('vandu-cmd').value || '!vandu').trim(),
-    buttonDelayMs: (parseFloat(document.getElementById('vandu-delay').value) || 2) * 1000,
+    buttonDelayMs: getSharedDelayMs(),
     vanduRealm: vanduRealm,
     vanduMap: vanduRealm ? (VANDU_REALM_MAPS[vanduRealm] || '') : '',
     vanduTotalTrips: (!isNaN(vanduTotalTripsVal) && vanduTotalTripsVal > 0) ? vanduTotalTripsVal : 0,
@@ -337,8 +350,6 @@ function getBicanhConfig() {
 function getUpgradeConfig() {
   const typeEl = document.getElementById('upgrade-type');
   const type = typeEl ? typeEl.value : 'hp';
-  const delayEl = document.getElementById('upgrade-delay');
-  const delaySec = delayEl ? (parseFloat(delayEl.value) || 2) : 2;
   const countEl = document.getElementById('spam-count');
   const countVal = countEl ? (parseInt(countEl.value) || 10) : 10;
   const cmd = SPAM_CMDS[type] || SPAM_CMDS.hp;
@@ -348,7 +359,7 @@ function getUpgradeConfig() {
     username: '', // Upgrade/Spam giờ dùng User ID, không dùng username nữa
     upgradeType: Object.prototype.hasOwnProperty.call(SPAM_CMDS, type) ? type : 'hp',
     upgradeCmd: cmd,
-    upgradeDelayMs: Math.min(60000, Math.max(100, Math.round(delaySec * 1000))),
+    upgradeDelayMs: Math.min(60000, Math.max(100, Math.round(getSharedDelayMs()))),
     spamCount: Math.min(9999, Math.max(1, countVal)),
     spamType: type,
   };
@@ -532,6 +543,10 @@ function saveSkillOrder() {
   // User ID dùng chung cũng lưu ở đây (dù đã lưu live theo từng phím gõ).
   const sharedUserIdEl = document.getElementById('userid-shared');
   if (sharedUserIdEl) localStorage.setItem('userid-shared', sharedUserIdEl.value);
+
+  // Delay dùng chung cũng lưu ở đây (dù đã lưu live theo từng phím gõ).
+  const sharedDelayEl = document.getElementById('delay-shared');
+  if (sharedDelayEl) localStorage.setItem('delay-shared', sharedDelayEl.value);
 
   let delayMs = getSkillClickDelayMs();
   if (delayInput) {
