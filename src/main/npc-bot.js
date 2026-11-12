@@ -5300,6 +5300,18 @@ class NpcBot {
     return (node === 12 || node === 24 || node === 36) ? 50 : 20;
   }
 
+  // V65 (anh 2026-11-12, anh Tiet 13/36): dem so buff trong tui tu
+  // chinh man hien tai — man Loi Kiep hien "8 The Buff", bang cong
+  // huong hien "Tui Buff 4/12". Tra ve null neu man khong ghi so.
+  vanduBuffBagCount(text) {
+    const raw = String(text || '');
+    let m = raw.match(/Túi Buff\s*(\d+)\s*\/\s*\d+/);
+    if (m) return Number(m[1]);
+    m = raw.match(/(\d+)\s*Thẻ Buff/);
+    if (m) return Number(m[1]);
+    return null;
+  }
+
   vanduSyncSectCounts(text) {
     const raw = String(text || '');
     const re = /(Kiếm|Khí|Thuật|Ma)\s*Tông\s*(\d+)\s*\/\s*\d+/g;
@@ -6320,11 +6332,25 @@ class NpcBot {
       }
 
       // Lôi Kiếp Tôi Thể: mất 20% HP lấy buff cực phẩm (anh chốt ở tiết 11,
-      // lúc HP 100%; ngưỡng HP nào thì đổi sang phương án an toàn chưa chốt,
-      // nên v2 bấm Lôi Kiếp như mẫu đã thấy và ghi log HP lúc bấm).
+      // lúc HP 100%; ngưỡng HP nào thì đổi sang phương án an toàn chưa chốt).
+      // V65 (anh 2026-11-12, ảnh Tiết 13/36): túi Buff đã đủ 12 thì KHÔNG
+      // đánh cược lấy buff nữa (túi đầy, buff mới sẽ đào thải buff cũ) mà
+      // bấm "Khắc Khổ Phòng Ngự" (+10% Giảm Dame vĩnh viễn). Số buff đọc
+      // từ màn ("12 Thẻ Buff" / "Túi Buff 12/12"); màn không ghi số thì
+      // dùng số buff bot đã tự đếm được (vanduOwnedBuffs); cả hai đều
+      // không biết thì đánh cược như cũ. Không có nút Khắc Khổ trên màn
+      // thì cũng đánh cược như cũ.
       if (btnNorm.some(x => x.includes('loi kiep toi the'))) {
-        await this.vanduClickButton('Lôi Kiếp Tôi Thể');
-        this.vanduLog('⚡ Vân Du: Lôi Kiếp Tôi Thể (đánh cược lấy buff)');
+        const bagCount = this.vanduBuffBagCount(text);
+        const trackedCount = Object.keys(this.vanduOwnedBuffs || {}).length;
+        const bagFull = (bagCount !== null ? bagCount : trackedCount) >= 12;
+        if (bagFull && btnNorm.some(x => x.includes('khac kho phong ngu'))) {
+          await this.vanduClickButton('Khắc Khổ Phòng Ngự');
+          this.vanduLog('⚡ Vân Du: túi Buff đã đủ 12, bấm Khắc Khổ Phòng Ngự thay vì Lôi Kiếp');
+        } else {
+          await this.vanduClickButton('Lôi Kiếp Tôi Thể');
+          this.vanduLog('⚡ Vân Du: Lôi Kiếp Tôi Thể (đánh cược lấy buff)');
+        }
         await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
         continue;
       }
