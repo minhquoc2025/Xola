@@ -5911,7 +5911,7 @@ class NpcBot {
       const clicked = (await this.vanduClickButton('Trở Về Giang Hồ')) || (await this.vanduClickExactText('Trở Về Giang Hồ'));
       if (clicked) return clicked;
       if (attempt < 5) {
-        this.log(`⏳ Vân Du: chưa bấm được Trở Về Giang Hồ (lần ${attempt}/5), chờ quét lại...`);
+        this.vanduLog(`⏳ Vân Du: chưa bấm được Trở Về Giang Hồ (lần ${attempt}/5), chờ quét lại...`);
         await this.delay(2000);
         const again = await this.vanduScanLatest();
         const stillThere = !!again && ((again.buttons || []).some(b => this.vanduNormalize(b).includes('tro ve giang ho')) || this.vanduNormalize(again.text || '').includes('tro ve giang ho'));
@@ -5933,7 +5933,7 @@ class NpcBot {
 
   async vanduBattleLoop(runId) {
     // V15: log luôn thứ tự đang dùng để anh kiểm tra cấu hình có vào bot không.
-    this.log(`⚔️ Vân Du: vào trận (thứ tự: ${this.vanduSkillOrder.join(' -> ')})`);
+    this.vanduLog(`⚔️ Vân Du: vào trận (thứ tự: ${this.vanduSkillOrder.join(' -> ')})`);
     // V41 (anh 2026-11-06): qua Tiết mới gặp trận mới thì bấm lại skill
     // từ đầu theo config — trước đây vanduSkillIdx chỉ reset đầu chuyến
     // nên trận sau bấm tiếp diễn từ chỗ trận trước dừng lại.
@@ -5946,7 +5946,7 @@ class NpcBot {
     const startedAt = Date.now();
     while (this.isRunning && this.runId === runId) {
       if (Date.now() - startedAt > this.battleTimeoutMs) {
-        this.log('⚠️ Vân Du: trận quá lâu, quay lại vòng quét chính');
+        this.vanduLog('⚠️ Vân Du: trận quá lâu, quay lại vòng quét chính');
         return;
       }
       await this.dismissEphemeralMessages();
@@ -5981,12 +5981,12 @@ class NpcBot {
       // dù đã xài hết; giờ xài xong số đan tụt, shop sau mua tiếp.
       if (itemBtns.length !== this.vanduDanCount) {
         this.vanduDanCount = itemBtns.length;
-        this.log(`💊 Vân Du: đồng bộ Đan ${this.vanduDanCount}/3 (theo nút trên màn battle)`);
+        this.vanduLog(`💊 Vân Du: đồng bộ Đan ${this.vanduDanCount}/3 (theo nút trên màn battle)`);
       }
       if (hp !== null && hp <= 50 && itemBtn) {
         const clicked = await this.vanduClickButton('Cửu Chuyển Hoàn Hồn');
         if (clicked) {
-          this.log(`💊 Vân Du: hồi máu bằng Cửu Chuyển (HP ${hp}%, Tiết ${this.vanduNode || '?'})`);
+          this.vanduLog(`💊 Vân Du: hồi máu bằng Cửu Chuyển (HP ${hp}%, Tiết ${this.vanduNode || '?'})`);
           await this.delay(Math.max(1000, skillGapMs));
           continue;
         }
@@ -6016,16 +6016,28 @@ class NpcBot {
         const filler = screen.buttons.find(x => this.vanduNormalize(x).includes('kiem co ban'));
         if (filler) {
           clicked = await this.vanduClickButton('Kiếm Cơ Bản');
-          if (clicked) this.log('⚔️ Vân Du: tất cả skill chính đang hồi/thiếu nút, dùng Kiếm Cơ Bản');
+          if (clicked) this.vanduLog('⚔️ Vân Du: tất cả skill chính đang hồi/thiếu nút, dùng Kiếm Cơ Bản');
         }
       }
       if (clicked) {
-        this.log(`⚔️ Vân Du: ${clicked}`);
+        this.vanduLog(`⚔️ Vân Du: ${clicked}`);
       } else {
         this.logDebug('Vân Du: không có skill nào bấm được lúc này, chờ quét lại');
       }
       await this.delay(Math.max(500, skillGapMs));
     }
+  }
+
+  // V63: log Vân Du kèm số Tiết hiện tại (đọc từ màn gần nhất), để
+  // đọc log biết đang ở Tiết mấy. Không chèn khi chưa biết Tiết
+  // (vanduNode = 0, vd lúc chọn map đầu chuyến) hoặc khi câu log đã
+  // có "Tiết" (vd log hồi máu đã ghi "Tiết 4").
+  vanduLog(msg) {
+    const node = this.vanduNode || 0;
+    if (node > 0 && typeof msg === 'string' && msg.includes('Vân Du:') && !msg.includes('Tiết')) {
+      msg = msg.replace('Vân Du:', 'Vân Du [Tiết ' + node + ']:');
+    }
+    this.log(msg);
   }
 
   async vanduLoop(runId) {
@@ -6065,9 +6077,9 @@ class NpcBot {
       const screen = await this.vanduScanLatest();
       if (!screen) {
         idleScans++;
-        if (idleScans === 1 || idleScans % 15 === 0) this.log(this.userId ? '⏳ Vân Du: chưa thấy màn hình game của mình (chỉ thấy màn người khác hoặc chưa có màn mới), vẫn chờ — không bấm màn người khác.' : '⏳ Vân Du: chưa thấy màn hình game, vẫn chờ...');
+        if (idleScans === 1 || idleScans % 15 === 0) this.vanduLog(this.userId ? '⏳ Vân Du: chưa thấy màn hình game của mình (chỉ thấy màn người khác hoặc chưa có màn mới), vẫn chờ — không bấm màn người khác.' : '⏳ Vân Du: chưa thấy màn hình game, vẫn chờ...');
         if (idleScans > 90) {
-          this.log('⛔ Vân Du: quá lâu không thấy màn hình game, dừng để tránh thao tác nhầm.');
+          this.vanduLog('⛔ Vân Du: quá lâu không thấy màn hình game, dừng để tránh thao tác nhầm.');
           break;
         }
         await this.delay(2000);
@@ -6096,13 +6108,13 @@ class NpcBot {
         if (result && result !== 'gone') {
           const trips = this.vanduCountTrip();
           const limit = this.vanduTotalTrips || 0;
-          this.log(`🏁 Vân Du: đã về Giang Hồ, hết chuyến số ${trips}${limit > 0 ? ' / ' + limit : ''}.`);
+          this.vanduLog(`🏁 Vân Du: đã về Giang Hồ, hết chuyến số ${trips}${limit > 0 ? ' / ' + limit : ''}.`);
           if (!this.vanduShouldRestartTrips()) {
-            if (limit > 0) this.log(`🛑 Vân Du: đã hoàn thành đủ ${limit} lần đi. Dừng bot.`);
+            if (limit > 0) this.vanduLog(`🛑 Vân Du: đã hoàn thành đủ ${limit} lần đi. Dừng bot.`);
             await this.stop();
             return;
           }
-          this.log(`🔁 Vân Du: tự động bắt đầu chuyến mới (${this.vanduCmd})...`);
+          this.vanduLog(`🔁 Vân Du: tự động bắt đầu chuyến mới (${this.vanduCmd})...`);
           // Reset trạng thái theo chuyến (đúng danh sách ở đầu vanduLoop),
           // nhưng GIỮ vanduTripCount để đếm tiếp tới giới hạn.
           this.vanduSkillIdx = 0;
@@ -6126,9 +6138,9 @@ class NpcBot {
           if (!this.isRunning || this.runId !== runId) return;
           continue;
         } else if (result === 'gone') {
-          this.log('⚠️ Vân Du: nút Trở Về Giang Hồ đã biến mất (có thể đã bấm tay), dừng mà không tính chuyến này.');
+          this.vanduLog('⚠️ Vân Du: nút Trở Về Giang Hồ đã biến mất (có thể đã bấm tay), dừng mà không tính chuyến này.');
         } else {
-          this.log('⚠️ Vân Du: thấy nút Trở Về Giang Hồ nhưng bấm không được sau 5 lần thử, dừng mà không tính chuyến này. Bấm tay nút này rồi START lại chuyến mới.');
+          this.vanduLog('⚠️ Vân Du: thấy nút Trở Về Giang Hồ nhưng bấm không được sau 5 lần thử, dừng mà không tính chuyến này. Bấm tay nút này rồi START lại chuyến mới.');
         }
         await this.stop();
         return;
@@ -6144,7 +6156,7 @@ class NpcBot {
       const finishBtn = this.vanduFinishRewardButton(norm, btnNorm);
       if (finishBtn) {
         await this.vanduClickButton(finishBtn);
-        this.log('🏆 Vân Du: hết 36 Tiết, bấm Hoàn Tất Nhận Thưởng (An Toàn), không vào Vô Gian Thâm Uyên');
+        this.vanduLog('🏆 Vân Du: hết 36 Tiết, bấm Hoàn Tất Nhận Thưởng (An Toàn), không vào Vô Gian Thâm Uyên');
         await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
         continue;
       }
@@ -6159,7 +6171,7 @@ class NpcBot {
           const currentMap = this.vanduCurrentMap(text);
           if (currentMap && this.vanduNormalize(currentMap) === this.vanduNormalize(targetMap)) {
             this.vanduMapPicked = true;
-            this.log(`🗺️ Vân Du: map đang chọn đã là ${targetMap}, bấm Bắt Đầu`);
+            this.vanduLog(`🗺️ Vân Du: map đang chọn đã là ${targetMap}, bấm Bắt Đầu`);
           } else {
             // V56 (2026-11-11, log anh gửi 07:33/07:39/07:46): bấm chọn map
             // trả về tên nút (truthy) KHÔNG có nghĩa là game đã đổi map —
@@ -6174,7 +6186,7 @@ class NpcBot {
             // container dòng "Đại Vùng Đang Chọn: ..." hay khối mô tả chứa
             // tên map (bấm trúng nhưng game không đổi gì — đúng lỗi V5).
             if ((this.vanduMapPickTries || 0) >= 3) {
-              this.log(`⛔ Vân Du: đã thử chọn map ${targetMap} 3 lần mà game vẫn đang ở ${currentMap || 'không đọc được map'}, dừng để tránh vào sai map. Hãy chọn tay map rồi START lại với list để trống.`);
+              this.vanduLog(`⛔ Vân Du: đã thử chọn map ${targetMap} 3 lần mà game vẫn đang ở ${currentMap || 'không đọc được map'}, dừng để tránh vào sai map. Hãy chọn tay map rồi START lại với list để trống.`);
               break;
             }
             this.vanduMapPickTries = (this.vanduMapPickTries || 0) + 1;
@@ -6186,19 +6198,19 @@ class NpcBot {
               // trúng), bấm ảo mà dropdown không mở.
               const opened = (await this.vanduClickMapTrigger(currentMap)) || (await this.vanduClickExactText(currentMap)) || (await this.vanduClickButton(currentMap));
               if (!opened) {
-                this.log(`⛔ Vân Du: không mở được danh sách map (đang ${currentMap}, cần ${targetMap}), dừng để tránh vào sai map. Hãy chọn tay map rồi START lại với list để trống.`);
+                this.vanduLog(`⛔ Vân Du: không mở được danh sách map (đang ${currentMap}, cần ${targetMap}), dừng để tránh vào sai map. Hãy chọn tay map rồi START lại với list để trống.`);
                 break;
               }
-              this.log(`🗺️ Vân Du: mở danh sách map (đang chọn ${currentMap}, cần ${targetMap})`);
+              this.vanduLog(`🗺️ Vân Du: mở danh sách map (đang chọn ${currentMap}, cần ${targetMap})`);
               await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
               // V57: đếm xem tên map đích có thật trong DOM không sau cú mở
               // — 0/0 nghĩa là dropdown chưa mở ra, bấm tiếp cũng chỉ trúng
               // phần tử ảo nên dừng luôn cho rõ lý do thay vì thử 3 lần.
               const opt = await this.vanduCountMapOptions(targetMap);
               if (opt) {
-                this.log(`🔍 Vân Du: sau khi mở list, tên ${targetMap} khớp đúng ${opt.exact} chỗ, chứa tên ${opt.contains} chỗ${opt.options != null ? `, option thật ${opt.options} chỗ` : ''}`);
+                this.vanduLog(`🔍 Vân Du: sau khi mở list, tên ${targetMap} khớp đúng ${opt.exact} chỗ, chứa tên ${opt.contains} chỗ${opt.options != null ? `, option thật ${opt.options} chỗ` : ''}`);
                 if (opt.exact === 0 && opt.contains === 0) {
-                  this.log(`⛔ Vân Du: mở danh sách map rồi mà không thấy tên ${targetMap} đâu, dừng để tránh bấm hụt. Hãy chọn tay map rồi START lại với list để trống.`);
+                  this.vanduLog(`⛔ Vân Du: mở danh sách map rồi mà không thấy tên ${targetMap} đâu, dừng để tránh bấm hụt. Hãy chọn tay map rồi START lại với list để trống.`);
                   break;
                 }
                 // V61: option thật = 0 (chỉ thấy chữ trùng trong tin nhắn)
@@ -6206,10 +6218,10 @@ class NpcBot {
                 // v60 mở lại đã chứng minh là hại: trigger bấm lần 2
                 // ĐÓNG dropdown đang mở (🔍 tụt 14/7 -> 12/1, log 10:06).
                 if (opt.options === 0) {
-                  this.log(`⚠️ Vân Du: mở list rồi mà không thấy option thật của ${targetMap} (chỉ thấy chữ trong tin nhắn), vẫn thử bấm chọn...`);
+                  this.vanduLog(`⚠️ Vân Du: mở list rồi mà không thấy option thật của ${targetMap} (chỉ thấy chữ trong tin nhắn), vẫn thử bấm chọn...`);
                 }
               } else {
-                this.log(`⚠️ Vân Du: không đếm được option map, vẫn thử bấm ${targetMap}`);
+                this.vanduLog(`⚠️ Vân Du: không đếm được option map, vẫn thử bấm ${targetMap}`);
               }
               // V61: bấm chọn map bằng option khoanh trong popout TRƯỚC
               // (vanduClickMapOption) — bấm theo chữ có thể trúng span chữ
@@ -6219,9 +6231,9 @@ class NpcBot {
               clicked = (await this.vanduClickMapOption(targetMap)) || (await this.vanduClickExactText(targetMap)) || (await this.vanduClickButton(targetMap));
             }
             if (clicked) {
-              this.log(`🗺️ Vân Du: đã bấm chọn map ${targetMap} (lần ${this.vanduMapPickTries}/3), chờ game xác nhận...`);
+              this.vanduLog(`🗺️ Vân Du: đã bấm chọn map ${targetMap} (lần ${this.vanduMapPickTries}/3), chờ game xác nhận...`);
             } else {
-              this.log(`⛔ Vân Du: không bấm được map ${targetMap} trong danh sách, dừng để tránh vào sai map. Hãy chọn tay map rồi START lại với list để trống.`);
+              this.vanduLog(`⛔ Vân Du: không bấm được map ${targetMap} trong danh sách, dừng để tránh vào sai map. Hãy chọn tay map rồi START lại với list để trống.`);
               break;
             }
             // V59 (log 09:41 chuyến 2, 2026-11-11): cú bấm chọn map ĐÃ ăn
@@ -6242,19 +6254,19 @@ class NpcBot {
               const againMap = this.vanduCurrentMap(again.text || '');
               if (againMap && this.vanduNormalize(againMap) === this.vanduNormalize(targetMap)) {
                 this.vanduMapPicked = true;
-                this.log(`🗺️ Vân Du: map đang chọn đã là ${targetMap}, bấm Bắt Đầu`);
+                this.vanduLog(`🗺️ Vân Du: map đang chọn đã là ${targetMap}, bấm Bắt Đầu`);
                 confirmed = true;
                 break;
               }
             }
             if (!confirmed) {
-              this.log(`🗺️ Vân Du: đã bấm chọn map ${targetMap} (lần ${this.vanduMapPickTries}/3), quét lại vẫn thấy ${currentMap || 'không đọc được map'}, thử lại...`);
+              this.vanduLog(`🗺️ Vân Du: đã bấm chọn map ${targetMap} (lần ${this.vanduMapPickTries}/3), quét lại vẫn thấy ${currentMap || 'không đọc được map'}, thử lại...`);
             }
             continue;
           }
         }
         if (!(await this.vanduClickButton('Bắt Đầu Xuất Phát'))) await this.vanduClickExactText('Bắt Đầu Xuất Phát');
-        this.log('🚀 Vân Du: Bắt Đầu Xuất Phát');
+        this.vanduLog('🚀 Vân Du: Bắt Đầu Xuất Phát');
         await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
         continue;
       }
@@ -6284,7 +6296,7 @@ class NpcBot {
       // Nhận diện bằng chính nút cần bấm.
       if (btnNorm.some(x => x.includes('tung sieu do vong hon'))) {
         await this.vanduClickButton('Tụng siêu độ vong hồn');
-        this.log('🕯️ Vân Du: Dị Biến Cô Ma Loạn Vũ, bấm Tụng siêu độ vong hồn');
+        this.vanduLog('🕯️ Vân Du: Dị Biến Cô Ma Loạn Vũ, bấm Tụng siêu độ vong hồn');
         await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
         continue;
       }
@@ -6293,7 +6305,7 @@ class NpcBot {
       // đúng (sang chặng kế) đều dùng nút này. V1 Vân Du chưa xử lý nên kẹt.
       if (btnNorm.some(x => x.includes('tiep tuc tien sau'))) {
         await this.vanduClickButton('Tiếp Tục Tiến Sâu');
-        this.log('➡️ Vân Du: Tiếp Tục Tiến Sâu');
+        this.vanduLog('➡️ Vân Du: Tiếp Tục Tiến Sâu');
         await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
         continue;
       }
@@ -6303,7 +6315,7 @@ class NpcBot {
       // nên v2 bấm Lôi Kiếp như mẫu đã thấy và ghi log HP lúc bấm).
       if (btnNorm.some(x => x.includes('loi kiep toi the'))) {
         await this.vanduClickButton('Lôi Kiếp Tôi Thể');
-        this.log('⚡ Vân Du: Lôi Kiếp Tôi Thể (đánh cược lấy buff)');
+        this.vanduLog('⚡ Vân Du: Lôi Kiếp Tôi Thể (đánh cược lấy buff)');
         await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
         continue;
       }
@@ -6320,7 +6332,7 @@ class NpcBot {
       // anh muốn HP thấp thì đổi sang Bắt bướm thì nói mình thêm ngưỡng.
       if (btnNorm.some(x => x.includes('tinh toa giao cam'))) {
         await this.vanduClickButton('Tĩnh tọa giao cảm');
-        this.log('🦋 Vân Du: Kỳ Ngộ Thất Thái Hồ Điệp, chọn Tĩnh tọa giao cảm (tốn 15% HP)');
+        this.vanduLog('🦋 Vân Du: Kỳ Ngộ Thất Thái Hồ Điệp, chọn Tĩnh tọa giao cảm (tốn 15% HP)');
         await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
         continue;
       }
@@ -6336,7 +6348,7 @@ class NpcBot {
       const skipBtn = this.vanduKyNgoSkipButton(norm, btnNorm);
       if (skipBtn) {
         await this.vanduClickButton(skipBtn);
-        this.log('⏭️ Vân Du: Kỳ Ngộ đánh cược, bấm Bỏ qua, không cược');
+        this.vanduLog('⏭️ Vân Du: Kỳ Ngộ đánh cược, bấm Bỏ qua, không cược');
         await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
         continue;
       }
@@ -6348,7 +6360,7 @@ class NpcBot {
       const rescueBtn = this.vanduKyNgoRescueButton(norm, btnNorm);
       if (rescueBtn) {
         await this.vanduClickButton(rescueBtn);
-        this.log('🌿 Vân Du: Kỳ Ngộ Độc Kiếm Tiên, bấm Cứu mạng tiền bối');
+        this.vanduLog('🌿 Vân Du: Kỳ Ngộ Độc Kiếm Tiên, bấm Cứu mạng tiền bối');
         await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
         continue;
       }
@@ -6360,7 +6372,7 @@ class NpcBot {
       const teaBtn = this.vanduKyNgoTeaButton(norm, btnNorm);
       if (teaBtn) {
         await this.vanduClickButton(teaBtn);
-        this.log('🍵 Vân Du: Kỳ Ngộ Tiên Tử Trà Hữu, bấm Thưởng trà');
+        this.vanduLog('🍵 Vân Du: Kỳ Ngộ Tiên Tử Trà Hữu, bấm Thưởng trà');
         await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
         continue;
       }
@@ -6372,7 +6384,7 @@ class NpcBot {
       const merchantBtn = this.vanduKyNgoMerchantButton(norm, btnNorm);
       if (merchantBtn) {
         await this.vanduClickButton(merchantBtn);
-        this.log('🛒 Vân Du: Kỳ Ngộ Hắc Thị Thương Nhân, mua Bích Họa Bí Thuật (80k)');
+        this.vanduLog('🛒 Vân Du: Kỳ Ngộ Hắc Thị Thương Nhân, mua Bích Họa Bí Thuật (80k)');
         await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
         continue;
       }
@@ -6383,7 +6395,7 @@ class NpcBot {
       const bowBtn = this.vanduKyNgoBowButton(norm, btnNorm);
       if (bowBtn) {
         await this.vanduClickButton(bowBtn);
-        this.log('🙏 Vân Du: Kỳ Ngộ Tiếng Khóc Trẻ Thơ, bấm Cúi đầu thi lễ');
+        this.vanduLog('🙏 Vân Du: Kỳ Ngộ Tiếng Khóc Trẻ Thơ, bấm Cúi đầu thi lễ');
         await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
         continue;
       }
@@ -6394,7 +6406,7 @@ class NpcBot {
       const healHunterBtn = this.vanduKyNgoHealHunterButton(norm, btnNorm);
       if (healHunterBtn) {
         await this.vanduClickButton(healHunterBtn);
-        this.log('💚 Vân Du: Kỳ Ngộ Thợ Săn Kho Báu Trọng Thương, bấm Cứu chữa (tốn 50% HP)');
+        this.vanduLog('💚 Vân Du: Kỳ Ngộ Thợ Săn Kho Báu Trọng Thương, bấm Cứu chữa (tốn 50% HP)');
         await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
         continue;
       }
@@ -6406,7 +6418,7 @@ class NpcBot {
       const shareFoodBtn = this.vanduKyNgoShareFoodButton(norm, btnNorm);
       if (shareFoodBtn) {
         await this.vanduClickButton(shareFoodBtn);
-        this.log('🍑 Vân Du: Kỳ Ngộ Song Sinh Cầu Tử, bấm Chia đồ ăn cho cả hai');
+        this.vanduLog('🍑 Vân Du: Kỳ Ngộ Song Sinh Cầu Tử, bấm Chia đồ ăn cho cả hai');
         await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
         continue;
       }
@@ -6418,7 +6430,7 @@ class NpcBot {
       const congratBtn = this.vanduKyNgoCongratulateButton(norm, btnNorm);
       if (congratBtn) {
         await this.vanduClickButton(congratBtn);
-        this.log('🎉 Vân Du: Kỳ Ngộ Huyết Phong Lục Tổ Sư, bấm Hỷ chúc');
+        this.vanduLog('🎉 Vân Du: Kỳ Ngộ Huyết Phong Lục Tổ Sư, bấm Hỷ chúc');
         await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
         continue;
       }
@@ -6438,18 +6450,18 @@ class NpcBot {
       if (this.vanduIsKyNgoScreen(norm, btnNorm) && !btnNorm.some(x => x.includes('bo qua di tiep an toan'))) {
         const green = await this.vanduClickGreenButton(screen.msgId);
         if (green) {
-          this.log(`🙏 Vân Du: Kỳ Ngộ, chọn nút xanh lá "${green}"`);
+          this.vanduLog(`🙏 Vân Du: Kỳ Ngộ, chọn nút xanh lá "${green}"`);
         } else if (btnNorm.some(x => x.includes('dang huong'))) {
           const dh = await this.vanduClickButton('Dâng hương');
           if (dh) {
-            this.log('🙏 Vân Du: Kỳ Ngộ, không thấy nút xanh lá, bấm Dâng hương');
+            this.vanduLog('🙏 Vân Du: Kỳ Ngộ, không thấy nút xanh lá, bấm Dâng hương');
           } else if (this.vanduLastKyNgoFailMsgId !== screen.msgId) {
             this.vanduLastKyNgoFailMsgId = screen.msgId;
-            this.log('⚠️ Vân Du: Kỳ Ngộ, không bấm được nút xanh/Dâng hương trên màn này, chờ màn mới (không bấm bừa)');
+            this.vanduLog('⚠️ Vân Du: Kỳ Ngộ, không bấm được nút xanh/Dâng hương trên màn này, chờ màn mới (không bấm bừa)');
           }
         } else if (this.vanduLastKyNgoFailMsgId !== screen.msgId) {
           this.vanduLastKyNgoFailMsgId = screen.msgId;
-          this.log('⚠️ Vân Du: Kỳ Ngộ, không thấy nút xanh/Dâng hương trên màn này, chờ màn mới (không bấm bừa)');
+          this.vanduLog('⚠️ Vân Du: Kỳ Ngộ, không thấy nút xanh/Dâng hương trên màn này, chờ màn mới (không bấm bừa)');
         }
         await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
         continue;
@@ -6465,7 +6477,7 @@ class NpcBot {
       // qua nút này, không reset như khi thua boss.
       if (btnNorm.some(x => x.includes('bo qua di tiep an toan'))) {
         await this.vanduClickButton('Bỏ qua đi tiếp an toàn');
-        this.log('🎰 Vân Du: Kỳ Duyên Môn (Cửa Vàng), bỏ qua đi tiếp an toàn, không cược tất tay');
+        this.vanduLog('🎰 Vân Du: Kỳ Duyên Môn (Cửa Vàng), bỏ qua đi tiếp an toàn, không cược tất tay');
         await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
         continue;
       }
@@ -6475,13 +6487,13 @@ class NpcBot {
       // Vận Năng Linh Thước thì mới mở an toàn bằng Linh Thước.
       if (btnNorm.some(x => x.includes('pha phong an'))) {
         await this.vanduClickButton('Phá Phong Ấn');
-        this.log('📦 Vân Du: Cổ Thạch Hòm, chọn Phá Phong Ấn');
+        this.vanduLog('📦 Vân Du: Cổ Thạch Hòm, chọn Phá Phong Ấn');
         await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
         continue;
       }
       if (btnNorm.some(x => x.includes('van nang linh thuoc')) && /cổ thạch hòm|co thach hom|hòm/i.test(text)) {
         await this.vanduClickButton('Vận Năng Linh Thước');
-        this.log('📦 Vân Du: Cổ Thạch Hòm, mở bằng Vận Năng Linh Thước');
+        this.vanduLog('📦 Vân Du: Cổ Thạch Hòm, mở bằng Vận Năng Linh Thước');
         await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
         continue;
       }
@@ -6495,7 +6507,7 @@ class NpcBot {
         const doorBtn = door ? buttons.find(x => this.vanduNormalize(x).includes(this.vanduNormalize('Cửa ' + door))) : null;
         if (doorBtn) {
           await this.vanduClickButton(doorBtn);
-          this.log(`🧩 Vân Du: đố Bát Quái, thơ hành ${element} -> ${doorBtn}`);
+          this.vanduLog(`🧩 Vân Du: đố Bát Quái, thơ hành ${element} -> ${doorBtn}`);
         } else {
           // V36 (anh chốt 2026-11-06, log 22:33:14): câu đố chưa đọc
           // được đáp án thì chọn NGẪU NHIÊN 1 cửa thay vì dừng — đáp
@@ -6505,9 +6517,9 @@ class NpcBot {
           if (doorBtns.length > 0) {
             const randomBtn = doorBtns[Math.floor(Math.random() * doorBtns.length)];
             await this.vanduClickButton(randomBtn);
-            this.log(`🎲 Vân Du: đố Bát Quái, không đoán được hành/cửa từ thơ (hành: ${element || '?'}) — chọn ngẫu nhiên "${randomBtn}" thay vì dừng`);
+            this.vanduLog(`🎲 Vân Du: đố Bát Quái, không đoán được hành/cửa từ thơ (hành: ${element || '?'}) — chọn ngẫu nhiên "${randomBtn}" thay vì dừng`);
           } else {
-            this.log(`⛔ Vân Du: đố Bát Quái, không đoán được hành/cửa từ thơ (hành: ${element || '?'}) và không thấy nút cửa nào, dừng để tránh mở sai cửa.`);
+            this.vanduLog(`⛔ Vân Du: đố Bát Quái, không đoán được hành/cửa từ thơ (hành: ${element || '?'}) và không thấy nút cửa nào, dừng để tránh mở sai cửa.`);
             break;
           }
         }
@@ -6536,23 +6548,23 @@ class NpcBot {
           if (clicked) {
             this.vanduDanCount++;
             shopBought = true;
-            this.log(`🛒 Vân Du: mua Cửu Chuyển Hoàn Hồn Đan (${this.vanduDanCount}/3)`);
+            this.vanduLog(`🛒 Vân Du: mua Cửu Chuyển Hoàn Hồn Đan (${this.vanduDanCount}/3)`);
           } else if (this.vanduLastShopFailMsgId !== screen.msgId) {
             this.vanduLastShopFailMsgId = screen.msgId;
-            this.log('⚠️ Vân Du: shop, không bấm được nút Mua Cửu Chuyển trên màn này, chờ màn mới (không bấm bừa)');
+            this.vanduLog('⚠️ Vân Du: shop, không bấm được nút Mua Cửu Chuyển trên màn này, chờ màn mới (không bấm bừa)');
           }
         } else if (action === 'bi-tich') {
           const clicked = await this.vanduClickButton('Bí Tịch Thượng Cổ');
           if (clicked) {
             shopBiTich = true;
-            this.log('📜 Vân Du: đủ 3 Cửu Chuyển, bấm Bí Tịch Thượng Cổ rồi chơi tiếp theo mạch');
+            this.vanduLog('📜 Vân Du: đủ 3 Cửu Chuyển, bấm Bí Tịch Thượng Cổ rồi chơi tiếp theo mạch');
           } else if (this.vanduLastShopFailMsgId !== screen.msgId) {
             this.vanduLastShopFailMsgId = screen.msgId;
-            this.log('⚠️ Vân Du: shop, không bấm được nút Bí Tịch Thượng Cổ trên màn này, chờ màn mới (không bấm bừa)');
+            this.vanduLog('⚠️ Vân Du: shop, không bấm được nút Bí Tịch Thượng Cổ trên màn này, chờ màn mới (không bấm bừa)');
           }
         } else {
           await this.vanduClickButton('Rời đi tiếp tục hành trình');
-          this.log('🚪 Vân Du: rời shop, tiếp tục hành trình');
+          this.vanduLog('🚪 Vân Du: rời shop, tiếp tục hành trình');
         }
         await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
         continue;
@@ -6597,7 +6609,7 @@ class NpcBot {
             // V33: chỉ xảy ra khi sổ bot ghi max hết mà bảng vẫn hiện lá
             // (game không hiện lá max, nên đây là sổ lệch) — chờ màn mới
             // thay vì bấm bừa.
-            this.log('⛔ Vân Du: bảng buff không còn lá chọn được (sổ bot ghi max hết, game không hiện lá max — có thể đếm lệch), chờ màn mới');
+            this.vanduLog('⛔ Vân Du: bảng buff không còn lá chọn được (sổ bot ghi max hết, game không hiện lá max — có thể đếm lệch), chờ màn mới');
             break;
           }
           if (choice.action === 'reroll') {
@@ -6609,19 +6621,19 @@ class NpcBot {
               const s = (cardSects && cardSects[i]) || c.sect || '?';
               return `${c.name || b}(${s}:${r})`;
             }).join(', ');
-            this.log(`🔄 Vân Du: Đổi Vận, bảng đang có: ${desc}`);
+            this.vanduLog(`🔄 Vân Du: Đổi Vận, bảng đang có: ${desc}`);
             const clicked = await this.vanduClickButton(doiVanBtn);
             if (!clicked) {
               // V14: bấm Đổi không được (nút tắt/hết lượt) thì chọn buff
               // còn lại ngay trong vòng này, không thoát ra để vòng ngoài
               // quét lại màn cũ với rerolls reset về 0 rồi đứng im.
-              this.log('⛔ Vân Du: bấm Đổi Vận không được, chuyển sang chọn buff còn lại');
+              this.vanduLog('⛔ Vân Du: bấm Đổi Vận không được, chuyển sang chọn buff còn lại');
               rerollBlocked = true;
               continue;
             }
             rerolls++;
-            if (remaining !== null) this.log(`🔄 Vân Du: Đổi Vận (bảng báo còn ${remaining} lượt trước khi bấm)`);
-            else this.log(`🔄 Vân Du: Đổi Vận lần ${rerolls} (không đọc được số lượt, tối đa 4)`);
+            if (remaining !== null) this.vanduLog(`🔄 Vân Du: Đổi Vận (bảng báo còn ${remaining} lượt trước khi bấm)`);
+            else this.vanduLog(`🔄 Vân Du: Đổi Vận lần ${rerolls} (không đọc được số lượt, tối đa 4)`);
             await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
             continue;
           }
@@ -6643,7 +6655,7 @@ class NpcBot {
             if (isNewBuff && card.sect) this.vanduSectCounts[card.sect] = (this.vanduSectCounts[card.sect] || 0) + 1;
             if (isNewBuff && choice.reason === 'counter') this.vanduCounterPicks = (this.vanduCounterPicks || 0) + 1;
             const reasonTag = choice.reason ? ` [${choice.reason}]` : '';
-            this.log(`✨ Vân Du: chọn buff "${clicked}"${reasonTag}`);
+            this.vanduLog(`✨ Vân Du: chọn buff "${clicked}"${reasonTag}`);
             picked = true;
           } else {
             break;
@@ -6676,7 +6688,7 @@ class NpcBot {
           shopKey = '';
           shopBought = false;
           shopBiTich = false;
-          this.log('🚪 Vân Du: đã rời shop (thấy màn cửa), reset cờ mua shop cho lần vào sau');
+          this.vanduLog('🚪 Vân Du: đã rời shop (thấy màn cửa), reset cờ mua shop cho lần vào sau');
         }
         const circuitBefore = this.vanduCircuit;
         const chosen = this.vanduChooseDoor(doorButtons, circuitBefore);
@@ -6698,7 +6710,7 @@ class NpcBot {
           if (circuitBefore && circuitBefore.last && prevClick && circuitKey &&
               this.vanduSameCircuitClick(prevClick, screen.msgId, circuitKey, chosenDoor, chosenElement) &&
               prevClick.count >= 3) {
-            this.log(`⛔ Vân Du: đã bấm ${chosen} ${prevClick.count} lần mà màn không đổi (mạch ${circuitBefore.type} vẫn ${circuitBefore.last}), dừng để anh bấm tay rồi bấm START lại`);
+            this.vanduLog(`⛔ Vân Du: đã bấm ${chosen} ${prevClick.count} lần mà màn không đổi (mạch ${circuitBefore.type} vẫn ${circuitBefore.last}), dừng để anh bấm tay rồi bấm START lại`);
             break;
           }
           const clicked = await this.vanduClickButton(chosen);
@@ -6719,12 +6731,12 @@ class NpcBot {
                 element: advanced.last,
                 count: (prev && this.vanduSameCircuitClick(prev, screen.msgId, circuitKey, chosenDoor, advanced.last)) ? prev.count + 1 : 1,
               };
-              this.log(`🚪 Vân Du: chọn cửa "${chosen}" — mạch ${circuitBefore.type} tiến ${circuitBefore.last} -> ${advanced.last}, bước tiếp là ${this.vanduNextElement(advanced.type, advanced.last)}`);
+              this.vanduLog(`🚪 Vân Du: chọn cửa "${chosen}" — mạch ${circuitBefore.type} tiến ${circuitBefore.last} -> ${advanced.last}, bước tiếp là ${this.vanduNextElement(advanced.type, advanced.last)}`);
             } else {
-              this.log(`🚪 Vân Du: chọn cửa "${chosen}"${circuitBefore ? ` (mạch ${circuitBefore.type}, sau ${circuitBefore.last || '?'})` : ''}`);
+              this.vanduLog(`🚪 Vân Du: chọn cửa "${chosen}"${circuitBefore ? ` (mạch ${circuitBefore.type}, sau ${circuitBefore.last || '?'})` : ''}`);
             }
           } else {
-            this.log(`🚪 Vân Du: chọn cửa "${chosen}"${circuitBefore ? ` (mạch ${circuitBefore.type}, sau ${circuitBefore.last || '?'})` : ''}`);
+            this.vanduLog(`🚪 Vân Du: chọn cửa "${chosen}"${circuitBefore ? ` (mạch ${circuitBefore.type}, sau ${circuitBefore.last || '?'})` : ''}`);
           }
         } else if (circuitBefore) {
           // V38 (anh báo 2026-11-06, log 08:51:50): kẹt "mạch sinh cần
@@ -6742,20 +6754,20 @@ class NpcBot {
             const fallback = this.vanduChooseDoor(doorButtons, null);
             if (fallback) {
               await this.vanduClickButton(fallback);
-              this.log(`🔄 Vân Du: màn cửa không nhắc tới mạch (chưa vô mạch) — xóa mạch ${circuitBefore.type} cũ, chọn cửa "${fallback}" theo thứ tự ưu tiên`);
+              this.vanduLog(`🔄 Vân Du: màn cửa không nhắc tới mạch (chưa vô mạch) — xóa mạch ${circuitBefore.type} cũ, chọn cửa "${fallback}" theo thứ tự ưu tiên`);
             } else {
-              this.log(`⛔ Vân Du: màn cửa không nhắc tới mạch mà cũng không chọn được cửa nào, dừng để tránh bấm sai`);
+              this.vanduLog(`⛔ Vân Du: màn cửa không nhắc tới mạch mà cũng không chọn được cửa nào, dừng để tránh bấm sai`);
               break;
             }
           } else if (need) {
             // V11: đang có mạch mà không có cửa đúng thì không bấm, còn
             // hơn bấm sai mạch. Log rõ cần hành nào để anh kiểm tra màn.
-            this.log(`⛔ Vân Du: mạch ${circuitBefore.type} cần ${need} nhưng không có cửa ${need} trong [${doorButtons.join(', ')}], không bấm để tránh sai mạch`);
+            this.vanduLog(`⛔ Vân Du: mạch ${circuitBefore.type} cần ${need} nhưng không có cửa ${need} trong [${doorButtons.join(', ')}], không bấm để tránh sai mạch`);
           } else {
-            this.log(`⛔ Vân Du: mạch ${circuitBefore.type} chưa biết hành hiện tại, không đoán cửa`);
+            this.vanduLog(`⛔ Vân Du: mạch ${circuitBefore.type} chưa biết hành hiện tại, không đoán cửa`);
           }
         } else {
-          this.log('⚠️ Vân Du: chỉ thấy cửa Tử Môn, không chọn theo luật (chờ màn hình mới)');
+          this.vanduLog('⚠️ Vân Du: chỉ thấy cửa Tử Môn, không chọn theo luật (chờ màn hình mới)');
         }
         await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
         continue;
@@ -6764,13 +6776,13 @@ class NpcBot {
       // Tiết điểm phụ v1: chỉ Rời đi, không bấm gamble.
       if (btnNorm.some(b => b.includes('roi di'))) {
         await this.vanduClickButton('Rời đi');
-        this.log('🚪 Vân Du: tiết điểm phụ, bấm Rời đi (v1, không gamble)');
+        this.vanduLog('🚪 Vân Du: tiết điểm phụ, bấm Rời đi (v1, không gamble)');
         await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
         continue;
       }
 
       const unrec = buttons.join(' | ').slice(0, 200);
-      if (unrec !== lastUnrecognized) { lastUnrecognized = unrec; this.log(`⚠️ Vân Du: màn hình chưa nhận diện, nút: ${unrec} | chuẩn hoá: ${btnNorm.join(' | ').slice(0, 200)}`); }
+      if (unrec !== lastUnrecognized) { lastUnrecognized = unrec; this.vanduLog(`⚠️ Vân Du: màn hình chưa nhận diện, nút: ${unrec} | chuẩn hoá: ${btnNorm.join(' | ').slice(0, 200)}`); }
       await this.delay(2500);
     }
 
