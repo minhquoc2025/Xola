@@ -635,6 +635,10 @@ async function updateStats() {
     } else {
       document.getElementById('stat-total').textContent = `${battleCount} trận`;
     }
+    // V71: thẻ trạng thái Neon (tiến trình / HP / đan) — dữ liệu đã có sẵn
+    // trong status (vanduNode, vanduDanCount, vanduHpPct, vanduDanEmptyNode).
+    updateStatusRow(status);
+
     document.getElementById('stat-wins').textContent = formatNumber(wins);
     document.getElementById('stat-losses').textContent = formatNumber(losses);
     document.getElementById('stat-coins').textContent = formatNumber(s.coins || 0);
@@ -672,6 +676,107 @@ async function updateStats() {
   }
 }
 
+// V71: cập nhật 3 thẻ trạng thái Neon (tiến trình / HP / đan).
+// Vân Du có đủ dữ liệu (vanduNode, vanduHpPct, vanduDanCount); mode khác
+// chỉ hiện tiến trình riêng của nó, HP/đan hiện "—".
+function updateStatusRow(status) {
+  const el = (id) => document.getElementById(id);
+  const progressValue = el('status-progress-value');
+  const progressFill = el('status-progress-fill');
+  const progressSub = el('status-progress-sub');
+  const progressLabel = el('status-progress-label');
+  if (!progressValue || !progressFill || !progressSub) return;
+  const hpValue = el('status-hp-value');
+  const hpFill = el('status-hp-fill');
+  const hpSub = el('status-hp-sub');
+  const danValue = el('status-dan-value');
+  const danSub = el('status-dan-sub');
+  const markers = [12, 24, 36].map((n) => el('boss-marker-' + n));
+  const showMarkers = (on) => markers.forEach((m) => { if (m) m.style.display = on ? '' : 'none'; });
+  const running = status.isRunning ? true : false;
+  const dot = running
+    ? '<span class="status-dot on"></span>ĐANG CHẠY'
+    : '<span class="status-dot off"></span>ĐÃ DỪNG';
+
+  const setHp = (hpPct, thresholdText) => {
+    if (!hpValue || !hpFill || !hpSub) return;
+    if (hpPct === null || hpPct === undefined) {
+      hpValue.textContent = '—';
+      hpFill.style.width = '0%';
+      hpFill.className = 'hp-fill high';
+      hpSub.innerHTML = dot + ' · ' + thresholdText;
+      return;
+    }
+    const hp = Math.max(0, Math.min(100, hpPct));
+    hpValue.textContent = hp + '%';
+    hpFill.style.width = hp + '%';
+    hpFill.className = 'hp-fill ' + (hp >= 50 ? 'high' : hp >= 25 ? 'mid' : 'low');
+    hpSub.innerHTML = dot + ' · ' + thresholdText;
+  };
+  const setDan = (dan, emptyNode, nextBoss) => {
+    if (!danValue || !danSub) return;
+    if (dan === null || dan === undefined) {
+      danValue.textContent = '—';
+      danValue.style.color = '';
+      danSub.textContent = '—';
+      danSub.className = 'status-sub';
+      return;
+    }
+    danValue.textContent = dan + '/3';
+    danValue.style.color = dan === 0 ? '#ff2d78' : '#39ff14';
+    if (dan === 0) {
+      const from = emptyNode ? ' từ Tiết ' + emptyNode : '';
+      const boss = nextBoss ? ' trước Boss ' + nextBoss : '';
+      danSub.textContent = '⚠ HẾT ĐAN' + from + ' — không còn hồi phục' + boss;
+      danSub.className = 'status-sub warn';
+    } else {
+      danSub.textContent = 'Còn ' + dan + '/3 — sẵn sàng hồi phục';
+      danSub.className = 'status-sub ok';
+    }
+  };
+
+  if (status.mode === 'vandu') {
+    const node = status.vanduNode || 0;
+    const trips = status.vanduTripCount || 0;
+    const limit = status.vanduTotalTrips || 0;
+    const pct = Math.max(0, Math.min(100, (node / 36) * 100));
+    if (progressLabel) progressLabel.textContent = limit > 0 ? 'Tiến trình chuyến ' + trips + '/' + limit : 'Tiến trình chuyến';
+    progressValue.innerHTML = 'Tiết ' + node + ' / 36' + (limit > 0 ? ' <span class="dim">· Chuyến ' + trips + '/' + limit + '</span>' : '');
+    progressFill.style.width = pct + '%';
+    showMarkers(true);
+    markers.forEach((m, i) => { if (m) m.classList.toggle('done', node >= [12, 24, 36][i]); });
+    const nextBoss = [12, 24, 36].find((b) => b > node);
+    progressSub.textContent = nextBoss
+      ? 'Boss tiếp theo: ' + nextBoss + ' (còn ' + (nextBoss - node) + ' Tiết)'
+      : 'Đã qua Boss 36 — chờ Hoàn Tất Nhận Thưởng';
+    const inBossZone = node === 11 || node === 23 || node === 35 || node === 12 || node === 24 || node === 36;
+    setHp(status.vanduHpPct, inBossZone ? 'Ngưỡng hồi: <50% (boss)' : 'Ngưỡng hồi: <20% (thường)');
+    setDan(status.vanduDanCount || 0, status.vanduDanEmptyNode, nextBoss);
+  } else if (status.mode === 'luanhoi') {
+    const cur = status.lastLuanhoiTarget != null ? status.lastLuanhoiTarget : 0;
+    const tgt = status.luanhoiTarget || 0;
+    const totalRuns = status.luanhoiTotalRuns || 0;
+    const runs = status.luanhoiRunCount || 0;
+    if (progressLabel) progressLabel.textContent = 'Tiến trình Luân Hồi';
+    progressValue.textContent = 'Tầng ' + cur + ' / ' + tgt;
+    progressFill.style.width = (tgt > 0 ? Math.max(0, Math.min(100, (cur / tgt) * 100)) : 0) + '%';
+    showMarkers(false);
+    progressSub.textContent = totalRuns > 0 ? 'Đã đi: ' + runs + ' / ' + totalRuns + ' lần' : 'Mục tiêu: Tầng ' + tgt;
+    setHp(null, 'Không theo dõi HP ở Luân Hồi');
+    setDan(null);
+  } else {
+    if (progressLabel) progressLabel.textContent = 'Trạng thái';
+    progressValue.textContent = running ? 'Đang chạy' : 'Đã dừng';
+    progressFill.style.width = '0%';
+    showMarkers(false);
+    progressSub.textContent = status.mode === 'dianguc'
+      ? 'Tầng ' + (status.diangucFloor || 0) + ', bước ' + (status.diangucStep || 0)
+      : status.mode === 'bicanh' ? 'Đang spam skill...' : '';
+    setHp(null, 'Không theo dõi HP ở mode này');
+    setDan(null);
+  }
+}
+
 async function resetStats() {
   await window.api.botResetStats(0);
   updateStats();
@@ -687,10 +792,21 @@ function loadLogs() {
   });
 }
 
+// V71: tô màu log theo loại (như mockup Neon) — phân loại theo từ khóa.
+// BOSS check trước: dòng "BOSS 24 Tới mốc..." có chứa chữ "kẹt" nên phải
+// nhận diện boss trước, không thì nó rơi vào nhóm cảnh báo đỏ.
+function logClass(msg) {
+  if (/BOSS \d+/.test(msg)) return 'log-boss';
+  if (/CẢNH BÁO|⛔|HẾT ĐAN|không hồi|kẹt/i.test(msg)) return 'log-warn';
+  if (/THẮNG|✅|hồi máu bằng|🏁|Hoàn Tất/i.test(msg)) return 'log-win';
+  if (/vào trận|⚔️|đánh|skill/i.test(msg)) return 'log-battle';
+  return 'log-info';
+}
+
 function appendLog(msg) {
   const logArea = document.getElementById('log-area');
   const entry = document.createElement('div');
-  entry.className = 'log-entry';
+  entry.className = 'log-entry ' + logClass(msg);
   entry.textContent = msg;
   logArea.appendChild(entry);
   logArea.scrollTop = logArea.scrollHeight;
@@ -715,8 +831,8 @@ function copyLogs() {
 
   navigator.clipboard.writeText(text).then(() => {
     btn.textContent = '✅ Đã copy!';
-    btn.style.background = '#1a5a2e';
-    btn.style.borderColor = '#2a7a3e';
+    btn.style.background = '#00c853';
+    btn.style.borderColor = '#39ff14';
     setTimeout(() => {
       btn.textContent = '📋 Copy Log';
       btn.style.background = '';
@@ -724,8 +840,8 @@ function copyLogs() {
     }, 2000);
   }).catch(() => {
     btn.textContent = '❌ Lỗi copy';
-    btn.style.background = '#5a1a1a';
-    btn.style.borderColor = '#7a2a2a';
+    btn.style.background = '#ff1c1c';
+    btn.style.borderColor = '#ff2d78';
     setTimeout(() => {
       btn.textContent = '📋 Copy Log';
       btn.style.background = '';

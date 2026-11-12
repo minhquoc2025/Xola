@@ -97,6 +97,8 @@ class NpcBot {
     this.vanduNode = 0;
     this.vanduLastBuffNode = 0; // V69: Tiết lúc chọn buff gần nhất (xem vanduIsBossByFlow)
     this.vanduDanCount = 0;
+    this.vanduHpPct = null; // V71: % HP người chơi đọc gần nhất (thẻ HP Neon)
+    this.vanduDanEmptyNode = null; // V71: Tiết lúc đan về 0 (thẻ Đan: "HẾT ĐAN từ Tiết X")
     this.vanduCircuit = null;
     // V22: msgId của màn cuối cùng đã dùng để đặt/gộp mạch, để phân biệt
     // màn mới (tin tiến độ game) với màn cũ quét lại (giữ mạch dài hơn).
@@ -826,6 +828,8 @@ class NpcBot {
       tuLuyenActive: this._tuLuyenActive,
       vanduNode: this.vanduNode,
       vanduDanCount: this.vanduDanCount,
+      vanduHpPct: this.vanduHpPct, // V71: thẻ HP Neon
+      vanduDanEmptyNode: this.vanduDanEmptyNode, // V71: thẻ Đan Neon
       vanduTripCount: this.vanduTripCount,
       vanduTotalTrips: this.vanduTotalTrips,
       vanduCircuit: this.vanduCircuit,
@@ -6160,6 +6164,7 @@ class NpcBot {
       // Giới hạn là số đan đang có (tối đa 3, đồng bộ theo nút ở trên);
       // hết đan thì không còn nút để bấm nên tự dừng.
       const hp = this.vanduPlayerHpPct(screen.text);
+      if (hp !== null) this.vanduHpPct = hp; // V71: thẻ HP Neon đọc từ đây
       const itemBtns = screen.buttons.filter(b => {
         const n = this.vanduNormalize(b);
         return n.includes('cuu chuyen hoan hon') && !n.includes('mua');
@@ -6171,6 +6176,10 @@ class NpcBot {
       // dù đã xài hết; giờ xài xong số đan tụt, shop sau mua tiếp.
       if (itemBtns.length !== this.vanduDanCount) {
         this.vanduDanCount = itemBtns.length;
+        // V71: ghi lại Tiết lúc đan về 0 để thẻ Đan hiện "HẾT ĐAN từ Tiết X";
+        // mua thêm đan thì xóa mốc.
+        if (itemBtns.length === 0) this.vanduDanEmptyNode = this.vanduNode;
+        else this.vanduDanEmptyNode = null;
         this.vanduLog(`💊 Vân Du: đồng bộ Đan ${this.vanduDanCount}/3 (theo nút trên màn battle)`);
       }
       // V68: boss thì ngưỡng 50% kể cả khi số Tiết đọc được còn lag
@@ -6249,6 +6258,8 @@ class NpcBot {
     this.vanduNode = 0;
     this.vanduLastBuffNode = 0; // V69: reset theo chuyến như vanduNode
     this.vanduDanCount = 0;
+    this.vanduHpPct = null; // V71: reset theo chuyến như vanduNode
+    this.vanduDanEmptyNode = null; // V71: reset theo chuyến như vanduNode
     this.vanduCircuit = null;
     // V22: reset luôn msgId mạch theo chuyến, để màn đầu chuyến nào cũng
     // được tính là mới (không so với msgId chuyến trước).
@@ -6325,6 +6336,8 @@ class NpcBot {
           this.vanduNode = 0;
           this.vanduLastBuffNode = 0; // V69: reset theo chuyến như vanduNode
           this.vanduDanCount = 0;
+          this.vanduHpPct = null; // V71: reset theo chuyến như vanduNode
+          this.vanduDanEmptyNode = null; // V71: reset theo chuyến như vanduNode
           this.vanduCircuit = null;
           this.vanduCircuitMsgId = null;
           this.vanduLastCircuitClick = null; // V54: đếm bấm cửa mạch là theo màn, chuyến mới thì đếm lại từ đầu (trước đây sót, đếm chuyến trước lọt sang chuyến sau)

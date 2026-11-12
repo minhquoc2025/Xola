@@ -7,538 +7,800 @@
         content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
   <title>Discord NPC Auto</title>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    body {
-      font: 13px/1.4 'Segoe UI', sans-serif;
-      background: #1a1a2e;
-      color: #eee;
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-      overflow: hidden;
-    }
-
-    #bar {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 0 10px;
-      background: #16213e;
-      border-bottom: 1px solid #0f3460;
-      height: 40px;
-      flex-shrink: 0;
-    }
-
-    #bar h1 {
-      font-size: 14px;
-      color: #e94560;
-      white-space: nowrap;
-    }
-
-    #btn-mute {
-      margin-left: auto;
-      background: #2a2a4a;
-      color: #eee;
-      border: 1px solid #3a3a5a;
-      border-radius: 4px;
-      padding: 4px 10px;
-      cursor: pointer;
-      font-size: 12px;
-    }
-
-    #btn-mute:hover {
-      background: #3a3a5a;
-    }
-
-    #btn-mute.muted {
-      background: #5a1a1a;
-      border-color: #7a2a2a;
-    }
-
-    #content {
-      flex: 1;
-      min-height: 0;
-      position: relative;
-      background: #0a0a1a;
-    }
-
-    #content webview {
-      width: 100%;
-      height: 100%;
-      border: none;
-    }
-
-    #content webview.wv-hidden {
-      display: none;
-    }
-
-    /* Panel dưới co giãn theo cửa sổ, không cố định 240px nữa:
-       màn nhỏ (14"/15.6"/16" scale 125-150%) thì panel cao tối đa
-       44% chiều cao cửa sổ và tự cuộn, không cắt nội dung. */
-    #control-panel {
-      flex: 0 0 auto;
-      min-height: 260px;
-      max-height: 44vh;
-      overflow-y: auto;
-      flex-shrink: 0;
-      background: #0d1b2e;
-      border-top: 1px solid #1a3a5e;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      padding: 6px;
-    }
-
-    .panel-section {
-      display: flex;
-      flex-direction: column;
-    }
-
-    .panel-section h3 {
-      font-size: 11px;
-      color: #556688;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      margin-bottom: 6px;
-    }
-
-    /* === NPC Panel === */
-    #npc-panel {
-      flex: 1 1 280px;
-      min-width: 260px;
-      border: 1px solid #1a2a4e;
-      border-radius: 6px;
-      padding: 8px;
-      display: flex;
-      flex-direction: column;
-      min-height: 0;
-      overflow-y: auto;
-    }
-
-    /* === Tabs cho panel điều khiển ===
-       Gốc lỗi khuất mode: 7 nút 1 hàng, mỗi nút white-space:nowrap
-       nên tổng bề rộng tối thiểu ~400px, trong khi panel chỉ ~280px
-       ở cửa sổ 1200px (còn hẹp hơn khi màn 16" scale 125-150%).
-       Cho tabs xuống 2 hàng (4 nút/hàng), nút ⚙️ giữ 1 ô nhỏ ở
-       hàng 2, chữ dài quá thì cắt "..." chứ không đẩy nút khác ra ngoài. */
-    #mode-tabs {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 4px;
-      margin-bottom: 8px;
-      flex-shrink: 0;
-    }
-
-    #mode-tabs button {
-      flex: 1 1 calc(25% - 4px);
-      min-width: 0;
-      padding: 5px 4px;
-      background: #0a1628;
-      color: #aaa;
-      border: 1px solid #1a2a4e;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 10px;
-      font-weight: 600;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    #btn-config-modal {
-      flex: 0 0 40px !important;
-    }
-
-    #mode-tabs button.active {
-      background: #16213e;
-      color: #e94560;
-      border-color: #e94560;
-    }
-
-    .mode-config {
-      display: none;
-    }
-
-    .mode-config.active {
-      display: flex;
-    }
-
-    .config-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 3px;
-      flex: 1;
-      align-content: start;
-    }
-
-    .config-field.full {
-      grid-column: 1 / -1;
-    }
-
-    .config-field label {
-      display: block;
-      font-size: 9px;
-      color: #888;
-      margin-bottom: 1px;
-    }
-
-    .config-field input {
-      width: 100%;
-      padding: 3px 5px;
-      background: #0a0a1a;
-      border: 1px solid #1a1a4e;
-      border-radius: 3px;
-      color: #eee;
-      font-size: 11px;
-      outline: none;
-    }
-
-    .config-field input:focus {
-      border-color: #e94560;
-    }
-
-    .btn-start {
-      background: #1a5a2e;
-      color: #fff;
-      margin-top: 4px;
-    }
-
-    .btn-start:hover {
-      background: #2a7a3e;
-    }
-
-    .btn-stop {
-      background: #5a1a1a;
-      color: #fff;
-      margin-top: 4px;
-    }
-
-    .btn-stop:hover {
-      background: #7a2a2a;
-    }
-
-    .btn-secondary {
-      background: #2a2a4a;
-      color: #aaa;
-    }
-
-    .btn-secondary:hover {
-      background: #3a3a5a;
-    }
-
-    /* === Skill Modal === */
-    .skill-item {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 4px 8px;
-      margin: 2px 0;
-      background: #0a1628;
-      border: 1px solid #1a2a4e;
-      border-radius: 4px;
-      font-size: 11px;
-      color: #ccc;
-      cursor: default;
-    }
-
-    .skill-item .stt {
-      background: #e94560;
-      color: #fff;
-      width: 22px;
-      height: 22px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 10px;
-      font-weight: 700;
-      flex-shrink: 0;
-    }
-
-    .skill-item .skill-name {
-      flex: 1;
-    }
-
-    .skill-item .skill-cat {
-      font-size: 9px;
-      color: #556688;
-      background: #1a2a4e;
-      padding: 1px 5px;
-      border-radius: 3px;
-    }
-
-    /* === Stats Panel === */
-    /* V56 (anh 2026-11-10): v55 chưa đủ — đo thực tế (7 món -> 30 món):
-       #items-list cao 133 -> 570px mà KHÔNG cuộn trong (scrollHeight =
-       clientHeight), #stats-panel phình 290 -> 727px, #control-panel chạm
-       trần 44vh rồi cuộn CẢ panel (controlScrollH 740px), màn Discord bị
-       ép từ 654 -> 519px. Gốc lỗi: min-height: 0 của v55 chỉ có tác dụng
-       khi chuỗi flex có chiều cao xác định để co lại, mà #stats-panel cao
-       theo nội dung (flex line lấy theo item cao nhất) nên không có điểm
-       neo nào cả. Thêm max-height: 300px làm điểm neo — bằng chiều cao tự
-       nhiên của #npc-panel (~290px) nên panel không bao giờ cao hơn hàng
-       của nó; khi nội dung dài hơn, panel dừng ở 300px và chuỗi min-height: 0
-       bên dưới mới có cái để co lại, 2 body cuộn trong. */
-    #stats-panel {
-      flex: 2 1 420px;
-      min-width: 320px;
-      border: 1px solid #1a2a4e;
-      border-radius: 6px;
-      padding: 8px;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      overflow-y: auto;
-      min-height: 0;
-      max-height: 300px;
-    }
-
-    .stats-top {
-      display: grid;
-      grid-template-columns: repeat(6, 1fr);
-      gap: 4px;
-    }
-
-    .stat-box {
-      background: #0a1628;
-      border: 1px solid #1a2a4e;
-      border-radius: 6px;
-      padding: 6px 4px;
-      text-align: center;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 2px;
-    }
-
-    .stat-box-icon {
-      font-size: 10px;
-    }
-
-    .stat-box-label {
-      font-size: 9px;
-      color: #888;
-    }
-
-    .stat-box-value {
-      font-size: 14px;
-      font-weight: 700;
-      color: #4ecca3;
-    }
-
-    .stat-box-value.target {
-      color: #ccc;
-    }
-
-    .stat-box-value.win {
-      color: #5ae05a;
-    }
-
-    .stat-box-value.loss {
-      color: #e94560;
-    }
-
-    .stat-box-value.coin {
-      color: #ffd700;
-    }
-
-    .stat-box-value.exp {
-      color: #87ceeb;
-    }
-
-    .stat-box-value.item {
-      color: #c084fc;
-    }
-
-    /* V56: hàng grid lấy theo chiều cao của khung (1fr) chứ không theo nội
-       dung — không có dòng này thì hàng auto sẽ phình theo danh sách món
-       dài nhất, 2 section không co lại được và body không cuộn trong. */
-    .stats-bottom {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      grid-template-rows: minmax(0, 1fr);
-      gap: 6px;
-      flex: 1;
-      min-height: 0;
-    }
-
-    .stats-section {
-      background: #0a1628;
-      border: 1px solid #1a2a4e;
-      border-radius: 6px;
-      padding: 6px;
-      display: flex;
-      flex-direction: column;
-      min-height: 0;
-    }
-
-    .stats-section h4 {
-      font-size: 10px;
-      color: #556688;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      margin-bottom: 4px;
-      padding-bottom: 3px;
-      border-bottom: 1px solid #1a2a4e;
-    }
-
-    /* V55 (anh 2026-11-10): vật phẩm rơi nhiều thì #items-list phải cuộn
-       bên trong, không đẩy panel lên. Cùng gốc lỗi v37: .stats-section-body
-       là flex item (của .stats-section, flex column) mà không có
-       min-height: 0 nên không co lại dưới cỡ nội dung được — mỗi dòng
-       .item-row mới làm khung cao thêm, đẩy #stats-panel rồi cả
-       #control-panel lên, ép màn Discord phía trên. Thêm min-height: 0
-       là đủ vì chuỗi flex đã kín (stats-bottom flex:1 + min-height:0,
-       stats-panel min-height:0 + overflow auto, control-panel max 44vh).
-       Áp cho cả 2 body dùng class này (Vật Phẩm Rơi + Trận Gần Nhất). */
-    .stats-section-body {
-      flex: 1;
-      min-height: 0;
-      overflow-y: auto;
-      font-size: 11px;
-    }
-
-    .last-battle-result {
-      font-size: 12px;
-      font-weight: 700;
-      margin-bottom: 2px;
-    }
-
-    .last-battle-result.win {
-      color: #5ae05a;
-    }
-
-    .last-battle-result.loss {
-      color: #e94560;
-    }
-
-    .last-battle-npc {
-      color: #aaa;
-      font-size: 10px;
-      margin-bottom: 3px;
-    }
-
-    .last-battle-rewards {
-      color: #4ecca3;
-      font-size: 11px;
-    }
-
-    .item-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 2px 0;
-      border-bottom: 1px solid #0f1a2e;
-      font-size: 10px;
-    }
-
-    .item-name {
-      color: #ccc;
-      flex: 1;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .item-count {
-      color: #c084fc;
-      font-weight: 600;
-      margin-left: 4px;
-      white-space: nowrap;
-    }
-
-    /* === Log Panel === */
-    #log-section {
-      flex: 1 1 240px;
-      min-width: 220px;
-      display: flex;
-      flex-direction: column;
-      min-height: 0;
-    }
-
-    /* V37: khung log cố định như trước — panel cũ cao 240px thì log còn
-       ~190px, log mới cuộn bên trong, không đẩy màn hình lên. Gốc lỗi:
-       v35 bỏ chiều cao cố định của panel dưới, mà #log-area là flex item
-       không có min-height: 0 nên không co lại dưới cỡ nội dung được —
-       mỗi dòng log mới làm khung cao thêm, đẩy cả màn hình lên. */
-    #log-area {
-      flex: 1;
-      min-height: 0;
-      max-height: 200px;
-      background: #0a0a1a;
-      border: 1px solid #1a1a3e;
-      border-radius: 4px;
-      padding: 6px;
-      font: 10px/1.4 monospace;
-      color: #aaa;
-      overflow-y: auto;
-      white-space: pre-wrap;
-    }
-
-    #log-area .log-entry {
-      margin-bottom: 1px;
-    }
-
-    #log-controls {
-      display: flex;
-      gap: 4px;
-      margin-top: 4px;
-    }
-
-    #log-controls button {
-      background: #2a2a4a;
-      color: #aaa;
-      border: 1px solid #3a3a5a;
-      padding: 3px 10px;
-      border-radius: 3px;
-      cursor: pointer;
-      font-size: 10px;
-    }
-
-    #log-controls button:hover {
-      background: #3a3a5a;
-    }
-
-    /* === Responsive: 22" / 16" / 15.6" / 14" ===
-       Màn lớn giữ 3 cột như cũ. Màn hẹp: ô thống kê 6 -> 3 cột,
-       panel dưới được cuộn và các cột tự xuống hàng thay vì bị cắt. */
-    @media (max-width: 1400px) {
-      .stats-top {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-      }
-      #control-panel {
-        max-height: 46vh;
-      }
-    }
-
-    @media (max-width: 1100px) {
-      #npc-panel,
-      #stats-panel,
-      #log-section {
-        flex-basis: 100%;
-        min-width: 0;
-      }
-      #log-section {
-        min-height: 140px;
-      }
-      .stats-bottom {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    @media (max-width: 700px) {
-      .config-grid {
-        grid-template-columns: 1fr;
-      }
-      #mode-tabs button {
-        flex-basis: calc(50% - 4px);
-      }
-    }
+/* === NEON CYBER THEME (v71, 2026-11-12, theo mockup anh gửi) ===
+   Nền gần đen #050510, neon cyan #00FFFF / magenta #FF00FF / tím #7B2FFF /
+   xanh lá #39FF14, panel kính tối, viền neon phát sáng, bo tròn 12px.
+   Giữ nguyên mọi ID/class cũ để renderer.js không đổi hành vi; chỉ đổi
+   diện mạo. Cơ chế v56/v70 giữ nguyên (stats-panel neo 250px, 2 body
+   cuộn trong, chuỗi min-height: 0). */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font: 13px/1.4 'Segoe UI', sans-serif;
+  background: #050510;
+  color: #e6e6fa;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* --- Top bar --- */
+#bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  background: linear-gradient(90deg, #0a0a1f, #12082e);
+  border-bottom: 1px solid rgba(0, 255, 255, .25);
+  height: 40px;
+  flex-shrink: 0;
+  box-shadow: 0 0 18px rgba(123, 47, 255, .25);
+}
+
+#bar h1 {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  background: linear-gradient(90deg, #00ffff, #7b2fff, #ff00ff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  white-space: nowrap;
+  text-shadow: 0 0 18px rgba(0, 255, 255, .35);
+}
+
+#btn-mute {
+  margin-left: auto;
+  background: rgba(13, 13, 31, .9);
+  color: #e6e6fa;
+  border: 1px solid rgba(0, 255, 255, .35);
+  border-radius: 8px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  box-shadow: 0 0 8px rgba(0, 255, 255, .15);
+}
+
+#btn-mute:hover {
+  border-color: #00ffff;
+  box-shadow: 0 0 12px rgba(0, 255, 255, .4);
+}
+
+#btn-mute.muted {
+  background: #2a0a1e;
+  border-color: #ff2d78;
+  box-shadow: 0 0 12px rgba(255, 45, 120, .4);
+}
+
+#content {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  background: #050510;
+}
+
+#content webview {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+#content webview.wv-hidden {
+  display: none;
+}
+
+/* --- Control panel: cột (tabs / status / 3 panel) --- */
+#control-panel {
+  flex: 0 0 auto;
+  min-height: 260px;
+  max-height: 46vh;
+  overflow-y: auto;
+  flex-shrink: 0;
+  background: linear-gradient(180deg, #0a0a1f, #070714);
+  border-top: 1px solid rgba(123, 47, 255, .4);
+  box-shadow: 0 -4px 24px rgba(123, 47, 255, .2);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+}
+
+.panel-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-section h3 {
+  font-size: 11px;
+  color: #00ffff;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-bottom: 6px;
+  text-shadow: 0 0 10px rgba(0, 255, 255, .5);
+}
+
+/* --- Mode tabs: pill, full width --- */
+#mode-tabs {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+#mode-tabs button {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 8px 4px;
+  background: rgba(13, 13, 31, .9);
+  color: #8892b0;
+  border: 1px solid rgba(123, 47, 255, .3);
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: box-shadow .15s, border-color .15s, color .15s;
+}
+
+#mode-tabs button:hover {
+  color: #e6e6fa;
+  border-color: rgba(0, 255, 255, .6);
+  box-shadow: 0 0 10px rgba(0, 255, 255, .25);
+}
+
+#btn-config-modal {
+  flex: 0 0 44px !important;
+}
+
+#mode-tabs button.active {
+  background: linear-gradient(135deg, #7b2fff, #ff00ff);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 0 16px rgba(255, 0, 255, .55), 0 0 4px rgba(255, 0, 255, .8);
+}
+
+/* --- Status row: 3 thẻ (tiến trình / HP / đan) --- */
+#status-row {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.status-card {
+  background: linear-gradient(180deg, rgba(19, 19, 43, .95), rgba(10, 10, 26, .95));
+  border: 1px solid rgba(123, 47, 255, .35);
+  border-radius: 12px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  box-shadow: 0 0 12px rgba(123, 47, 255, .18), inset 0 0 18px rgba(0, 255, 255, .04);
+}
+
+.status-label {
+  font-size: 9px;
+  color: #8892b0;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  font-weight: 700;
+}
+
+.status-value {
+  font-size: 15px;
+  font-weight: 800;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status-value .dim {
+  color: #8892b0;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.status-sub {
+  font-size: 10px;
+  color: #8892b0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status-sub.warn {
+  color: #ff2d78;
+  font-weight: 700;
+}
+
+.status-sub.ok {
+  color: #39ff14;
+}
+
+.status-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: 1px;
+}
+
+.status-dot.on {
+  background: #39ff14;
+  box-shadow: 0 0 8px #39ff14;
+}
+
+.status-dot.off {
+  background: #556688;
+}
+
+/* Thanh tiến trình / HP: track tối + fill gradient phát sáng */
+.progress-track,
+.hp-track {
+  position: relative;
+  height: 8px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, .08);
+  border: 1px solid rgba(0, 255, 255, .18);
+  overflow: visible;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, #00ffff, #7b2fff, #ff00ff);
+  box-shadow: 0 0 10px rgba(0, 255, 255, .6);
+  transition: width .4s;
+}
+
+.hp-fill {
+  height: 100%;
+  border-radius: 99px;
+  transition: width .4s;
+}
+
+.hp-fill.high {
+  background: linear-gradient(90deg, #39ff14, #00ffff);
+  box-shadow: 0 0 10px rgba(57, 255, 20, .6);
+}
+
+.hp-fill.mid {
+  background: linear-gradient(90deg, #ffd700, #ff9f1c);
+  box-shadow: 0 0 10px rgba(255, 215, 0, .6);
+}
+
+.hp-fill.low {
+  background: linear-gradient(90deg, #ff2d78, #ff1c1c);
+  box-shadow: 0 0 10px rgba(255, 45, 120, .7);
+}
+
+.boss-marker {
+  position: absolute;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ffd700;
+  border: 1px solid #050510;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 8px rgba(255, 215, 0, .9);
+  pointer-events: none;
+}
+
+.boss-marker.done {
+  background: #39ff14;
+  box-shadow: 0 0 8px rgba(57, 255, 20, .9);
+}
+
+/* --- Hàng 3 panel: cân bằng chiều cao --- */
+#control-row {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+  min-height: 0;
+  align-items: stretch;
+}
+
+#control-row > .panel-section {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* === NPC Panel === */
+#npc-panel {
+  background: linear-gradient(180deg, rgba(19, 19, 43, .95), rgba(10, 10, 26, .95));
+  border: 1px solid rgba(123, 47, 255, .35);
+  border-radius: 12px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 250px;
+  overflow-y: auto;
+  box-shadow: 0 0 12px rgba(123, 47, 255, .15);
+}
+
+.mode-config {
+  display: none;
+}
+
+.mode-config.active {
+  display: flex;
+}
+
+.config-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  flex: 1;
+  align-content: start;
+}
+
+.config-field.full {
+  grid-column: 1 / -1;
+}
+
+.config-field label {
+  display: block;
+  font-size: 9px;
+  color: #8892b0;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 3px;
+  font-weight: 700;
+}
+
+.config-field input,
+.config-field select {
+  width: 100%;
+  padding: 6px 8px;
+  background: rgba(5, 5, 16, .9);
+  border: 1px solid rgba(0, 255, 255, .25);
+  border-radius: 8px;
+  color: #e6e6fa;
+  font-size: 12px;
+  outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+
+.config-field input:focus,
+.config-field select:focus {
+  border-color: #00ffff;
+  box-shadow: 0 0 10px rgba(0, 255, 255, .35);
+}
+
+.config-field select option {
+  background: #0d0d1f;
+}
+
+.btn-start,
+.btn-stop,
+.btn-secondary {
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 800;
+  letter-spacing: 1px;
+  padding: 9px 10px;
+  font-size: 12px;
+  transition: box-shadow .15s, filter .15s;
+}
+
+.btn-start {
+  background: linear-gradient(135deg, #00c853, #39ff14);
+  color: #04140a;
+  margin-top: 4px;
+  box-shadow: 0 0 14px rgba(57, 255, 20, .45);
+}
+
+.btn-start:hover {
+  filter: brightness(1.15);
+  box-shadow: 0 0 20px rgba(57, 255, 20, .7);
+}
+
+.btn-stop {
+  background: linear-gradient(135deg, #ff1c1c, #ff2d78);
+  color: #fff;
+  margin-top: 4px;
+  box-shadow: 0 0 14px rgba(255, 45, 120, .5);
+}
+
+.btn-stop:hover {
+  filter: brightness(1.15);
+  box-shadow: 0 0 20px rgba(255, 45, 120, .75);
+}
+
+.btn-secondary {
+  background: rgba(13, 13, 31, .9);
+  color: #8892b0;
+  border: 1px solid rgba(123, 47, 255, .35);
+}
+
+.btn-secondary:hover {
+  color: #e6e6fa;
+  border-color: #00ffff;
+  box-shadow: 0 0 10px rgba(0, 255, 255, .3);
+}
+
+/* === Skill Modal === */
+.skill-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  margin: 2px 0;
+  background: rgba(10, 22, 40, .9);
+  border: 1px solid rgba(0, 255, 255, .2);
+  border-radius: 8px;
+  font-size: 11px;
+  color: #ccc;
+  cursor: default;
+}
+
+.skill-item .stt {
+  background: linear-gradient(135deg, #7b2fff, #ff00ff);
+  color: #fff;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+  box-shadow: 0 0 8px rgba(255, 0, 255, .5);
+}
+
+.skill-item .skill-name {
+  flex: 1;
+}
+
+.skill-item .skill-cat {
+  font-size: 9px;
+  color: #8892b0;
+  background: rgba(26, 42, 78, .9);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+/* === Stats Panel === */
+/* V56/V70 giữ nguyên: neo max-height 250px + chuỗi min-height: 0 để
+   2 body cuộn trong, không đội panel lên. V71 chỉ đổi diện mạo. */
+#stats-panel {
+  background: linear-gradient(180deg, rgba(19, 19, 43, .95), rgba(10, 10, 26, .95));
+  border: 1px solid rgba(0, 255, 255, .3);
+  border-radius: 12px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  min-height: 0;
+  max-height: 250px;
+  box-shadow: 0 0 12px rgba(0, 255, 255, .15);
+}
+
+.stats-top {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+}
+
+.stat-box {
+  background: rgba(5, 5, 16, .85);
+  border: 1px solid rgba(123, 47, 255, .3);
+  border-radius: 10px;
+  padding: 6px 4px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.stat-box-icon {
+  font-size: 10px;
+}
+
+.stat-box-label {
+  font-size: 9px;
+  color: #8892b0;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-weight: 700;
+}
+
+.stat-box-value {
+  font-size: 15px;
+  font-weight: 800;
+  color: #39ff14;
+  text-shadow: 0 0 10px rgba(57, 255, 20, .35);
+}
+
+.stat-box-value.target {
+  color: #e6e6fa;
+  text-shadow: none;
+  font-size: 12px;
+}
+
+.stat-box-value.win {
+  color: #39ff14;
+}
+
+.stat-box-value.loss {
+  color: #ff2d78;
+  text-shadow: 0 0 10px rgba(255, 45, 120, .4);
+}
+
+.stat-box-value.coin {
+  color: #ffd700;
+  text-shadow: 0 0 10px rgba(255, 215, 0, .4);
+}
+
+.stat-box-value.exp {
+  color: #00ffff;
+  text-shadow: 0 0 10px rgba(0, 255, 255, .4);
+}
+
+.stat-box-value.item {
+  color: #c084fc;
+  text-shadow: 0 0 10px rgba(192, 132, 252, .4);
+}
+
+/* V56: hàng grid lấy theo chiều cao của khung (1fr) chứ không theo nội
+   dung — không có dòng này thì hàng auto sẽ phình theo danh sách món
+   dài nhất, 2 section không co lại được và body không cuộn trong. */
+.stats-bottom {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: minmax(0, 1fr);
+  gap: 6px;
+  flex: 1;
+  min-height: 0;
+}
+
+.stats-section {
+  background: rgba(5, 5, 16, .85);
+  border: 1px solid rgba(123, 47, 255, .25);
+  border-radius: 10px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.stats-section h4 {
+  font-size: 10px;
+  color: #00ffff;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 4px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid rgba(0, 255, 255, .2);
+  text-shadow: 0 0 8px rgba(0, 255, 255, .4);
+}
+
+/* V55: vật phẩm rơi nhiều thì #items-list phải cuộn bên trong, không
+   đẩy panel lên (chuỗi flex đã kín: stats-bottom flex:1 + min-height:0,
+   stats-panel min-height:0 + overflow auto, control-panel max 44vh). */
+.stats-section-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  font-size: 11px;
+}
+
+.last-battle-result {
+  font-size: 12px;
+  font-weight: 800;
+  margin-bottom: 2px;
+}
+
+.last-battle-result.win {
+  color: #39ff14;
+  text-shadow: 0 0 10px rgba(57, 255, 20, .5);
+}
+
+.last-battle-result.loss {
+  color: #ff2d78;
+  text-shadow: 0 0 10px rgba(255, 45, 120, .5);
+}
+
+.last-battle-npc {
+  color: #aaa;
+  font-size: 10px;
+  margin-bottom: 3px;
+}
+
+.last-battle-rewards {
+  color: #39ff14;
+  font-size: 11px;
+}
+
+.item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 2px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, .06);
+  font-size: 10px;
+}
+
+.item-name {
+  color: #ccc;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.item-count {
+  color: #c084fc;
+  font-weight: 700;
+  margin-left: 4px;
+  white-space: nowrap;
+  text-shadow: 0 0 8px rgba(192, 132, 252, .5);
+}
+
+/* === Log Panel === */
+#log-section {
+  background: linear-gradient(180deg, rgba(19, 19, 43, .95), rgba(10, 10, 26, .95));
+  border: 1px solid rgba(255, 0, 255, .3);
+  border-radius: 12px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 250px;
+  box-shadow: 0 0 12px rgba(255, 0, 255, .15);
+}
+
+/* V37: #log-area là flex item, min-height: 0 để co lại dưới cỡ nội
+   dung — mỗi dòng log mới cuộn bên trong, không đẩy màn hình lên. */
+#log-area {
+  flex: 1;
+  min-height: 0;
+  background: rgba(5, 5, 16, .9);
+  border: 1px solid rgba(0, 255, 255, .2);
+  border-radius: 8px;
+  padding: 6px;
+  font: 10px/1.5 monospace;
+  color: #aaa;
+  overflow-y: auto;
+  white-space: pre-wrap;
+}
+
+#log-area .log-entry {
+  margin-bottom: 2px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  border-left: 3px solid transparent;
+}
+
+/* V71: log tô màu theo loại (như mockup) — phân loại theo từ khóa
+   trong appendLog của renderer.js, mặc định là xám. */
+#log-area .log-entry.log-info {
+  color: #9aa3c0;
+}
+
+#log-area .log-entry.log-win {
+  color: #7dffa8;
+  background: rgba(57, 255, 20, .08);
+  border-left-color: #39ff14;
+}
+
+#log-area .log-entry.log-warn {
+  color: #ff8fb8;
+  background: rgba(255, 45, 120, .1);
+  border-left-color: #ff2d78;
+}
+
+#log-area .log-entry.log-boss {
+  color: #d9a7ff;
+  background: rgba(123, 47, 255, .14);
+  border-left-color: #7b2fff;
+}
+
+#log-area .log-entry.log-battle {
+  color: #8ef6ff;
+  background: rgba(0, 255, 255, .07);
+  border-left-color: #00ffff;
+}
+
+#log-controls {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+#log-controls button {
+  flex: 1;
+  background: rgba(13, 13, 31, .9);
+  color: #8892b0;
+  border: 1px solid rgba(123, 47, 255, .35);
+  padding: 5px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+#log-controls button:hover {
+  color: #e6e6fa;
+  border-color: #00ffff;
+  box-shadow: 0 0 10px rgba(0, 255, 255, .3);
+}
+
+/* Scrollbar neon (WebKit) */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, .04);
+  border-radius: 99px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #7b2fff, #00ffff);
+  border-radius: 99px;
+  box-shadow: 0 0 6px rgba(0, 255, 255, .4);
+}
+
+/* === Responsive: 22" / 16" / 15.6" / 14" === */
+@media (max-width: 1400px) {
+  #control-panel {
+    max-height: 46vh;
+  }
+  #status-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  /* Màn hẹp: ô thống kê 6 -> 3 cột (2 hàng), như mockup. */
+  .stats-top {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1100px) {
+  #control-row {
+    flex-direction: column;
+  }
+  #npc-panel,
+  #stats-panel,
+  #log-section {
+    flex-basis: auto;
+  }
+  #log-section {
+    min-height: 140px;
+  }
+  .stats-bottom {
+    grid-template-columns: 1fr;
+  }
+  #status-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .config-grid {
+    grid-template-columns: 1fr;
+  }
+  .stats-top {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
   </style>
 </head>
 
@@ -552,36 +814,63 @@
 
   <div id="content"></div>
   <div id="control-panel">
-    <!-- NPC Panel (25%) -->
+<div id="mode-tabs">
+    <button id="tab-npc"
+            class="active"
+            onclick="setMode('npc')">⚔️ NPC</button>
+    <button id="tab-luanhoi"
+            onclick="setMode('luanhoi')">🌀 Luanhoi</button>
+    <button id="tab-bicanh"
+            onclick="setMode('bicanh')">⚔️ Bicanh</button>
+    <button id="tab-dianguc"
+            onclick="setMode('dianguc')">🔥 Dianguc</button>
+    <button id="tab-upgrade"
+            onclick="setMode('spam')">💀 Spam</button>
+    <button id="tab-vandu"
+            onclick="setMode('vandu')">🌿 Vandu</button>
+    <button id="btn-config-modal"
+            onclick="toggleSkillModal()"
+           >⚙️</button>
+  </div>
+    <div id="status-row">
+    <div class="status-card">
+      <div class="status-label" id="status-progress-label">Tiến trình chuyến</div>
+      <div class="status-value" id="status-progress-value">—</div>
+      <div class="progress-track">
+        <div class="progress-fill" id="status-progress-fill" style="width:0%"></div>
+        <span class="boss-marker" id="boss-marker-12" style="left:33.33%"></span>
+        <span class="boss-marker" id="boss-marker-24" style="left:66.67%"></span>
+        <span class="boss-marker" id="boss-marker-36" style="left:100%"></span>
+      </div>
+      <div class="status-sub" id="status-progress-sub">—</div>
+    </div>
+    <div class="status-card">
+      <div class="status-label">HP hiện tại</div>
+      <div class="status-value" id="status-hp-value">—</div>
+      <div class="hp-track">
+        <div class="hp-fill high" id="status-hp-fill" style="width:0%"></div>
+      </div>
+      <div class="status-sub" id="status-hp-sub">—</div>
+    </div>
+    <div class="status-card">
+      <div class="status-label">Cửu Chuyển Hoàn Hồn Đan</div>
+      <div class="status-value" id="status-dan-value">—</div>
+      <div class="status-sub" id="status-dan-sub">—</div>
+    </div>
+  </div>
+  <div id="control-row">
+    <!-- NPC Panel -->
     <div id="npc-panel"
          class="panel-section">
-      <div id="mode-tabs">
-        <button id="tab-npc"
-                class="active"
-                onclick="setMode('npc')">⚔️ NPC</button>
-        <button id="tab-luanhoi"
-                onclick="setMode('luanhoi')">🌀 Luanhoi</button>
-        <button id="tab-bicanh"
-                onclick="setMode('bicanh')">⚔️ Bicanh</button>
-        <button id="tab-dianguc"
-                onclick="setMode('dianguc')">🔥 Dianguc</button>
-        <button id="tab-upgrade"
-                onclick="setMode('spam')">💀 Spam</button>
-        <button id="tab-vandu"
-                onclick="setMode('vandu')">🌿 Vandu</button>
-        <button id="btn-config-modal"
-                onclick="toggleSkillModal()"
-                style="background:#2a2a4a;color:#eee;border:1px solid #3a3a5a;padding:5px 12px;border-radius:4px;cursor:pointer;font-size:11px;">⚙️</button>
-      </div>
       <div id="skill-modal"
            style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:1000;justify-content:center;align-items:center;">
-        <div style="background:#1a1a2e;border:2px solid #e94560;border-radius:12px;padding:20px;width:90%;max-width:1100px;max-height:85vh;overflow-y:auto;">
+        <div style="background:#0d0d1f;border:2px solid #7b2fff;border-radius:12px;padding:20px;width:90%;max-width:1100px;max-height:85vh;overflow-y:auto;">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
-            <h3 style="color:#e94560;margin:0;">⚔️ CẤU HÌNH SKILL BICANH</h3>
+            <h3 style="color:#ff2d78;margin:0;">⚔️ CẤU HÌNH SKILL BICANH</h3>
             <button onclick="toggleSkillModal()"
                     style="background:none;border:none;color:#eee;font-size:22px;cursor:pointer;">✕</button>
           </div>
-          <p style="color:#aaa;font-size:11px;margin-bottom:10px;">Nhập STT cách nhau bởi dấu phẩy, ví dụ: <b style="color:#4ecca3;">3,4,5,9</b></p>
+          <p style="color:#aaa;font-size:11px;margin-bottom:10px;">Nhập STT cách nhau bởi dấu phẩy, ví dụ: <b style="color:#39ff14;">3,4,5,9</b></p>
           <div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:12px;margin-bottom:15px;">
             <div id="skill-grid-0"></div>
             <div id="skill-grid-1"></div>
@@ -592,7 +881,7 @@
             <label style="color:#eee;font-size:12px;">Combo có sẵn: </label>
             <select id="skill-combo-preset"
                     onchange="applySkillPreset(this.value)"
-                    style="width:100%;padding:8px 10px;background:#0a0a1a;border:1px solid #1a1a4e;border-radius:6px;color:#eee;font-size:13px;outline:none;box-sizing:border-box;"></select>
+                    style="width:100%;padding:8px 10px;background:#050510;border:1px solid rgba(0,255,255,.25);border-radius:6px;color:#eee;font-size:13px;outline:none;box-sizing:border-box;"></select>
           </div>
           <div style="margin-bottom:15px;">
             <label style="color:#eee;font-size:12px;">Thứ tự click: </label>
@@ -600,7 +889,7 @@
                    type="text"
                    oninput="syncSkillPresetFromInput()"
                    placeholder="VD: 1,2,3,4,5,6"
-                   style="width:100%;padding:8px 10px;background:#0a0a1a;border:1px solid #1a1a4e;border-radius:6px;color:#eee;font-size:14px;outline:none;box-sizing:border-box;">
+                   style="width:100%;padding:8px 10px;background:#050510;border:1px solid rgba(0,255,255,.25);border-radius:6px;color:#eee;font-size:14px;outline:none;box-sizing:border-box;">
           </div>
           <div style="margin-bottom:10px;">
             <label style="color:#eee;font-size:12px;">Delay giữa 2 lần click (ms) — dùng chung cho cả 4 mode: </label>
@@ -610,23 +899,23 @@
                    min="100"
                    max="10000"
                    step="100"
-                   style="width:100%;padding:8px 10px;background:#0a0a1a;border:1px solid #1a1a4e;border-radius:6px;color:#eee;font-size:14px;outline:none;box-sizing:border-box;">
+                   style="width:100%;padding:8px 10px;background:#050510;border:1px solid rgba(0,255,255,.25);border-radius:6px;color:#eee;font-size:14px;outline:none;box-sizing:border-box;">
           </div>
           <div style="margin-bottom:15px;">
             <label style="color:#eee;font-size:12px;">User ID Discord (dùng chung cho cả 6 mode): </label>
             <input id="userid-shared"
                    type="text"
                    placeholder="ID Discord (dãy số)"
-                   style="width:100%;padding:8px 10px;background:#0a0a1a;border:1px solid #1a1a4e;border-radius:6px;color:#eee;font-size:14px;outline:none;box-sizing:border-box;">
+                   style="width:100%;padding:8px 10px;background:#050510;border:1px solid rgba(0,255,255,.25);border-radius:6px;color:#eee;font-size:14px;outline:none;box-sizing:border-box;">
           </div>
           <div style="display:flex;gap:10px;justify-content:flex-end;">
             <button onclick="saveSkillOrder()"
-                    style="background:#1a5a2e;color:#fff;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:13px;">💾 Lưu</button>
+                    style="background:#00c853;color:#fff;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:13px;">💾 Lưu</button>
             <button onclick="resetSkillOrder()"
-                    style="background:#5a1a1a;color:#fff;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:13px;">Reset</button>
+                    style="background:#ff1c1c;color:#fff;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:13px;">Reset</button>
           </div>
           <div id="skill-order-status"
-               style="margin-top:10px;color:#4ecca3;font-size:12px;"></div>
+               style="margin-top:10px;color:#39ff14;font-size:12px;"></div>
         </div>
       </div>
       <!-- === AUTO FARM NPC CONFIG === -->
@@ -664,7 +953,7 @@
                    max="999">
           </div>
           <div class="config-field">
-            <label style="color:#e94560;font-weight:600;font-size:9px;">AUTO CLIMB</label>
+            <label style="color:#ff2d78;font-weight:600;font-size:9px;">AUTO CLIMB</label>
 
             <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
               <input id="auto-climb"
@@ -682,7 +971,7 @@
                    max="999">
           </div>
           <div class="config-field">
-            <label style="color:#e94560;font-weight:600;font-size:9px;">TU LUYỆN</label>
+            <label style="color:#ff2d78;font-weight:600;font-size:9px;">TU LUYỆN</label>
             <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
               <input id="tu-luyen"
                      type="checkbox"
@@ -893,7 +1182,7 @@
           <div class="config-field full">
             <label for="upgrade-type">Loại spam</label>
             <select id="upgrade-type"
-                    style="width:100%;padding:3px 5px;background:#0a0a1a;border:1px solid #1a1a4e;border-radius:3px;color:#eee;font-size:11px;outline:none;">
+                    style="width:100%;padding:3px 5px;background:#050510;border:1px solid rgba(0,255,255,.25);border-radius:3px;color:#eee;font-size:11px;outline:none;">
               <option value="hp">/upgrade hp — ❤ HP</option>
               <option value="atk">/upgrade atk — ⚔ ATK</option>
               <option value="def">/upgrade def — 🛡 DEF</option>
@@ -905,7 +1194,7 @@
       </div>
     </div>
 
-    <!-- Stats Panel (50%) -->
+    <!-- Stats Panel -->
     <div id="stats-panel"
          class="panel-section">
       <h3>📊 Thống Kê Trận Đấu</h3>
@@ -963,7 +1252,7 @@
       </div>
     </div>
 
-    <!-- Log Panel (25%) -->
+    <!-- Log Panel -->
     <div id="log-section"
          class="panel-section">
       <h3>Logs</h3>
@@ -975,6 +1264,7 @@
                 onclick="copyLogs()">📋 Copy Log</button>
       </div>
     </div>
+  </div>
   </div>
 
   <script src="renderer.js"></script>
