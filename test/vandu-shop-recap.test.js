@@ -105,7 +105,7 @@ async function runBot(screens) {
   // A (bug chính): màn cửa có recap Tiên Thương — bot phải bấm Tử Môn,
   // không được thử mua đan, không được im lặng đơ.
   {
-    const { bot, logs, clicks } = await runBot([doorAfterShop, tripEndScreen]);
+    const { bot, logs, clicks } = await runBot([doorAfterShop, tripEndScreen, tripEndScreen]);
     has(logs, 'chọn cửa "💀 Tử Môn"', 'A: phai bam Tu Mon (Tho) theo mach Sinh 2/5');
     has(logs, 'mạch sinh tiến Hỏa -> Thổ', 'A: phai log tien mach Hoa -> Tho');
     eq(clicks.includes('mua cuu chuyen'), false, 'A: khong duoc bam Mua Cuu Chuyen tren man cua');
@@ -118,7 +118,7 @@ async function runBot(screens) {
   // B (không phá shop thật): màn shop có nút Mua thì vẫn mua đan 1/3,
   // rồi rời shop, rồi màn cửa sau đó vẫn bấm cửa bình thường.
   {
-    const { logs, clicks } = await runBot([shopScreen, shopScreen, doorAfterShop, tripEndScreen]);
+    const { logs, clicks } = await runBot([shopScreen, shopScreen, doorAfterShop, tripEndScreen, tripEndScreen]);
     has(logs, 'mua Cửu Chuyển Hoàn Hồn Đan (1/3)', 'B: shop that van mua dan');
     eq(clicks.includes('mua cuu chuyen'), true, 'B: phai co cum bam Mua');
     has(logs, 'rời shop, tiếp tục hành trình', 'B: mua xong thi roi shop');
@@ -130,7 +130,7 @@ async function runBot(screens) {
   // không rơi xuống handler tiết điểm phụ.
   {
     const shopAfterBuy = { msgId: 'shop-1', text: shopScreen.text, buttons: ['Rời đi tiếp tục hành trình'] };
-    const { logs, clicks } = await runBot([shopScreen, shopAfterBuy, doorAfterShop, tripEndScreen]);
+    const { logs, clicks } = await runBot([shopScreen, shopAfterBuy, doorAfterShop, tripEndScreen, tripEndScreen]);
     has(logs, 'mua Cửu Chuyển Hoàn Hồn Đan (1/3)', 'C: phai mua dan o man shop dau');
     has(logs, 'rời shop, tiếp tục hành trình', 'C: shop chi con nut Roi di van roi shop');
     eq(clicks.includes('roi di'), true, 'C: phai co cum bam Roi di');

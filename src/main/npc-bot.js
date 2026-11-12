@@ -4928,6 +4928,22 @@ class NpcBot {
       prev.door === door && prev.element === element;
   }
 
+  // V67 (2026-11-12, log 09:27:01): màn có đổi sau cú bấm cửa không —
+  // bấm xong mà màn không đổi thì cú bấm chưa vào game (đã gặp 2 lần:
+  // Hưu Môn 2026-11-11, Tử Môn 2026-11-12). Màn đổi = msgId mới, hoặc
+  // mạch game tiến tới đúng hành vừa bấm (game sửa cùng message), hoặc
+  // màn không còn là màn cửa nữa (đã sang battle/buff/shop...).
+  vanduDoorClickLanded(before, after, circuitBefore, element) {
+    if (!after) return false;
+    if ((after.msgId || '') !== (before.msgId || '')) return true;
+    const afterButtons = after.buttons || [];
+    const afterDoors = afterButtons.filter(b => this.vanduElementOfDoor(b) !== null);
+    if (afterDoors.length === 0) return true;
+    const parsed = this.vanduParseCircuit(after.text || '');
+    if (parsed && parsed.last === element && circuitBefore && circuitBefore.last && parsed.last !== circuitBefore.last) return true;
+    return false;
+  }
+
   // V11: gộp mạch đọc từ màn hình vào mạch bot đang giữ, nhưng KHÔNG cho
   // màn hình cũ làm tụt mạch. Màn hình chỉ ghi neo mạch (vd chỉ [Kim]) trong
   // khi bot đã tự tiến tới [Kim, Mộc] là màn cũ, phải giữ [Kim, Mộc]. Chỉ
@@ -6873,26 +6889,50 @@ class NpcBot {
             break;
           }
           const clicked = await this.vanduClickButton(chosen);
-          if (clicked && circuitBefore && circuitBefore.last) {
-            const advanced = this.vanduAdvanceCircuit(circuitBefore, chosenElement);
-            if (advanced !== circuitBefore) {
-              this.vanduCircuit = advanced;
-              // V32: ghi lại cú bấm để lần quét sau biết mà trả mạch về
-              // nếu màn không đổi (cú bấm chưa vào game, xem merge).
-              // V54: ghi cả vị trí mạch trước cú bấm + cửa đã bấm, để lần
-              // quét sau chỉ cộng dồn khi đúng màn đó, đúng mạch đó, đúng
-              // cửa đó — màn mới/mạch mới/cửa khác thì đếm lại từ 1.
+          if (clicked) {
+            // V67: kiểm tra màn sau cú bấm (như chọn map v56) — chỉ tin
+            // cú bấm khi màn thật sự đổi; chưa đổi thì không tự tiến mạch.
+            await this.delay(2000);
+            if (!this.isRunning || this.runId !== runId) return;
+            const again = await this.vanduScanLatest();
+            const landed = this.vanduDoorClickLanded(screen, again, circuitBefore, chosenElement);
+            if (landed && circuitBefore && circuitBefore.last) {
+              const advanced = this.vanduAdvanceCircuit(circuitBefore, chosenElement);
+              if (advanced !== circuitBefore) {
+                this.vanduCircuit = advanced;
+                // V32: ghi lại cú bấm để lần quét sau biết mà trả mạch về
+                // nếu màn không đổi (cú bấm chưa vào game, xem merge).
+                // V54: ghi cả vị trí mạch trước cú bấm + cửa đã bấm, để lần
+                // quét sau chỉ cộng dồn khi đúng màn đó, đúng mạch đó, đúng
+                // cửa đó — màn mới/mạch mới/cửa khác thì đếm lại từ 1.
+                const prev = this.vanduLastCircuitClick;
+                this.vanduLastCircuitClick = {
+                  msgId: screen.msgId,
+                  circuitKey,
+                  door: chosenDoor,
+                  element: advanced.last,
+                  count: (prev && this.vanduSameCircuitClick(prev, screen.msgId, circuitKey, chosenDoor, advanced.last)) ? prev.count + 1 : 1,
+                };
+                this.vanduLog(`🚪 Vân Du: chọn cửa "${chosen}" — mạch ${circuitBefore.type} tiến ${circuitBefore.last} -> ${advanced.last}, bước tiếp là ${this.vanduNextElement(advanced.type, advanced.last)}`);
+              } else {
+                this.vanduLog(`🚪 Vân Du: chọn cửa "${chosen}"${circuitBefore ? ` (mạch ${circuitBefore.type}, sau ${circuitBefore.last || '?'})` : ''}`);
+              }
+            } else if (landed) {
+              this.vanduLog(`🚪 Vân Du: chọn cửa "${chosen}"${circuitBefore ? ` (mạch ${circuitBefore.type}, sau ${circuitBefore.last || '?'})` : ''}`);
+            } else {
+              // Cú bấm chưa vào game: không tự tiến mạch, ghi lại cú bấm
+              // để guard v32/v54 đếm, log cảnh báo 1 lần/màn rồi chờ quét
+              // lại thử tiếp — dừng hẳn vẫn do guard quyết định.
               const prev = this.vanduLastCircuitClick;
+              const failCount = (prev && this.vanduSameCircuitClick(prev, screen.msgId, circuitKey, chosenDoor, chosenElement)) ? prev.count + 1 : 1;
               this.vanduLastCircuitClick = {
                 msgId: screen.msgId,
                 circuitKey,
                 door: chosenDoor,
-                element: advanced.last,
-                count: (prev && this.vanduSameCircuitClick(prev, screen.msgId, circuitKey, chosenDoor, advanced.last)) ? prev.count + 1 : 1,
+                element: chosenElement,
+                count: failCount,
               };
-              this.vanduLog(`🚪 Vân Du: chọn cửa "${chosen}" — mạch ${circuitBefore.type} tiến ${circuitBefore.last} -> ${advanced.last}, bước tiếp là ${this.vanduNextElement(advanced.type, advanced.last)}`);
-            } else {
-              this.vanduLog(`🚪 Vân Du: chọn cửa "${chosen}"${circuitBefore ? ` (mạch ${circuitBefore.type}, sau ${circuitBefore.last || '?'})` : ''}`);
+              if (failCount === 1) this.vanduLog(`⚠️ Vân Du: bấm "${chosen}" mà màn không đổi, chờ màn mới (không bấm bừa)`);
             }
           } else {
             this.vanduLog(`🚪 Vân Du: chọn cửa "${chosen}"${circuitBefore ? ` (mạch ${circuitBefore.type}, sau ${circuitBefore.last || '?'})` : ''}`);

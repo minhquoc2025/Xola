@@ -72,7 +72,7 @@ const tripEndScreen = { msgId: 'end', text: 'Trở Về Giang Hồ', buttons: ['
     bot.delay = async () => {};
     bot.sendChat = async () => {};
     bot.dismissEphemeralMessages = async () => {};
-    const queue = [door10, tripEndScreen];
+    const queue = [door10, tripEndScreen, tripEndScreen]; // v67: +1 màn cho lần quét kiểm tra sau cú bấm cửa
     let current = null;
     bot.vanduScanLatest = async () => {
       if (queue.length === 0) throw new Error('scan script exhausted');
