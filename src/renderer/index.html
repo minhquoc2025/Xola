@@ -310,14 +310,17 @@ body {
   align-items: stretch;
 }
 
+/* V73 (anh 2026-11-12, ảnh live: tỉ lệ control 3-6-3): NPC 3 phần, Stats
+   6 phần, Logs 3 phần — khung giữa rộng gấp đôi 2 khung bên. Chiều cao
+   3 khung vẫn cân bằng (cùng neo max-height 250px, xem từng panel). */
 #control-row > .panel-section {
-  flex: 1 1 0;
   min-width: 0;
   min-height: 0;
 }
 
 /* === NPC Panel === */
 #npc-panel {
+  flex: 3 1 0;
   background: linear-gradient(180deg, rgba(19, 19, 43, .95), rgba(10, 10, 26, .95));
   border: 1px solid rgba(123, 47, 255, .35);
   border-radius: 12px;
@@ -478,6 +481,7 @@ body {
 /* V56/V70 giữ nguyên: neo max-height 250px + chuỗi min-height: 0 để
    2 body cuộn trong, không đội panel lên. V71 chỉ đổi diện mạo. */
 #stats-panel {
+  flex: 6 1 0;
   background: linear-gradient(180deg, rgba(19, 19, 43, .95), rgba(10, 10, 26, .95));
   border: 1px solid rgba(0, 255, 255, .3);
   border-radius: 12px;
@@ -655,6 +659,7 @@ body {
 
 /* === Log Panel === */
 #log-section {
+  flex: 3 1 0;
   background: linear-gradient(180deg, rgba(19, 19, 43, .95), rgba(10, 10, 26, .95));
   border: 1px solid rgba(255, 0, 255, .3);
   border-radius: 12px;
@@ -780,7 +785,9 @@ body {
   #npc-panel,
   #stats-panel,
   #log-section {
-    flex-basis: auto;
+    /* Màn hẹp xếp dọc: bỏ tỉ lệ 3-6-3 (không áp theo chiều dọc), các
+       panel cao theo nội dung. */
+    flex: 1 1 auto;
   }
   #log-section {
     min-height: 140px;
@@ -1136,9 +1143,6 @@ body {
               <option value="Nguyên Anh">Nguyên Anh — Tây Vực Sa Mạc</option>
               <option value="Hóa Thần">Hóa Thần — Thiên Sơn Tuyết Lãnh</option>
             </select>
-          </div>
-          <div class="config-field full">
-            <label style="font-size:9px;color:#888;">Vân Du: chọn cảnh giới trong list trước khi START, bot sẽ mở danh sách map trong game, chọn map tương ứng rồi bấm Bắt Đầu Xuất Phát. Để trống = chọn tay trong game. Số lần đi: nhập N thì bot tự chạy đủ N chuyến (mỗi chuyến bấm xong Trở Về Giang Hồ tính 1 lần), để trống/0 thì 1 chuyến rồi dừng như cũ.</label>
           </div>
         </div>
       </div>
