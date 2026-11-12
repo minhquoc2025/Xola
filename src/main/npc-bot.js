@@ -5440,6 +5440,16 @@ class NpcBot {
     return (node === 12 || node === 24 || node === 36) ? 50 : 20;
   }
 
+  // V68 (2026-11-12, anh: boss Tiết 12 máu <50% mà không hồi): màn
+  // battle boss có chữ "Cột mốc Vực Cảnh ... bị phong tỏa" và thưởng
+  // "Mảnh Cổ Khí" (walkthrough bước 21, màn boss 12 thật) — battle
+  // thường không có 2 chữ này. Dùng để nhận boss khi số Tiết đọc
+  // được còn lag ở 11 (boss chen vào không qua màn cửa Tiết 12).
+  vanduIsBossBattle(text) {
+    const n = this.vanduNormalize(text);
+    return n.includes('vuc canh') || n.includes('manh co khi');
+  }
+
   // V65 (anh 2026-11-12, anh Tiet 13/36): dem so buff trong tui tu
   // chinh man hien tai — man Loi Kiep hien "8 The Buff", bang cong
   // huong hien "Tui Buff 4/12". Tra ve null neu man khong ghi so.
@@ -6118,6 +6128,10 @@ class NpcBot {
       const isBattle = norm.includes('trang thai chien truong') || norm.includes('dien bien hiep dau') ||
         this.vanduSkillOrder.some(s => btnNorm.some(b => b.includes(this.vanduNormalize(s))));
       if (!isBattle) return;
+      // V68: đọc lại Tiết từ chính màn battle — boss chen vào không qua
+      // màn cửa Tiết 12 nên node cũ còn 11, ngưỡng hồi sai thành 20%.
+      const battleNode = this.vanduParseNode(screen.text);
+      if (battleNode) this.vanduNode = battleNode;
       // Hồi máu bằng vật phẩm dưới skill — V64: boss Tiết 12/24/36
       // thì máu < 50% xài, Tiết thường chỉ xài khi máu < 20%.
       // V27 (anh dặn boss Tiết 12/24/36 máu 50% thì hồi): luật này vốn đã
@@ -6144,7 +6158,10 @@ class NpcBot {
         this.vanduDanCount = itemBtns.length;
         this.vanduLog(`💊 Vân Du: đồng bộ Đan ${this.vanduDanCount}/3 (theo nút trên màn battle)`);
       }
-      if (hp !== null && hp < this.vanduHealThreshold(this.vanduNode) && itemBtn) {
+      // V68: boss thì ngưỡng 50% kể cả khi số Tiết đọc được còn lag
+      // (màn boss có chữ Vực Cảnh / Mảnh Cổ Khí, xem vanduIsBossBattle).
+      const healThreshold = this.vanduIsBossBattle(screen.text) ? 50 : this.vanduHealThreshold(this.vanduNode);
+      if (hp !== null && hp < healThreshold && itemBtn) {
         const clicked = await this.vanduClickButton('Cửu Chuyển Hoàn Hồn');
         if (clicked) {
           this.vanduLog(`💊 Vân Du: hồi máu bằng Cửu Chuyển (HP ${hp}%, Tiết ${this.vanduNode || '?'})`);

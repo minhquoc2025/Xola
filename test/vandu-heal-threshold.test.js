@@ -64,6 +64,43 @@ async function runBattle(node, hpPct) {
   return { bot, logs, clicks };
 }
 
+// Như runBattle nhưng màn battle tự viết (để giả lập màn boss: số Tiết
+// trong màn khác số node bot đang giữ, hoặc màn có chữ boss).
+async function runBattleText(presetNode, text) {
+  const bot = new NpcBot({ executeJavaScript() {} }, 1);
+  bot.updateConfig({ mode: 'vandu', vanduCmd: '!vandu', username: 'Test', userId: '' });
+  bot.vanduNode = presetNode;
+  const logs = [];
+  bot.log = (m) => logs.push(String(m));
+  bot.delay = async () => {};
+  bot.dismissEphemeralMessages = async () => {};
+  const queue = [{ msgId: 'battle-x', text, buttons: ['🗡️ Phá Giáp', 'Cửu Chuyển Hoàn Hồn'] }, tripEndScreen];
+  let current = null;
+  bot.vanduScanLatest = async () => {
+    if (queue.length === 0) throw new Error('scan script exhausted');
+    current = queue.shift();
+    return current;
+  };
+  const clicks = [];
+  bot.exec = async (js) => {
+    const s = String(js);
+    const m = s.match(/const needle = "([^"]*)"/);
+    const needle = m ? m[1] : '';
+    if (needle) {
+      const btn = (current && current.buttons || []).find((b) => bot.vanduNormalize(b).includes(needle));
+      if (!btn) return null;
+      if (needle.includes('cuu chuyen hoan hon')) clicks.push('dan');
+      if (needle.includes('pha giap')) clicks.push('pha giap');
+      return btn;
+    }
+    return 'clicked';
+  };
+  bot.isRunning = true;
+  bot.runId = 1;
+  await bot.vanduBattleLoop(1);
+  return { bot, logs, clicks };
+}
+
 (async () => {
   // Ngưỡng: boss 12/24/36 là 50, còn lại (kể cả không đọc được Tiết) là 20.
   {
@@ -114,6 +151,24 @@ async function runBattle(node, hpPct) {
     const { logs, clicks } = await runBattle(23, 20);
     eq(clicks.includes('dan'), false, 'E: Tiet thuong HP dung 20% khong xai (can < 20%)');
     lacks(logs, 'hồi máu bằng Cửu Chuyển', 'E: khong duoc log hoi mau');
+  }
+
+  // F (v68, log 09:52:03-19): boss Tiết 12 chen vào, node bot còn 11,
+  // HP 40% — màn boss có chữ Vực Cảnh / Mảnh Cổ Khí thì ngưỡng vẫn 50%.
+  {
+    const bossText = `Tiết Điểm 11/36\nTrạng Thái Chiến Trường\nDiễn Biến Hiệp Đấu\nHòa: 200.000.000/500.000.000\nQuái: 2.205.862.109/2.205.862.109 HP (100%)\nNGUY HIỂM TỘT CÙNG! Cột mốc Vực Cảnh I bị phong tỏa bởi [Hư Ảo] Thiết Mao Hắc Lang!\nHạ gục quái này để nhận ngay 5 - 10 Mảnh Cổ Khí và Thẻ Buff Tím/Vàng!`;
+    const { logs, clicks } = await runBattleText(11, bossText);
+    eq(clicks.includes('dan'), true, 'F: man boss (Vuc Canh/Manh Co Khi) HP 40% phai xai dan du node con 11');
+    has(logs, 'hồi máu bằng Cửu Chuyển (HP 40%', 'F: phai log hoi mau HP 40%');
+  }
+
+  // G (v68): màn battle tự ghi Tiết Điểm 12/36 nhưng node bot còn 11 —
+  // battle loop phải đọc lại Tiết từ màn, ngưỡng 50%.
+  {
+    const screen12 = `Tiết Điểm 12/36\nTrạng Thái Chiến Trường\nDiễn Biến Hiệp Đấu\nHòa: 200.000.000/500.000.000\nQuái: 840.364.197/943.248.306 HP (89%)`;
+    const { logs, clicks } = await runBattleText(11, screen12);
+    eq(clicks.includes('dan'), true, 'G: man battle ghi Tiet 12 thi phai xai dan du node cu la 11');
+    has(logs, 'hồi máu bằng Cửu Chuyển (HP 40%, Tiết 12)', 'G: phai log hoi mau HP 40% Tiet 12');
   }
 
   console.log('vandu-heal-threshold: OK');
