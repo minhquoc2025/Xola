@@ -5292,6 +5292,14 @@ class NpcBot {
     return null;
   }
 
+  // V64 (anh 2026-11-12): nguong HP de xai Cuu Chuyen Hoan Hon —
+  // boss Tiet 12/24/36 thi mau < 50% xai, Tiet thuong chi xai khi mau
+  // < 20% (giu dan cho boss). Tiet khong doc duoc (vanduNode 0) tinh
+  // nhu Tiet thuong.
+  vanduHealThreshold(node) {
+    return (node === 12 || node === 24 || node === 36) ? 50 : 20;
+  }
+
   vanduSyncSectCounts(text) {
     const raw = String(text || '');
     const re = /(Kiếm|Khí|Thuật|Ma)\s*Tông\s*(\d+)\s*\/\s*\d+/g;
@@ -5958,7 +5966,8 @@ class NpcBot {
       const isBattle = norm.includes('trang thai chien truong') || norm.includes('dien bien hiep dau') ||
         this.vanduSkillOrder.some(s => btnNorm.some(b => b.includes(this.vanduNormalize(s))));
       if (!isBattle) return;
-      // Hồi máu bằng vật phẩm dưới skill, chỉ khi máu <= 50%.
+      // Hồi máu bằng vật phẩm dưới skill — V64: boss Tiết 12/24/36
+      // thì máu < 50% xài, Tiết thường chỉ xài khi máu < 20%.
       // V27 (anh dặn boss Tiết 12/24/36 máu 50% thì hồi): luật này vốn đã
       // có nhưng chết từ 2 chỗ — nút thật trên màn chỉ ghi "Cửu Chuyển
       // Hoàn Hồn" (không có "Đan") nên tìm '...dan' không bao giờ trúng,
@@ -5983,7 +5992,7 @@ class NpcBot {
         this.vanduDanCount = itemBtns.length;
         this.vanduLog(`💊 Vân Du: đồng bộ Đan ${this.vanduDanCount}/3 (theo nút trên màn battle)`);
       }
-      if (hp !== null && hp <= 50 && itemBtn) {
+      if (hp !== null && hp < this.vanduHealThreshold(this.vanduNode) && itemBtn) {
         const clicked = await this.vanduClickButton('Cửu Chuyển Hoàn Hồn');
         if (clicked) {
           this.vanduLog(`💊 Vân Du: hồi máu bằng Cửu Chuyển (HP ${hp}%, Tiết ${this.vanduNode || '?'})`);
