@@ -6547,6 +6547,20 @@ class NpcBot {
         continue;
       }
 
+      // Trứng — "Sưởi ấm quả trứng" (v79, anh chốt 2026-11-13, ảnh màn
+      // Trận Đồ Ngũ Hành ở Tiết 21, trước Boss 24): bảng có 2 nút,
+      // "Sưởi ấm quả trứng" (xanh) và "Bỏ mặc". Anh dặn gặp bảng này
+      // thì luôn bấm Sưởi ấm quả trứng, không bỏ mặc. Màn này KHÔNG
+      // phải màn Kỳ Ngộ (không có chữ KỲ NGỘ hay nút Dâng hương) nên
+      // luật xanh lá chung (v19) không chạy — nhận diện bằng chính
+      // nút cần bấm, đặt trước các handler cửa/Kỳ Ngộ chung (như v58).
+      if (btnNorm.some(x => x.includes('suoi am qua trung'))) {
+        await this.vanduClickButton('Sưởi ấm quả trứng');
+        this.vanduLog('🥚 Vân Du: bấm Sưởi ấm quả trứng');
+        await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
+        continue;
+      }
+
       // Bảng Tiếp Tục Tiến Sâu: sau thua boss (về checkpoint) và sau giải đố
       // đúng (sang chặng kế) đều dùng nút này. V1 Vân Du chưa xử lý nên kẹt.
       if (btnNorm.some(x => x.includes('tiep tuc tien sau'))) {
