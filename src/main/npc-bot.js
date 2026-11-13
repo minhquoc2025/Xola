@@ -71,6 +71,7 @@ class NpcBot {
     this.luanhoiCmd = '!luanhoi';
     this.luanhoiSkillNames = ['Kiếm Cơ Bản', 'Liên Hoàn Kích', 'Trọng Kích', 'Phá Giáp', 'Xuyên Tâm', 'Liệt Hỏa Trảm', 'Hấp Huyết', 'Kịch Độc', 'Lôi Kích', 'Tuyệt Sát', 'Thần Uy', 'Băng Phong', 'Phòng Ngự', 'Phản Kích', 'Hồi Phục', 'Hộ Thuẫn', 'Hỏa Giáp', 'Chống Xỏ Lá', 'Thái Cực Dưỡng Sinh', 'Kiếm Khí Xung Thiên', 'Kim Cương Phục Ma', 'Hỗn Nguyên Hộ Thể', 'Vạn Kiếm Quy Tông', 'Phong Ấn Thất Mạch', 'Cửu Chuyển Hồi Xuân', 'Kim Đan Phá Sát', 'Tam Muội Chân Hỏa', 'Bất Diệt Kim Thân', 'Hư Không Đại Na Di', 'Nguyên Anh Xuất Khiếu', 'Pháp Tướng Thiên Địa', 'Lôi Đình Vạn Quân', 'Niết Bàn Trùng Sinh'];
     this.luanhoiSkillIdx = 0;
+    this.luanhoiCooldownLeft = new Map(); // V80: skill -> so turn con hoi
     this.luanhoiCurrentTier = 0;
     this.luanhoiBuffInit = false;
     this.lastLuanhoiTarget = null;
@@ -414,6 +415,7 @@ class NpcBot {
     this.climbWinsDone = 0;
     this.processedLockIds = new Set();
     this.luanhoiSkillIdx = 0;
+    this.luanhoiCooldownLeft = new Map();
     this.luanhoiRunCount = 0;
     // V24: Số lần đi Vân Du reset mỗi lần START như Luân Hồi (đếm trong
     // phiên này tới giới hạn rồi dừng), không còn giữ qua các lần START
@@ -2940,6 +2942,7 @@ class NpcBot {
     // FIX combo Luân Hồi: lượt mới = tầng 1 mới, combo quay về skill đầu tiên.
     // Chỉ reset luanhoiSkillIdx (Luân Hồi); _bicanhSkillIdx của Bicanh không đụng tới.
     this.luanhoiSkillIdx = 0;
+    this.luanhoiCooldownLeft = new Map();
     // Target hiệu dụng của lượt này: ban đầu = Target người dùng nhập.
     // Nếu tới Target mà chưa có mảnh, nó sẽ được nâng lên mốc boss kế (+10)
     // ở đoạn kiểm tra Target trong luanhoiFightLoop, và reset lại ở lượt mới.
@@ -3163,6 +3166,7 @@ class NpcBot {
       await this.cooldownWait(this.luanhoiRestartDelaySec, runId);
       if (this.isRunning && this.runId === runId) {
         this.luanhoiSkillIdx = 0;
+        this.luanhoiCooldownLeft = new Map();
         this.lastLuanhoiTarget = null;
         this.luanhoiLoop(runId);
       }
@@ -3252,6 +3256,7 @@ class NpcBot {
           await this.cooldownWait(this.luanhoiRestartDelaySec, runId);
           if (this.isRunning && this.runId === runId) {
             this.luanhoiSkillIdx = 0;
+            this.luanhoiCooldownLeft = new Map();
             this.lastLuanhoiTarget = null;
             this.luanhoiLoop(runId);
           }
@@ -3324,6 +3329,7 @@ class NpcBot {
       // nên combo quay về skill đầu tiên. Không reset ở các nhánh retry cùng tầng
       // (quá hạn buff, cooldown) ở trên — trong cùng 1 tầng vẫn quay vòng bình thường.
       this.luanhoiSkillIdx = 0;
+      this.luanhoiCooldownLeft = new Map();
       if (!_sameTierAdvance) {
         this.log('🔄 Sang tầng mới — combo Luân Hồi reset về skill đầu tiên.');
       }
@@ -3333,6 +3339,64 @@ class NpcBot {
         advanceSelectedAt: quickAdvance ? battleResult.selectedAt : null,
         afterBossWin: justWonBoss,
       });
+    }
+  }
+
+  // Chuẩn hoá tên skill về dạng không dấu, chỉ a-z0-9 — KHỚP với namesNoD
+  // trong luanhoiBattleTick (removeVN + bỏ ký tự lạ). Dùng làm key cho map
+  // cooldown để tên nút (có thể kèm emoji) và tên trong tin "đang hồi"
+  // vẫn trỏ cùng 1 skill.
+  luanhoiNormSkill(name) {
+    return String(name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/\u0111/g, 'd').replace(/\u0110/g, 'd')
+      .replace(/\u01a1/g, 'o').replace(/\u01a0/g, 'o')
+      .replace(/\u01b0/g, 'u').replace(/\u01af/g, 'u')
+      .toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+
+  // V80 (ảnh 2026-11-13 10:11: Lôi Đình/Vạn Kiếm/Hư Không đều "đang hồi!
+  // Còn 1 turn", Vạn Kiếm "Còn 2 turn" — Luân Hồi từ tầng 290 bấm loạn):
+  // phán quyết cho click skill ở vòng trước, đọc tin ephemeral TRƯỚC khi
+  // tick sau dismiss nó. Click bị từ chối (đang hồi / đợi lượt / bấm nhầm)
+  // thì lượt game KHÔNG tiến — quay vòng lại đúng skill đó, không tiến idx.
+  // Click được chấp nhận (không có tin mới) = 1 lượt game đã qua: ghi skill
+  // vừa dùng vào map hồi 3 turn, rồi trừ 1 cho mọi skill đang chờ.
+  // (Bicanh đã có cơ chế này từ lâu; Luân Hồi chưa có nên càng đánh lâu
+  // vòng xoay càng lệch khỏi cooldown thật của game.)
+  luanhoiApplyClickVerdict(detail, clickedSkill) {
+    if (!clickedSkill) return;
+    if (detail && detail.kind === 'cooldown') {
+      const namedKey = detail.skill ? this.luanhoiNormSkill(detail.skill) : null;
+      const clickedKey = this.luanhoiNormSkill(clickedSkill);
+      if (namedKey && namedKey !== clickedKey) {
+        // Tin hồi chiêu không khớp skill vừa bấm (tin cũ sót lại): vẫn ghi
+        // nhớ skill đó, nhưng click vừa rồi coi như đã được tính.
+        if (detail.turns) this.luanhoiCooldownLeft.set(namedKey, detail.turns);
+        this.log(`⏳ Luân Hồi: "${detail.skill}" đang hồi còn ${detail.turns || '?'} turn (không khớp skill vừa bấm "${clickedSkill}") — ghi nhớ, không lùi vòng...`);
+      } else {
+        this.luanhoiSkillIdx--;
+        if (detail.turns) {
+          this.luanhoiCooldownLeft.set(namedKey || clickedKey, detail.turns);
+          this.log(`⏳ Luân Hồi: "${detail.skill || clickedSkill}" đang hồi còn ${detail.turns} turn — ghi nhớ, chờ rồi bấm lại đúng skill này, không nhảy skill khác...`);
+        } else {
+          this.log(`⏳ Luân Hồi: "${clickedSkill}" đang hồi — bấm lại đúng skill này...`);
+        }
+        return;
+      }
+    } else if (detail && (detail.kind === 'wait-turn' || detail.kind === 'wrong-person')) {
+      this.luanhoiSkillIdx--;
+      this.log(detail.kind === 'wait-turn'
+        ? `⏳ Luân Hồi: đợi lượt trước xử lý xong — bấm lại "${clickedSkill}"...`
+        : `⚠️ Luân Hồi: bấm nhầm của người khác — bấm lại "${clickedSkill}"...`);
+      return;
+    }
+    // Không có tin mới: click được chấp nhận. Skill vừa dùng hồi 3 turn;
+    // 1 lượt đã qua nên trừ 1 cho mọi skill đang chờ (kể cả skill vừa dùng).
+    const usedKey = this.luanhoiNormSkill(clickedSkill);
+    this.luanhoiCooldownLeft.set(usedKey, 3);
+    for (const [name, turns] of Array.from(this.luanhoiCooldownLeft)) {
+      if (turns > 1) this.luanhoiCooldownLeft.set(name, turns - 1);
+      else this.luanhoiCooldownLeft.delete(name);
     }
   }
 
@@ -3348,6 +3412,8 @@ class NpcBot {
     // KHÔNG tăng idx ở đây — chỉ tăng SAU KHI xác nhận đã thực sự bấm được 1 skill (xem dưới),
     // để tránh lệch thứ tự xoay vòng khi lượt đó chỉ chọn buff/cooldown/không bấm được gì.
     const rotatedNames = names.map((_, i) => names[(startIdx + i) % names.length]);
+    // V80: danh sach skill dang hoi (key da chuan hoa, khop namesNoD ben trong exec).
+    const cooldownNamesNoD = [...(this.luanhoiCooldownLeft || new Map()).keys()];
 
     const tick = await this.exec(`(() => {
       const removeVN = s => (s || '').normalize('NFD')
@@ -3380,6 +3446,7 @@ class NpcBot {
       const tierNames = ['pham', 'linh', 'huyen', 'thien'];
       const rotatedNames = ${JSON.stringify(rotatedNames)};
       const namesNoD = rotatedNames.map(n => removeVN(n).replace(/[^a-z0-9]/g, ''));
+      const cooldownNoD = new Set(${JSON.stringify(cooldownNamesNoD)});
 
       const msgs = document.querySelectorAll('[role="article"]');
       const recent40 = Array.from(msgs).slice(-40).reverse();
@@ -3643,12 +3710,23 @@ class NpcBot {
           }
           if (availableBtns.length) break;
         }
+        // V80: bỏ qua skill đang hồi trong map — bấm lại skill đang hồi
+        // không làm lượt game tiến, chỉ sinh thêm tin "đang hồi" rồi lệch
+        // vòng xoay (ảnh 10:11 tầng 308).
         for (const n of namesNoD) {
+          if (cooldownNoD.has(n)) continue;
           const hit = availableBtns.find(b => b.noD.includes(n));
           if (hit) {
             hit.btn.click();
             return { type: 'skill', text: hit.txt };
           }
+        }
+        // Không còn skill nào sẵn sàng (mọi skill có nút đều đang hồi):
+        // chờ 1 lượt rồi thử lại, không bấm bừa (lưới an toàn).
+        for (const n of namesNoD) {
+          if (!cooldownNoD.has(n)) continue;
+          const hit = availableBtns.find(b => b.noD.includes(n));
+          if (hit) return { type: 'wait-cooldown', skill: hit.txt, skillNorm: n };
         }
       }
 
@@ -3669,8 +3747,17 @@ class NpcBot {
     // vội: chỉ thoát khi checkLuanhoiBattleEnd xác nhận trận đã kết thúc (buff tầng mới / win / loss).
     let noSkillSince = null;
     let noSkillLoggedAt = 0;
+    // V80: tên skill vừa bấm ở vòng trước, chờ phán quyết ở đầu vòng sau.
+    let pendingSkill = null;
 
     while (this.isRunning && this.runId === runId) {
+      // V80: phán quyết cho click skill ở vòng trước — peek TRƯỚC khi tick
+      // mới dismiss tin nhắn (dismiss ở đầu tick sẽ xoá bằng chứng).
+      if (pendingSkill) {
+        const detail = await this.peekBicanhEphemeralDetail();
+        this.luanhoiApplyClickVerdict(detail, pendingSkill);
+        pendingSkill = null;
+      }
       if (Date.now() - battleStartTime > maxBattleDurationMs) {
         this.log('⚠️ Luân hồi: battle timeout, force-end.');
         return { ended: true, result: 'unknown' };
@@ -3718,8 +3805,20 @@ class NpcBot {
         return { ended: false, cooldown: tick.seconds };
       }
 
+      if (tick && tick.type === 'wait-cooldown') {
+        const wKey = tick.skillNorm || this.luanhoiNormSkill(tick.skill);
+        const wLeft = this.luanhoiCooldownLeft.get(wKey) || 0;
+        this.log(`⏳ Luân Hồi: "${tick.skill}" đang hồi còn ${wLeft} turn — chờ 1 lượt rồi thử lại...`);
+        if (wLeft > 1) this.luanhoiCooldownLeft.set(wKey, wLeft - 1);
+        else this.luanhoiCooldownLeft.delete(wKey);
+        noSkillSince = null;
+        await this.delay(this.skillRetryWaitMs);
+        continue;
+      }
+
       if (tick && tick.type === 'skill') {
         this.log(`🌀 Click skill luân hồi: "${tick.text}"`);
+        pendingSkill = tick.text;
         noSkillSince = null;
       } else if (noSkillSince === null) {
         noSkillSince = Date.now();
@@ -3749,8 +3848,9 @@ class NpcBot {
     const tierWords = ['pham', 'linh', 'huyen', 'thien'];
 
     // Lấy tên skill cần click lần này (luân phiên đảo thứ tự)
+    // V80: chỉ tăng idx SAU KHI xác nhận đã bấm được (xem dưới) — tăng
+    // trước như bản cũ làm vòng xoay lệch mỗi khi click bị từ chối.
     const name = names[this.luanhoiSkillIdx % names.length];
-    this.luanhoiSkillIdx++;
 
     const clicked = await this.exec(`(() => {
       const removeVN = s => (s || '').normalize('NFD')
@@ -3788,7 +3888,15 @@ class NpcBot {
       return null;
     })()`);
 
-    if (clicked) return clicked;
+    if (clicked) {
+      // V80: click bị game từ chối (đang hồi / đợi lượt / bấm nhầm) thì
+      // không tính là đã bấm — giữ nguyên idx để vòng sau bấm lại đúng
+      // skill này.
+      const detail = await this.peekBicanhEphemeralDetail();
+      if (detail && (detail.kind === 'cooldown' || detail.kind === 'wait-turn' || detail.kind === 'wrong-person')) return null;
+      this.luanhoiSkillIdx++;
+      return clicked;
+    }
 
     // Fallback: skill theo idx không match được (cooldown/tên lệch) → thử các skill còn lại
     // THEO ĐÚNG THỨ TỰ XOAY VÒNG (bắt đầu từ idx hiện tại), không phải "cứ thấy cái nào trước thì bấm cái đó"
@@ -3839,7 +3947,12 @@ class NpcBot {
       return null;
     })()`);
 
-    if (any) return any;
+    if (any) {
+      const detail = await this.peekBicanhEphemeralDetail();
+      if (detail && (detail.kind === 'cooldown' || detail.kind === 'wait-turn' || detail.kind === 'wrong-person')) return null;
+      this.luanhoiSkillIdx++;
+      return any;
+    }
 
     // Debug: in toàn bộ button/role=button 1 lần duy nhất (tránh spam log mỗi vòng lặp)
     if (this.luanhoiSkillDebugCount === undefined) this.luanhoiSkillDebugCount = 0;
