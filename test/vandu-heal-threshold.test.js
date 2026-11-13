@@ -66,7 +66,7 @@ async function runBattle(node, hpPct) {
 
 // Như runBattle nhưng màn battle tự viết (để giả lập màn boss: số Tiết
 // trong màn khác số node bot đang giữ, hoặc màn có chữ boss).
-async function runBattleText(presetNode, text, lastBuffNode) {
+async function runBattleText(presetNode, text, lastBuffNode, buttons) {
   const bot = new NpcBot({ executeJavaScript() {} }, 1);
   bot.updateConfig({ mode: 'vandu', vanduCmd: '!vandu', username: 'Test', userId: '' });
   bot.vanduNode = presetNode;
@@ -75,7 +75,7 @@ async function runBattleText(presetNode, text, lastBuffNode) {
   bot.log = (m) => logs.push(String(m));
   bot.delay = async () => {};
   bot.dismissEphemeralMessages = async () => {};
-  const queue = [{ msgId: 'battle-x', text, buttons: ['🗡️ Phá Giáp', 'Cửu Chuyển Hoàn Hồn'] }, tripEndScreen];
+  const queue = [{ msgId: 'battle-x', text, buttons: buttons || ['🗡️ Phá Giáp', 'Cửu Chuyển Hoàn Hồn'] }, tripEndScreen];
   let current = null;
   bot.vanduScanLatest = async () => {
     if (queue.length === 0) throw new Error('scan script exhausted');
@@ -110,20 +110,30 @@ async function runBattleText(presetNode, text, lastBuffNode) {
     eq(bot.vanduHealThreshold(24), 50, 'boss Tiet 24 nguong 50');
     eq(bot.vanduHealThreshold(36), 50, 'boss Tiet 36 nguong 50');
     eq(bot.vanduHealThreshold(1), 20, 'Tiet 1 nguong 20');
-    eq(bot.vanduHealThreshold(11), 20, 'Tiet 11 nguong 20');
+    eq(bot.vanduHealThreshold(11), 50, 'vung boss Tiet 11 nguong 50');
     eq(bot.vanduHealThreshold(13), 20, 'Tiet 13 nguong 20');
-    eq(bot.vanduHealThreshold(23), 20, 'Tiet 23 nguong 20');
-    eq(bot.vanduHealThreshold(35), 20, 'Tiet 35 nguong 20');
+    eq(bot.vanduHealThreshold(23), 50, 'vung boss Tiet 23 nguong 50');
+    eq(bot.vanduHealThreshold(35), 50, 'vung boss Tiet 35 nguong 50');
     eq(bot.vanduHealThreshold(0), 20, 'khong doc duoc Tiet tinh nhu thuong (20)');
   }
 
-  // A: Tiết thường 23, HP 45% — KHÔNG xài đan, đánh skill tiếp.
+  // A: Tiết thường 13, HP 45% — KHÔNG xài đan, đánh skill tiếp.
+  // (Trước đây dùng Tiết 23 làm ví dụ thường, nhưng 23 là vùng boss
+  // nên ngưỡng 50 — xem case N.)
   {
-    const { logs, clicks } = await runBattle(23, 45);
+    const { logs, clicks } = await runBattle(13, 45);
     eq(clicks.includes('dan'), false, 'A: Tiet thuong HP 45% khong duoc xai dan');
     eq(clicks.includes('pha giap'), true, 'A: khong xai dan thi phai danh skill');
     lacks(logs, 'hồi máu bằng Cửu Chuyển', 'A: khong duoc log hoi mau');
-    has(logs, 'Vân Du [Tiết 23]: vào trận', 'A: log vao tran van ghi Tiet (v63)');
+    has(logs, 'Vân Du [Tiết 13]: vào trận', 'A: log vao tran van ghi Tiet (v63)');
+  }
+
+  // N (v78): Tiết 23 là vùng boss (boss 24 chen vào khi node còn 23)
+  // nên HP 45% (<50%) phải xài đan như boss, không giữ ngưỡng 20.
+  {
+    const { logs, clicks } = await runBattle(23, 45);
+    eq(clicks.includes('dan'), true, 'N: vung boss Tiet 23 HP 45% phai xai dan');
+    has(logs, 'hồi máu bằng Cửu Chuyển (HP 45%, Tiết 23)', 'N: phai log hoi mau HP 45% Tiet 23');
   }
 
   // B: boss Tiết 12, HP 45% — xài đan.
@@ -147,9 +157,9 @@ async function runBattleText(presetNode, text, lastBuffNode) {
     lacks(logs, 'hồi máu bằng Cửu Chuyển', 'D: khong duoc log hoi mau');
   }
 
-  // E: Tiết thường 23, HP đúng 20% — KHÔNG xài (luật là < 20%).
+  // E: Tiết thường 13, HP đúng 20% — KHÔNG xài (luật là < 20%).
   {
-    const { logs, clicks } = await runBattle(23, 20);
+    const { logs, clicks } = await runBattle(13, 20);
     eq(clicks.includes('dan'), false, 'E: Tiet thuong HP dung 20% khong xai (can < 20%)');
     lacks(logs, 'hồi máu bằng Cửu Chuyển', 'E: khong duoc log hoi mau');
   }
@@ -182,13 +192,13 @@ async function runBattleText(presetNode, text, lastBuffNode) {
     has(logs, 'hồi máu bằng Cửu Chuyển (HP 40%', 'H: phai log hoi mau HP 40%');
   }
 
-  // I (v69): chẩn đoán — máu 40% ở Tiết 11 mà không hồi (không có buff
-  // ở Tiết 11 trước đó, không có chữ boss) thì log 1 lần lý do.
+  // I (v69, sửa v78): chẩn đoán — máu 40% ở Tiết 11 (vùng boss,
+  // ngưỡng 50) mà hết đan thì không hồi được, log 1 lần lý do.
   {
     const screen11 = `Tiết Điểm 11/36\nTrạng Thái Chiến Trường\nDiễn Biến Hiệp Đấu\nHòa: 200.000.000/500.000.000\nQuái: 840.364.197/943.248.306 HP (89%)`;
-    const { logs, clicks } = await runBattleText(11, screen11, 0);
-    eq(clicks.includes('dan'), false, 'I: khong co buff o Tiet 11 thi nguong van 20, HP 40% khong xai');
-    has(logs, 'máu 40% <50% nhưng không hồi (ngưỡng 20, đan 1/3, boss=không, Tiết 11)', 'I: phai log chan doan ly do khong hoi');
+    const { logs, clicks } = await runBattleText(11, screen11, 0, ['🗡️ Phá Giáp']);
+    eq(clicks.includes('dan'), false, 'I: het dan thi khong xai duoc du HP 40% < 50');
+    has(logs, 'máu 40% <50% nhưng không hồi (ngưỡng 50, đan 0/3, boss=không, Tiết 11)', 'I: phai log chan doan ly do khong hoi');
   }
 
   // J (không phá đường thường): Tiết 11, HP 15% (<20%) thì xài đan
@@ -206,6 +216,27 @@ async function runBattleText(presetNode, text, lastBuffNode) {
     const { logs, clicks } = await runBattleText(11, screen11, 11);
     eq(clicks.includes('dan'), false, 'K: boss HP 55% khong xai (can < 50%)');
     lacks(logs, 'hồi máu bằng Cửu Chuyển', 'K: khong duoc log hoi mau');
+  }
+
+  // L (v78, ảnh battle thật 2026-11-13 07:37 + thua boss Tiết 12):
+  // trận sau buff ở Tiết 11 là boss 12 — Trạng Thái ghi HP 40% nhưng
+  // Diễn Biến còn cặp đầu 100% (hiệp 1). Code cũ đọc 100% nên không
+  // hồi; code mới đọc 40% từ Trạng Thái nên phải xài đan.
+  {
+    const screen11 = `Tiết Điểm 11/36\nTrạng Thái Chiến Trường\nHiệp cái: 235.445.079/588.612.697 HP (40%)\n[Tiên Tiểu Hư Ảo] Thiết Mao Hắc Lang: 2.205.862.109/2.205.862.109 HP (100%)\nDiễn Biến Hiệp Đấu\nHiệp cái: 588.612.697/588.612.697\nHiệp cái: 419.018.128/588.612.697`;
+    const { logs, clicks } = await runBattleText(11, screen11, 11);
+    eq(clicks.includes('dan'), true, 'L: boss 12 HP that 40% (Trang Thai) phai xai dan du Dien Bien con cap 100%');
+    has(logs, 'hồi máu bằng Cửu Chuyển (HP 40%', 'L: phai log hoi mau HP 40%');
+  }
+
+  // M (v78, log thật 07:40:49-51): trận boss ở Tiết 11 nhưng buff cuối
+  // ở Tiết 10 (Kỳ Duyên Môn chen vào ở Tiết 11) nên luật v69 trượt —
+  // vùng boss 11/23/35 giờ ngưỡng 50 luôn thì HP 26% phải xài đan.
+  {
+    const screen11 = `Tiết Điểm 11/36\nTrạng Thái Chiến Trường\nHiệp cái: 153.039.301/588.612.697 HP (26%)\n[Hư Ảo] Thiết Mao Hắc Lang: 2.205.862.109/2.205.862.109 HP (100%)\nDiễn Biến Hiệp Đấu\nHiệp cái: 588.612.697/588.612.697\nHiệp cái: 419.018.128/588.612.697`;
+    const { logs, clicks } = await runBattleText(11, screen11, 10);
+    eq(clicks.includes('dan'), true, 'M: vung boss Tiet 11 HP 26% phai xai dan du khong co buff o Tiet 11');
+    has(logs, 'hồi máu bằng Cửu Chuyển (HP 26%', 'M: phai log hoi mau HP 26%');
   }
 
   console.log('vandu-heal-threshold: OK');

@@ -5410,27 +5410,47 @@ class NpcBot {
 
   vanduPlayerHpPct(text) {
     const raw = String(text || '');
-    // V27: máu người chơi đọc từ mục "Diễn Biến Hiệp Đấu" trước — dòng
-    // đầu của mục là "Tên: hiện tại/tối đa" của người chơi (vd
-    // 275712739/505600508 ≈ 55%). Cách cũ đọc "HP (%)" đầu tiên toàn
-    // trúng máu QUÁI (dòng quái ghi "840.364.197/943.248.306 HP (89%)"
-    // nằm trên mục Diễn Biến), nên tới 50% máu mình bot vẫn không hồi.
-    // Chỉ nhận cặp số mà max >= 1000 để khỏi nhầm "Tiết Điểm 12/36".
+    const pctOf = (curS, maxS) => {
+      const cur = Number(String(curS).replace(/[.,]/g, ''));
+      const max = Number(String(maxS).replace(/[.,]/g, ''));
+      if (Number.isFinite(cur) && Number.isFinite(max) && max >= 1000 && cur <= max) {
+        return Math.round((100 * cur) / max);
+      }
+      return null;
+    };
+    // V78 (anh 2026-11-13, 2 ảnh battle thật 07:37): Diễn Biến Hiệp Đấu
+    // tích lũy nhiều hiệp (cũ trước, mới sau) nên cặp ĐẦU TIÊN không còn
+    // là máu hiện tại — ảnh 2: cặp đầu 100% trong khi Trạng Thái ghi
+    // Hiệp cái chỉ còn 27%; ảnh 1: cặp đầu 59% trong khi bảng buff ghi
+    // Sinh Lực Hiện Tại 32%. Trước đây lấy cặp đầu nên HP hiển thị
+    // (và cả ngưỡng hồi máu dùng chung hàm này) luôn cao hơn thật.
+    // Ưu tiên dòng Trạng Thái "Hiệp cái: hiện tại/tối đa HP (x%)" —
+    // đó là máu hiện tại; dòng Diễn Biến "Hiệp cái: ..." không có chữ
+    // HP nên không lẫn với nhau. Lấy cặp CUỐI nếu có nhiều dòng.
+    const statusRe = /Hiệp cái:\s*([\d.,]+)\s*\/\s*([\d.,]+)\s*HP/gi;
+    let m;
+    let statusPct = null;
+    while ((m = statusRe.exec(raw)) !== null) {
+      const p = pctOf(m[1], m[2]);
+      if (p !== null) statusPct = p;
+    }
+    if (statusPct !== null) return statusPct;
+    // Không có dòng Trạng Thái: lấy cặp "Hiệp cái:" / "Hòa:" CUỐI trong
+    // Diễn Biến (hiệp mới nhất), không lấy cặp đầu như trước (v27 chỉ
+    // có 1 cặp nên không đổi kết quả cũ).
     const diemIdx = raw.search(/Diễn Biến Hiệp Đấu/i);
     if (diemIdx >= 0) {
       const section = raw.slice(diemIdx);
-      const re = /([\d.]+)\s*\/\s*([\d.]+)/g;
-      let m;
+      const re = /(?:Hiệp cái|Hòa)\s*:\s*([\d.,]+)\s*\/\s*([\d.,]+)/g;
+      let last = null;
       while ((m = re.exec(section)) !== null) {
-        const cur = Number(m[1].replace(/\./g, ''));
-        const max = Number(m[2].replace(/\./g, ''));
-        if (Number.isFinite(cur) && Number.isFinite(max) && max >= 1000 && cur <= max) {
-          return Math.round((100 * cur) / max);
-        }
+        const p = pctOf(m[1], m[2]);
+        if (p !== null) last = p;
       }
+      if (last !== null) return last;
     }
     // Fallback cũ cho màn không có mục Diễn Biến (Khí Huyết %, HP %).
-    let m = raw.match(/Khí Huyết[^0-9%]*(\d+)\s*%/);
+    m = raw.match(/Khí Huyết[^0-9%]*(\d+)\s*%/);
     if (m) return Number(m[1]);
     m = raw.match(/HP[^0-9%]*(\d+)\s*%/);
     if (m) return Number(m[1]);
@@ -5441,8 +5461,16 @@ class NpcBot {
   // boss Tiet 12/24/36 thi mau < 50% xai, Tiet thuong chi xai khi mau
   // < 20% (giu dan cho boss). Tiet khong doc duoc (vanduNode 0) tinh
   // nhu Tiet thuong.
+  // V78 (anh 2026-11-13, log 07:40:51): boss chen vao khi node bot
+  // con 11/23/35 (chua kip len 12/24/36), ma v69 chi nhan ra khi tran
+  // di ngay sau bang buff o cung Tiet — chuyen nay buff cuoi o Tiet 10
+  // roi Ky Duyen Mon o Tiet 11 chen vao nen boss=khong, nguong 20,
+  // mau 26% khong hoi -> thua boss. O vung 11/23/35 thi boss da ke ben:
+  // hoi o <50% luon, ke ca tran thuong (vao boss voi mau cao van tot
+  // hon giu dan). UI status row tu v71 da ghi nguong <50% (boss) cho
+  // vung nay — gio bot moi khop voi UI.
   vanduHealThreshold(node) {
-    return (node === 12 || node === 24 || node === 36) ? 50 : 20;
+    return (node === 11 || node === 12 || node === 23 || node === 24 || node === 35 || node === 36) ? 50 : 20;
   }
 
   // V68 (2026-11-12, anh: boss Tiết 12 máu <50% mà không hồi): màn

@@ -369,6 +369,10 @@ eq(bot.vanduPlayerHpPct('Linh Tuyền Thủ Thú [Hư Ảo] Băng Tuyết Đa B�
 eq(bot.vanduPlayerHpPct('Diễn Biến Hiệp Đấu\nHiệp cái: 250000/500000'), 50, 'V27: HP 50% dung nguong hoi mau');
 eq(bot.vanduPlayerHpPct('Tiết Điểm 12/36'), null, 'V27: Tiet Diem khong phai HP');
 eq(bot.vanduPlayerHpPct('Tiết Điểm 12/36\nKhí Huyết: 42%'), 42, 'V27: fallback Khi Huyet');
+// V78 (anh 2026-11-13, 2 ảnh battle thật 07:37): Diễn Biến tích lũy
+// nhiều hiệp nên cặp đầu là máu cũ — lấy máu hiện tại từ Trạng Thái.
+eq(bot.vanduPlayerHpPct('Trạng Thái Chiến Trường\nHiệp cái: 161.131.770/588.612.697 HP (27%)\n[Tiên Tiểu Hư Ảo] Băng Tuyết Dạ Báo: 215.610.327/824.057.635 HP (26%)\nDiễn Biến Hiệp Đấu\nHiệp cái: 588.612.697/588.612.697\nHiệp cái: 419.018.128/588.612.697'), 27, 'V78: lay HP hien tai tu Trang Thai, khong lay cap dau Dien Bien (100%)');
+eq(bot.vanduPlayerHpPct('Diễn Biến Hiệp Đấu\nHiệp cái: 347.281.691/588.612.697\nHiệp cái: 188.356.063/588.612.697'), 32, 'V78: khong co Trang Thai thi lay cap CUOI Dien Bien (32%), khong lay cap dau (59%)');
 console.log('ALL VANDU TESTS PASSED');
 
 // V28: bang anh 2026-11-05 — do hiem ghi "[Vận Mệnh - Vàng (Thần Thoại)]",
