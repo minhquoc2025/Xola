@@ -6674,6 +6674,22 @@ class NpcBot {
         continue;
       }
 
+      // Truyền Quốc — "Nhận Truyền Quốc Tối Cao" (v81, anh chốt 2026-11-14,
+      // ảnh màn Trận Đồ Ngũ Hành ở Tiết 23/36, mạch Sinh 4/5, Dị Biến
+      // Thiên Đạo Phục Hưng): bảng có 3 nút, "Nhận Truyền Quốc Tối Cao"
+      // (xanh), "Đốt giấy tiền cúng bái" và "Phớt lờ". Anh dặn gặp bảng
+      // này thì luôn bấm Nhận Truyền Quốc Tối Cao, không đốt giấy tiền,
+      // không phớt lờ. Màn này KHÔNG phải màn Kỳ Ngộ (không có chữ KỲ NGỘ
+      // hay nút Dâng hương) nên luật xanh lá chung (v19) không chạy —
+      // nhận diện bằng chính nút cần bấm, đặt sau handler trứng v79
+      // (như v58/v79).
+      if (btnNorm.some(x => x.includes('nhan truyen quoc toi cao'))) {
+        await this.vanduClickButton('Nhận Truyền Quốc Tối Cao');
+        this.vanduLog('📜 Vân Du: bấm Nhận Truyền Quốc Tối Cao');
+        await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
+        continue;
+      }
+
       // Bảng Tiếp Tục Tiến Sâu: sau thua boss (về checkpoint) và sau giải đố
       // đúng (sang chặng kế) đều dùng nút này. V1 Vân Du chưa xử lý nên kẹt.
       if (btnNorm.some(x => x.includes('tiep tuc tien sau'))) {
