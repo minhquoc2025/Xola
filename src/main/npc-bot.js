@@ -4426,6 +4426,57 @@ class NpcBot {
     return (typeof floor === 'number' && floor > 0) ? floor : null;
   }
 
+  // v86 — số tin nhắn (article + ephemeral) hiện có, làm mốc để chỉ nhận
+  // màn "Hết thời gian" xuất hiện SAU khi lượt bắt đầu: màn timeout của
+  // lượt trước vẫn nằm trong 40 tin gần nhất, không có mốc thì lượt mới
+  // sẽ dừng oan ngay vòng đầu (vd timeout tầng 546 lúc 08:35, lượt mới
+  // 08:37 vẫn thấy màn đó trong DOM).
+  async bicanhMsgCount() {
+    const n = await this.exec(`(() => document.querySelectorAll('[role="article"], [class*="ephemeral"]').length)()`);
+    return (typeof n === 'number' && n > 0) ? n : 0;
+  }
+
+  // v86 — đọc tầng từ màn "Hết thời gian ở tầng N!" (lượt Bicanh kết thúc
+  // do hết giờ, game đã trả thưởng tích lũy). bicanhCurrentFloor không đọc
+  // được màn này vì nó không có "/600" (vd "Hết thời gian ở tầng 546!"),
+  // và trước v86 loop không có handler nào cho nó nên bot quay "Không tìm
+  // thấy skill" mãi. Quét cả [role="article"] lẫn [class*="ephemeral"]
+  // như peek, vì màn này có thể là tin ephemeral của game (ảnh 2026-11-16
+  // 08:35). Chỉ nhận màn có vị trí >= baseline (xuất hiện sau khi lượt
+  // bắt đầu). Trả số tầng hoặc null.
+  async bicanhTimeoutFloor(baselineCount) {
+    const userId = this.userId || '';
+    const username = this.username || '';
+    const baseline = (typeof baselineCount === 'number' && baselineCount > 0) ? baselineCount : 0;
+    const floor = await this.exec(`(() => {
+      const userId = ${JSON.stringify(userId)};
+      const username = ${JSON.stringify(username)};
+      const baseline = ${baseline};
+      const msgs = document.querySelectorAll('[role="article"], [class*="ephemeral"]');
+      const total = msgs.length;
+      const recent = Array.from(msgs).slice(-40).reverse();
+      const nd = value => String(value || '')
+        .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '')
+        .replace(/\\u0111/g, 'd').replace(/\\u0110/g, 'd')
+        .toLowerCase();
+      for (let i = 0; i < recent.length; i++) {
+        const msg = recent[i];
+        const origIdx = total - 1 - i;
+        if (origIdx < baseline) continue;
+        if (msg.getAttribute && msg.getAttribute('data-bot-ephemeral-dismissed') === 'true') continue;
+        if (userId && !(msg.innerHTML || '').includes(userId)) continue;
+        if (!userId && username) {
+          const first = nd(username).split(' ')[0];
+          if (first && !nd(msg.textContent).includes(first)) continue;
+        }
+        const m = nd(msg.textContent).match(/het thoi gian o tang\\s*(\\d+)/);
+        if (m) return parseInt(m[1], 10);
+      }
+      return null;
+    })()`);
+    return (typeof floor === 'number' && floor > 0) ? floor : null;
+  }
+
   // v85 — đồng hồ của Bicanh: mặc định là thời gian thật; test giả lập
   // bằng cách gán lại hàm này và cho delay() đẩy đồng hồ giả theo ms.
   bicanhNowMs() { return Date.now(); }
@@ -4510,6 +4561,9 @@ class NpcBot {
     };
     // Tầng đang đánh lúc vào trận — để vòng sau biết khi nào sang tầng mới.
     let bicanhLastFloor = await this.bicanhCurrentFloor();
+    // v86 — mốc số tin nhắn lúc vào trận (chống dừng oan vì màn timeout
+    // của lượt trước vẫn còn trong DOM).
+    const bicanhStartMsgCount = await this.bicanhMsgCount();
     while (this.isRunning && this.runId === runId) {
       // v82/v83 — sang tầng mới thì chạy lại combo từ đầu, giống Luân Hồi reset
       // mỗi tầng (và Vân Du v41 reset mỗi trận). NHƯNG tầng mới KHÔNG làm
@@ -4527,6 +4581,16 @@ class NpcBot {
         this.log(`🌀 Bicanh: sang tầng ${bicanhFloorNow} — chạy lại combo từ đầu (${bicanhSkillAt(0)})...`);
       }
       if (bicanhFloorNow !== null) bicanhLastFloor = bicanhFloorNow;
+      // v86 — hết thời gian ở tầng N: lượt Bicanh đã kết thúc (game đã trả
+      // thưởng tích lũy, màn này không còn nút skill), dừng bot thay vì quay
+      // "Không tìm thấy skill" mãi. Màn này bicanhCurrentFloor không đọc
+      // được (không có "/600") nên phải kiểm tra riêng mỗi vòng.
+      const bicanhTimedOutAt = await this.bicanhTimeoutFloor(bicanhStartMsgCount);
+      if (bicanhTimedOutAt !== null) {
+        this.log(`⏱️ Bicanh: hết thời gian ở tầng ${bicanhTimedOutAt} — dừng bot (đã nhận thưởng tích lũy).`);
+        this.isRunning = false;
+        break;
+      }
       const skillName = bicanhSkillAt(this._bicanhSkillIdx);
       if (!skillName) { this._bicanhSkillIdx++; continue; }
       // XOAY CHUẨN, KHÔNG NHẢY SKILL (quyết định của Nguyen 2026-11-02):
