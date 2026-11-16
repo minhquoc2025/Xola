@@ -4514,6 +4514,19 @@ class NpcBot {
         this.log(`🌀 Bicanh: sang tầng ${bicanhFloorNow} — chạy lại combo từ đầu (${bicanhSkillAt(0)})...`);
       }
       if (bicanhFloorNow !== null) bicanhLastFloor = bicanhFloorNow;
+      // v84 — mỗi vòng lặp ≈ 1 lượt game trôi qua (≈1-2s: click + delay,
+      // chờ 2s, hay không tìm thấy 2s), nên trừ 1 lượt hồi cho MỌI skill
+      // đang chờ — kể cả lúc chờ hay không tìm thấy, vì thời gian game vẫn
+      // trôi. v83 chỉ trừ khi có click được chấp nhận nên map bị kẹt ở số
+      // cũ trong lúc chờ/không tìm thấy: 1 lần lệch là chờ nối chờ từng
+      // skill một (log 2026-11-16 08:23-08:27: mỗi tầng 15-90s thay vì ~7s).
+      // Tin "đang hồi" của game (nhánh detail dưới) vẫn ghi đè map bằng số
+      // thật của game nên tick này cùng lắm làm bot bấm sớm ~1 lượt, và lần
+      // peek sau sẽ sửa lại map.
+      for (const [name, turns] of [...bicanhCooldownLeft]) {
+        if (turns > 1) bicanhCooldownLeft.set(name, turns - 1);
+        else bicanhCooldownLeft.delete(name);
+      }
       const skillName = bicanhSkillAt(this._bicanhSkillIdx);
       if (!skillName) { this._bicanhSkillIdx++; continue; }
       // XOAY CHUẨN, KHÔNG NHẢY SKILL (quyết định của Nguyen 2026-11-02):
@@ -4522,14 +4535,12 @@ class NpcBot {
       // KHÔNG tiến tới skill khác. Nhảy tới skill khác là phá vòng: skill
       // nhảy tới cũng chưa đủ 3 turn hồi kể từ lần dùng trước của nó, nên
       // nó cũng bị báo hồi, rồi lại nhảy, rồi cả vòng loạn lên (log
-      // 09:41). Chờ ở đây trừ 1 lượt trong map mỗi lần chờ, rồi bấm lại
-      // cùng skill khi map về 0.
+      // 09:41). Tick v84 ở đầu vòng đã trừ 1 lượt trong map mỗi lần chờ,
+      // rồi bấm lại cùng skill khi map về 0.
       const bicanhLeft = bicanhCooldownLeft.get(skillName) || 0;
       if (bicanhLeft > 0) {
         this.log(`⏳ "${skillName}" đang hồi còn ${bicanhLeft} lượt — chờ rồi bấm lại đúng skill này, không nhảy tới skill khác...`);
         await this.delay(this.skillRetryWaitMs);
-        if (bicanhLeft > 1) bicanhCooldownLeft.set(skillName, bicanhLeft - 1);
-        else bicanhCooldownLeft.delete(skillName);
         continue;
       }
       // Chặn bấm lại skill vừa bấm (giữ nguyên từ 1816bc0, chỉ dùng làm
@@ -4580,16 +4591,8 @@ class NpcBot {
           bicanhCooldownLeft.set(targetSkill, detail.turns);
           this.log(`⏳ "${targetSkill}" đang hồi còn ${detail.turns} turn — ghi nhớ, sẽ chờ rồi bấm lại đúng skill này khi tới lượt nó, không nhảy skill khác...`);
         }
-        // Lượt trước bị báo hồi nên KHÔNG trừ cooldown của các skill khác.
-      } else if (result && !result.waitTurn && !result.wrongPerson && bicanhPrevClicked) {
-        // Không có tin mới VÀ lượt trước thực sự đã bấm -> lượt trước được
-        // game chấp nhận, trừ 1 lượt hồi cho mọi skill đang chờ. Nếu lượt
-        // trước không bấm (không tìm thấy nút, bị lùi, v.v.) thì không trừ,
-        // nếu không map về 0 sớm và bot bấm lại skill vẫn đang hồi.
-        for (const [name, turns] of Array.from(bicanhCooldownLeft)) {
-          if (turns > 1) bicanhCooldownLeft.set(name, turns - 1);
-          else bicanhCooldownLeft.delete(name);
-        }
+        // Tick v84 ở đầu vòng đã trừ map theo thời gian trôi qua, nên ở
+        // đây không trừ thêm nữa (trừ 2 lần là bấm sớm).
       }
       if (result && (result.waitTurn || result.wrongPerson)) {
         // Tin bị từ chối còn sót từ lượt click trước: skill đó chưa được
