@@ -171,7 +171,40 @@ async function testBicanhFloorNullDoesNotReset() {
 testBicanhFloorResetRestartsCombo()
   .then(testBicanhCurrentFloorParsesNewestBattle)
   .then(testBicanhFloorNullDoesNotReset)
+  .then(testBicanhStopsAtMaxFloor)
   .catch((error) => {
     console.error(error);
     process.exitCode = 1;
   });
+
+// 4. v87 — tới tầng 600 (tối đa) thì dừng ngay, không bấm skill nữa.
+async function testBicanhStopsAtMaxFloor() {
+  const bot = new NpcBot({ executeJavaScript: () => 0 }, 1);
+  bot.isRunning = true;
+  bot.runId = 1;
+  bot.bicanhSkillOrder = [32, 29, 26, 23];
+  const logs = [];
+  bot.log = (...args) => logs.push(args.join(' '));
+  bot.delay = async () => {};
+  bot.sendChat = async () => {};
+  bot.waitForBicanhButton = async () => 'battle';
+  bot.checkBicanhCooldown = async () => 0;
+
+  bot.bicanhCurrentFloor = async () => 600;
+  const seen = [];
+  bot.clickNextBicanhSkill = async (skillName) => {
+    seen.push(skillName);
+    if (seen.length >= 5) bot.isRunning = false;
+    return { clicked: skillName, waitTurn: false, wrongPerson: false, cooldownDetail: null, skipCurrent: false };
+  };
+
+  await bot.bicanhLoop(1);
+
+  if (seen.length !== 0) {
+    throw new Error('Bicanh tới tầng 600 phải dừng ngay, không bấm skill nào, thực tế bấm: ' + JSON.stringify(seen));
+  }
+  if (!logs.some((line) => line.includes('tầng 600') && line.includes('dừng bot'))) {
+    throw new Error('Bicanh tới tầng 600 phải log rõ tầng tối đa và dừng bot, log thực tế: ' + JSON.stringify(logs));
+  }
+  console.log('Bicanh stops at max floor passed');
+}

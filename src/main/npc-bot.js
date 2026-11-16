@@ -4559,6 +4559,12 @@ class NpcBot {
       }
       return this.luanhoiSkillNames[idx % this.luanhoiSkillNames.length];
     };
+    // v87 — tầng tối đa của Bicanh (game chỉ có 600 tầng): tới tầng 600
+    // thì dừng, không chạy tiếp (Nguyen chốt 2026-11-16 "cho nó chạy max
+    // là 600 tầng"). Dừng lúc VỪA TỚI tầng 600, tức đã đánh xong 599 tầng
+    // và đang đứng trước tầng 600 — muốn đánh nốt tầng 600 thì cần biết
+    // màn hoàn thành sau khi qua 600 trông thế nào, chưa có mẫu.
+    const bicanhMaxFloor = 600;
     // Tầng đang đánh lúc vào trận — để vòng sau biết khi nào sang tầng mới.
     let bicanhLastFloor = await this.bicanhCurrentFloor();
     // v86 — mốc số tin nhắn lúc vào trận (chống dừng oan vì màn timeout
@@ -4581,6 +4587,12 @@ class NpcBot {
         this.log(`🌀 Bicanh: sang tầng ${bicanhFloorNow} — chạy lại combo từ đầu (${bicanhSkillAt(0)})...`);
       }
       if (bicanhFloorNow !== null) bicanhLastFloor = bicanhFloorNow;
+      // v87 — đã tới tầng tối đa (600) thì dừng bot.
+      if (bicanhFloorNow !== null && bicanhFloorNow >= bicanhMaxFloor) {
+        this.log(`🏆 Bicanh: đã đạt tầng ${bicanhFloorNow} (tối đa ${bicanhMaxFloor}) — dừng bot.`);
+        this.isRunning = false;
+        break;
+      }
       // v86 — hết thời gian ở tầng N: lượt Bicanh đã kết thúc (game đã trả
       // thưởng tích lũy, màn này không còn nút skill), dừng bot thay vì quay
       // "Không tìm thấy skill" mãi. Màn này bicanhCurrentFloor không đọc
