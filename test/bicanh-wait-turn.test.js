@@ -13,7 +13,13 @@ async function testBicanhWaitTurnRetriesPreviousSkill() {
   bot.bicanhSkillOrder = [29, 26, 23];
   const logs = [];
   bot.log = (...args) => logs.push(args.join(' '));
-  bot.delay = async () => {};
+  let fakeNow = 0;
+  // v85: đồng hồ giả — mỗi lần delay() đẩy thời gian theo đúng ms được delay
+  // (click 1000ms, chờ/không tìm thấy 2000ms), để cooldown tính bằng thời
+  // gian thật có cái để trôi trong test (delay thật là no-op thì đồng hồ
+  // thật gần như không nhúc nhích và bot chờ mãi không hết hồi).
+  bot.delay = async (ms) => { fakeNow += (ms || 0); };
+  bot.bicanhNowMs = () => fakeNow;
   bot.sendChat = async () => {};
   bot.waitForBicanhButton = async () => 'battle';
   bot.checkBicanhCooldown = async () => 0;
@@ -115,8 +121,9 @@ async function testPeekBicanhEphemeralDetail() {
   console.log('Bicanh ephemeral peek detail passed');
 }
 
-// 4. Loop Bicanh: skill bị báo hồi 2 turn thì phải bỏ qua cho tới khi đủ
-// 2 lượt chấp nhận, thay vì bấm lại ngay vòng sau và lại bị báo hồi.
+// 4. Loop Bicanh: skill bị báo hồi 2 turn (≈3600ms) thì phải chờ tới khi
+// hết hồi theo thời gian rồi bấm lại đúng skill đó, thay vì bấm lại ngay
+// vòng sau và lại bị báo hồi (v85: mốc hồi = now + turns * 1800ms).
 async function testBicanhCooldownSkip() {
   const bot = new NpcBot({ executeJavaScript: () => 0 }, 1);
   bot.isRunning = true;
@@ -124,7 +131,13 @@ async function testBicanhCooldownSkip() {
   bot.bicanhSkillOrder = [29, 26, 23];
   const logs = [];
   bot.log = (...args) => logs.push(args.join(' '));
-  bot.delay = async () => {};
+  let fakeNow = 0;
+  // v85: đồng hồ giả — mỗi lần delay() đẩy thời gian theo đúng ms được delay
+  // (click 1000ms, chờ/không tìm thấy 2000ms), để cooldown tính bằng thời
+  // gian thật có cái để trôi trong test (delay thật là no-op thì đồng hồ
+  // thật gần như không nhúc nhích và bot chờ mãi không hết hồi).
+  bot.delay = async (ms) => { fakeNow += (ms || 0); };
+  bot.bicanhNowMs = () => fakeNow;
   bot.sendChat = async () => {};
   bot.waitForBicanhButton = async () => 'battle';
   bot.checkBicanhCooldown = async () => 0;
@@ -147,8 +160,9 @@ async function testBicanhCooldownSkip() {
 
   await bot.bicanhLoop(1);
 
-  // Xoay chuẩn: s29 bị ghi hồi 2 turn, sau s23 (trừ còn 1) thì tới lượt
-  // s29 bot phải CHỜ và bấm lại đúng s29, KHÔNG nhảy tới s26/s23 nữa.
+  // Xoay chuẩn: s29 bị ghi hồi 2 turn (≈3600ms), tới lượt s29 (sau s23,
+  // ~3000ms đã trôi) còn ~1 lượt nên bot phải CHỜ rồi bấm lại đúng s29,
+  // KHÔNG nhảy tới s26/s23 nữa.
   const expected = [s29, s26, s23, s29];
   if (JSON.stringify(seen) !== JSON.stringify(expected)) {
     throw new Error('Bicanh xoay chuẩn phải chờ và bấm lại đúng skill đang hồi, thực tế: ' + JSON.stringify(seen));
@@ -202,7 +216,13 @@ async function testBicanhSkipCurrentCooldown() {
   bot.bicanhSkillOrder = [29, 26, 23];
   const logs = [];
   bot.log = (...args) => logs.push(args.join(' '));
-  bot.delay = async () => {};
+  let fakeNow = 0;
+  // v85: đồng hồ giả — mỗi lần delay() đẩy thời gian theo đúng ms được delay
+  // (click 1000ms, chờ/không tìm thấy 2000ms), để cooldown tính bằng thời
+  // gian thật có cái để trôi trong test (delay thật là no-op thì đồng hồ
+  // thật gần như không nhúc nhích và bot chờ mãi không hết hồi).
+  bot.delay = async (ms) => { fakeNow += (ms || 0); };
+  bot.bicanhNowMs = () => fakeNow;
   bot.sendChat = async () => {};
   bot.waitForBicanhButton = async () => 'battle';
   bot.checkBicanhCooldown = async () => 0;
@@ -282,7 +302,13 @@ async function testBicanhWrongPersonRetriesPreviousSkill() {
   bot.bicanhSkillOrder = [29, 26, 23];
   const logs = [];
   bot.log = (...args) => logs.push(args.join(' '));
-  bot.delay = async () => {};
+  let fakeNow = 0;
+  // v85: đồng hồ giả — mỗi lần delay() đẩy thời gian theo đúng ms được delay
+  // (click 1000ms, chờ/không tìm thấy 2000ms), để cooldown tính bằng thời
+  // gian thật có cái để trôi trong test (delay thật là no-op thì đồng hồ
+  // thật gần như không nhúc nhích và bot chờ mãi không hết hồi).
+  bot.delay = async (ms) => { fakeNow += (ms || 0); };
+  bot.bicanhNowMs = () => fakeNow;
   bot.sendChat = async () => {};
   bot.waitForBicanhButton = async () => 'battle';
   bot.checkBicanhCooldown = async () => 0;
@@ -344,7 +370,13 @@ async function testBicanhDuplicateWaitTurnDoesNotStepBackTwice() {
   bot.bicanhSkillOrder = [29, 26, 23];
   const logs = [];
   bot.log = (...args) => logs.push(args.join(' '));
-  bot.delay = async () => {};
+  let fakeNow = 0;
+  // v85: đồng hồ giả — mỗi lần delay() đẩy thời gian theo đúng ms được delay
+  // (click 1000ms, chờ/không tìm thấy 2000ms), để cooldown tính bằng thời
+  // gian thật có cái để trôi trong test (delay thật là no-op thì đồng hồ
+  // thật gần như không nhúc nhích và bot chờ mãi không hết hồi).
+  bot.delay = async (ms) => { fakeNow += (ms || 0); };
+  bot.bicanhNowMs = () => fakeNow;
   bot.sendChat = async () => {};
   bot.waitForBicanhButton = async () => 'battle';
   bot.checkBicanhCooldown = async () => 0;
@@ -382,18 +414,24 @@ async function testBicanhDuplicateWaitTurnDoesNotStepBackTwice() {
   console.log('Bicanh duplicate wait-turn does not step back twice passed');
 }
 
-// 12. Lượt không bấm không được trừ cooldown: s29 hồi 2 turn, s23 bị
-// "không tìm thấy" 2 lần liên tiếp thì s29 chỉ được trừ 1 lần (cho lượt
-// s26 đã bấm trước đó), không phải trừ mỗi lần không tìm thấy, nếu không
-// s29 sẽ về 0 sớm và bị bấm lại khi vẫn đang hồi.
-async function testBicanhNotFoundDoesNotDecrementCooldown() {
+// 12. Không tìm thấy nút tốn 2s mỗi lần nên thời gian vẫn trôi (v85):
+// s29 hồi 2 turn (≈3600ms), s23 bị "không tìm thấy" 2 lần liên tiếp
+// (4000ms) thì tới lượt s29 là hết hồi — bot bấm đúng s29 khi tới lượt,
+// không bấm sớm (v84 tick mỗi vòng lặp thì s29 hết sớm hơn game ~1 lượt).
+async function testBicanhNotFoundAdvancesRealTime() {
   const bot = new NpcBot({ executeJavaScript: () => 0 }, 1);
   bot.isRunning = true;
   bot.runId = 1;
   bot.bicanhSkillOrder = [29, 26, 23];
   const logs = [];
   bot.log = (...args) => logs.push(args.join(' '));
-  bot.delay = async () => {};
+  let fakeNow = 0;
+  // v85: đồng hồ giả — mỗi lần delay() đẩy thời gian theo đúng ms được delay
+  // (click 1000ms, chờ/không tìm thấy 2000ms), để cooldown tính bằng thời
+  // gian thật có cái để trôi trong test (delay thật là no-op thì đồng hồ
+  // thật gần như không nhúc nhích và bot chờ mãi không hết hồi).
+  bot.delay = async (ms) => { fakeNow += (ms || 0); };
+  bot.bicanhNowMs = () => fakeNow;
   bot.sendChat = async () => {};
   bot.waitForBicanhButton = async () => 'battle';
   bot.checkBicanhCooldown = async () => 0;
@@ -418,14 +456,14 @@ async function testBicanhNotFoundDoesNotDecrementCooldown() {
 
   await bot.bicanhLoop(1);
 
-  // Xoay chuẩn: s29 (lần 1) -> s26 (ghi s29=2) -> s23 không tìm thấy x2
-  // -> s23 bấm được -> tới lượt s29, map còn 1 nên bot CHỜ và bấm lại
-  // đúng s29, không nhảy qua s26/s23 nữa.
+  // Xoay chuẩn: s29 (lần 1) -> s26 (ghi s29=2 turn ≈ 3600ms) -> s23
+  // không tìm thấy x2 (4000ms trôi qua) -> s23 bấm được -> tới lượt s29
+  // là hết hồi nên bấm đúng s29, không nhảy qua s26/s23 nữa.
   const expected = [s29, s26, s23, s23, s23, s29];
   if (JSON.stringify(seen) !== JSON.stringify(expected)) {
     throw new Error('Bicanh not-found không được trừ cooldown mỗi lần, thực tế: ' + JSON.stringify(seen));
   }
-  console.log('Bicanh not-found does not decrement cooldown passed');
+  console.log('Bicanh not-found advances real time passed');
 }
 
 // 13. Xoay chuẩn thay cho chặn vừa bấm: thứ tự Kim -> Hư, với Vạn đã
@@ -439,7 +477,13 @@ async function testBicanhDoesNotReclickJustUsedSkillAfterSkips() {
   bot.bicanhSkillOrder = [26, 29, 23];
   const logs = [];
   bot.log = (...args) => logs.push(args.join(' '));
-  bot.delay = async () => {};
+  let fakeNow = 0;
+  // v85: đồng hồ giả — mỗi lần delay() đẩy thời gian theo đúng ms được delay
+  // (click 1000ms, chờ/không tìm thấy 2000ms), để cooldown tính bằng thời
+  // gian thật có cái để trôi trong test (delay thật là no-op thì đồng hồ
+  // thật gần như không nhúc nhích và bot chờ mãi không hết hồi).
+  bot.delay = async (ms) => { fakeNow += (ms || 0); };
+  bot.bicanhNowMs = () => fakeNow;
   bot.sendChat = async () => {};
   bot.waitForBicanhButton = async () => 'battle';
   bot.checkBicanhCooldown = async () => 0;
@@ -632,7 +676,7 @@ testBicanhWaitTurnRetriesPreviousSkill()
   .then(testBicanhWrongPersonRetriesPreviousSkill)
   .then(testClickNextWrongPersonDoesNotClick)
   .then(testBicanhDuplicateWaitTurnDoesNotStepBackTwice)
-  .then(testBicanhNotFoundDoesNotDecrementCooldown)
+  .then(testBicanhNotFoundAdvancesRealTime)
   .then(testBicanhDoesNotReclickJustUsedSkillAfterSkips)
   .then(testBicanhFocusPicksLatestPostAnchorBattle)
   .then(testBicanhFocusSkipsOtherPlayerAndNonSkillScreens)
