@@ -4948,15 +4948,30 @@ class NpcBot {
           break;
         }
         const list = anchor >= 0 ? msgs.slice(anchor + 1) : msgs.slice(baseline);
-        // v91 — chỉ nhận màn battle MỚI NHẤT (Fox/Nguyen 2026-11-16: game
-        // sang tầng là ra message battle mới, màn cũ vẫn còn nút skill —
-        // bấm vào thì game không tính, trận mới hết giờ, timeout tầng 561).
-        // Tìm màn mới nhất khớp "Tầng N/600" trước, rồi chỉ xét nút trong
-        // đúng màn đó: màn mới chưa render nút thì trả null (đợi rồi bấm
-        // lại), KHÔNG rơi xuống màn cũ.
+        // v94 — chỉ nhận màn battle MỚI NHẤT (Nguyen 2026-11-16, timeout
+        // tầng 571: "không quét được dom mới, nó cứ follow cái cũ là hết
+        // giờ"). v91 chỉ nhận màn khớp "Tầng N/600" — màn battle mới
+        // không có chữ đó thì vô hình, bot rơi xuống màn cũ. v94 nhận
+        // diện màn battle bằng NÚT SKILL (có nút tên skill) HOẶC chữ
+        // "Tầng N/600": màn mới nhất khớp 1 trong 2 dấu hiệu là màn đang
+        // chạy; màn mới chưa render nút thì trả null (đợi rồi bấm lại),
+        // KHÔNG rơi xuống màn cũ.
         const clearFocus = () => {
           document.querySelectorAll('[data-bicanh-focus="true"]').forEach(m => m.removeAttribute('data-bicanh-focus'));
           window.botBicanhFocusMsgId = '';
+        };
+        // v94 — màn battle là màn có nút skill HOẶC chữ "Tầng N/600":
+        // màn mới không có chữ tầng vẫn nhận ra bằng nút; màn mới chưa
+        // render nút thì battle null ở dưới (đợi), không rơi xuống cũ.
+        const isBattleDom = (msg) => {
+          if (/Tầng\\s*(\\d+)\\s*\\//.test(msg.textContent || '')) return true;
+          const domBtns = msg.querySelectorAll('button, [role="button"]');
+          for (const btn of domBtns) {
+            const clean = norm(btn.textContent);
+            if (!clean) continue;
+            if (skillNames.some(name => name && (clean === name || clean.includes(name)))) return true;
+          }
+          return false;
         };
         let battle = null;
         for (let i = list.length - 1; i >= 0; i--) {
@@ -4964,7 +4979,7 @@ class NpcBot {
           if (msg.getAttribute && msg.getAttribute('data-bot-ephemeral') === 'true') continue;
           const html = msg.innerHTML || '';
           if (!html.includes(userId)) continue;
-          if (/Tầng\\s*(\\d+)\\s*\\//.test(msg.textContent || '')) { battle = msg; break; }
+          if (isBattleDom(msg)) { battle = msg; break; }
         }
         if (!battle) { clearFocus(); return null; }
         const btns = battle.querySelectorAll('button, [role="button"]');
@@ -5027,6 +5042,11 @@ class NpcBot {
       .replace(/\u01B0/g, 'u').replace(/\u01AF/g, 'u')
       .toLowerCase();
 
+    // v94 — danh sách skill chuẩn hoá để nhận diện màn battle bằng nút
+    // skill (không phụ thuộc chữ "Tầng N/600") trong click fallback.
+    const bicanhSkillNamesNorm = (this.luanhoiSkillNames || []).filter(Boolean).map(name => String(name || '').normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '').replace(/\u0111/gi, 'd').replace(/\u01A1/gi, 'o').replace(/\u01B0/gi, 'u')
+      .toLowerCase().replace(/\s+/g, ' ').trim());
     // v88 — game vừa sang tầng (hoặc vừa sửa màn battle) thì nút skill
     // chưa render kịp: bấm ngay là "Không tìm thấy skill" và loop mất 2s
     // mỗi lần (log 08:40:30-08:54:20: 1-2 lần không tìm thấy cho mỗi skill,
@@ -5050,6 +5070,10 @@ class NpcBot {
       }
       clicked = await this.exec(`(() => {
        const nameNoD = ${JSON.stringify(nameNoD)};
+       const skillNames = ${JSON.stringify(bicanhSkillNamesNorm)};
+       const norm = value => String(value || '').normalize('NFD')
+         .replace(/[\\u0300-\\u036f]/g, '').replace(/\\u0111/gi, 'd').replace(/\\u01A1/gi, 'o').replace(/\\u01B0/gi, 'u')
+         .toLowerCase().replace(/\\s+/g, ' ').trim();
        // Màn battle đang focus (bicanhFocusBattle): bấm skill trong đúng
        // màn đó trước; màn focus cũ/mất nút thì rơi xuống quét cũ ở dưới.
        const focusId = window.botBicanhFocusMsgId || '';
@@ -5090,16 +5114,23 @@ class NpcBot {
        const userId = ${JSON.stringify(userId)};
        const msgs = document.querySelectorAll('[role="article"]');
        const recent = Array.from(msgs).slice(-40).reverse();
-       // v91 — chỉ bấm trong màn battle MỚI NHẤT (khớp "Tầng N/600"):
-       // màn cũ vẫn còn nút nhưng bấm vào game không tính, trận mới hết
-       // giờ (timeout tầng 561). Màn mới chưa có nút thì trả null để loop
-       // đợi rồi bấm lại, không rơi xuống màn cũ.
+       // v94 — chỉ bấm trong màn battle MỚI NHẤT: nhận diện bằng nút
+       // skill HOẶC "Tầng N/600" (như bicanhFocusBattle). Màn mới chưa
+       // có nút thì trả null để loop đợi rồi bấm lại, không rơi xuống cũ.
        let battle = null;
        for (const msg of recent) {
          if (msg.getAttribute && msg.getAttribute('data-bot-ephemeral') === 'true') continue;
          if (userId && !(msg.innerHTML || '').includes(userId)) continue;
          if (!userId && username && !isOwnedGameMessage(msg.textContent || '', username, ['bicanh', 'bi cảnh', 'bí cảnh', 'thap', 'tầng', 'leo tầng', 'fight', 'battle', 'đánh'])) continue;
          if (/Tầng\\s*(\\d+)\\s*\\//.test(msg.textContent || '')) { battle = msg; break; }
+         const domBtns = msg.querySelectorAll('button, [role="button"]');
+         let hasSkillBtn = false;
+         for (const btn of domBtns) {
+           const clean = norm(btn.textContent);
+           if (!clean) continue;
+           if (skillNames.some(name => name && (clean === name || clean.includes(name)))) { hasSkillBtn = true; break; }
+         }
+         if (hasSkillBtn) { battle = msg; break; }
        }
        if (!battle) return null;
        const btns = battle.querySelectorAll('button, [role="button"]');

@@ -751,6 +751,66 @@ async function testBicanhClickOnlyNewestBattle() {
   console.log('Bicanh click only newest battle passed');
 }
 
+
+// 19. v94 — màn battle mới KHÔNG có chữ "Tầng N/600" nhưng có nút skill
+// thì focus vẫn phải chuyển sang màn mới (timeout tầng 571: v91 chỉ khớp
+// chữ tầng nên màn mới vô hình, bot cứ bấm màn cũ).
+async function testBicanhFocusFollowsNewestBattleBySkillButtons() {
+  const { skill } = focusBattleArticles();
+  const cmd = focusArticle('cmd', '!bicanh', `avatars/${BICANH_FOCUS_UID}/abc.png !bicanh`, []);
+  const oldBattle = focusArticle('oldBattle', 'Bí Cảnh — Tầng 570/600', `<@!${BICANH_FOCUS_UID}> Bí Cảnh — Tầng 570/600`, [focusButton(skill)]);
+  const newBattle = focusArticle('newBattle', 'Bí Cảnh Vực Sâu', `<@!${BICANH_FOCUS_UID}> Bí Cảnh Vực Sâu`, [focusButton(skill)]);
+  const sandbox = focusSandbox([cmd, oldBattle, newBattle]);
+  const bot = focusBot([cmd, oldBattle, newBattle], sandbox);
+  bot._bicanhMsgBaseline = 0;
+  const focused = await bot.bicanhFocusBattle();
+  if (focused !== 'newBattle') throw new Error('màn mới có nút skill thì focus phải chuyển sang màn mới dù không có chữ tầng, thực tế: ' + focused);
+  if (oldBattle.getAttribute('data-bicanh-focus') === 'true') throw new Error('màn cũ không được giữ dấu focus');
+  console.log('Bicanh focus follows newest battle by skill buttons passed');
+}
+
+// 20. v94 — click phải bấm trong màn battle mới (không chữ tầng, có nút
+// skill), không bấm màn cũ.
+async function testBicanhClickFollowsNewestBattleBySkillButtons() {
+  const { skill } = focusBattleArticles();
+  const cmd = focusArticle('cmd', '!bicanh', `avatars/${BICANH_FOCUS_UID}/abc.png !bicanh`, []);
+  const oldBattle = focusArticle('oldBattle', 'Bí Cảnh — Tầng 570/600', `<@!${BICANH_FOCUS_UID}> Bí Cảnh — Tầng 570/600`, [focusButton(skill)]);
+  const newBattle = focusArticle('newBattle', 'Bí Cảnh Vực Sâu', `<@!${BICANH_FOCUS_UID}> Bí Cảnh Vực Sâu`, [focusButton(skill)]);
+  const sandbox = focusSandbox([cmd, oldBattle, newBattle]);
+  const bot = focusBot([cmd, oldBattle, newBattle], sandbox);
+  bot._bicanhMsgBaseline = 0;
+  bot.peekBicanhEphemeralDetail = async () => null;
+  bot.dismissEphemeralMessages = async () => {};
+  bot.delay = async () => {};
+  const result = await bot.clickNextBicanhSkill(skill);
+  if (!result || !result.clicked) throw new Error('màn mới có nút skill thì phải bấm được, thực tế: ' + JSON.stringify(result));
+  if (!newBattle._buttons[0].clicked) throw new Error('click phải rơi vào nút skill ở màn mới (không chữ tầng)');
+  if (oldBattle._buttons[0].clicked) throw new Error('click không được rơi vào màn cũ (tầng 570)');
+  console.log('Bicanh click follows newest battle by skill buttons passed');
+}
+
+// 21. v94 — fallback khi không có User ID: màn mới không chữ tầng nhưng
+// có nút skill thì vẫn bấm màn mới, không bấm màn cũ.
+async function testBicanhClickFallbackFollowsNewestBattleBySkillButtons() {
+  const { skill } = focusBattleArticles();
+  const oldBattle = focusArticle('oldBattle', 'Bí Cảnh — Tầng 570/600', 'Bí Cảnh — Tầng 570/600', [focusButton(skill)]);
+  const newBattle = focusArticle('newBattle', 'Bí Cảnh Vực Sâu', 'Bí Cảnh Vực Sâu', [focusButton(skill)]);
+  const sandbox = focusSandbox([oldBattle, newBattle]);
+  const bot = new NpcBot({
+    executeJavaScript: (script) => vm.runInNewContext(script, sandbox),
+  }, 1);
+  bot.userId = '';
+  bot.username = '';
+  bot.peekBicanhEphemeralDetail = async () => null;
+  bot.dismissEphemeralMessages = async () => {};
+  bot.delay = async () => {};
+  const result = await bot.clickNextBicanhSkill(skill);
+  if (!result || !result.clicked) throw new Error('fallback phải bấm được skill ở màn mới, thực tế: ' + JSON.stringify(result));
+  if (!newBattle._buttons[0].clicked) throw new Error('fallback phải bấm nút ở màn mới (không chữ tầng)');
+  if (oldBattle._buttons[0].clicked) throw new Error('fallback không được bấm nút ở màn cũ (tầng 570)');
+  console.log('Bicanh click fallback follows newest battle by skill buttons passed');
+}
+
 async function testBicanhClickRetriesWhenButtonNotReady() {
   const bot = new NpcBot({ executeJavaScript: () => 0 }, 1);
   bot.userId = '';
@@ -818,6 +878,9 @@ testBicanhWaitTurnRetriesPreviousSkill()
   .then(testBicanhClickWaitsWhenNewestBattleButtonDisabled)
   .then(testBicanhFocusIgnoresOldBattleWhenNewNotReady)
   .then(testBicanhClickOnlyNewestBattle)
+  .then(testBicanhFocusFollowsNewestBattleBySkillButtons)
+  .then(testBicanhClickFollowsNewestBattleBySkillButtons)
+  .then(testBicanhClickFallbackFollowsNewestBattleBySkillButtons)
   .then(testBicanhClickRetriesWhenButtonNotReady)
   .then(testBicanhClickGivesUpAfterThreeAttempts)
   .then(testBicanhUserIdConfig)
