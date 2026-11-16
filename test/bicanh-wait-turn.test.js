@@ -657,6 +657,43 @@ async function testBicanhClickFallsBackWhenFocusStale() {
   console.log('Bicanh click falls back when focus stale passed');
 }
 
+async function testBicanhClickRetriesWhenButtonNotReady() {
+  const bot = new NpcBot({ executeJavaScript: () => 0 }, 1);
+  bot.userId = '';
+  bot.username = '';
+  bot.peekBicanhEphemeralDetail = async () => null;
+  bot.dismissEphemeralMessages = async () => {};
+  let execCalls = 0;
+  bot.exec = async () => {
+    execCalls += 1;
+    return execCalls === 1 ? null : 'Lôi Đình Vạn Quân';
+  };
+  let delayCalls = 0;
+  bot.delay = async () => { delayCalls += 1; };
+  const result = await bot.clickNextBicanhSkill('Lôi Đình Vạn Quân');
+  if (!result || result.clicked !== 'Lôi Đình Vạn Quân') throw new Error('lần bấm 2 phải bấm được skill, thực tế: ' + JSON.stringify(result));
+  if (execCalls !== 2) throw new Error('phải quét lại đúng 1 lần sau lần trượt đầu, thực tế quét ' + execCalls + ' lần');
+  if (delayCalls !== 1) throw new Error('giữa 2 lần quét phải chờ 1 lần, thực tế chờ ' + delayCalls + ' lần');
+  console.log('Bicanh click retries when button not ready passed');
+}
+
+async function testBicanhClickGivesUpAfterThreeAttempts() {
+  const bot = new NpcBot({ executeJavaScript: () => 0 }, 1);
+  bot.userId = '';
+  bot.username = '';
+  bot.peekBicanhEphemeralDetail = async () => null;
+  bot.dismissEphemeralMessages = async () => {};
+  let execCalls = 0;
+  bot.exec = async () => { execCalls += 1; return null; };
+  let delayCalls = 0;
+  bot.delay = async () => { delayCalls += 1; };
+  const result = await bot.clickNextBicanhSkill('Lôi Đình Vạn Quân');
+  if (!result || result.clicked !== null) throw new Error('3 lần đều trượt thì phải trả clicked null, thực tế: ' + JSON.stringify(result));
+  if (execCalls !== 3) throw new Error('phải quét đúng 3 lần rồi mới bỏ, thực tế quét ' + execCalls + ' lần');
+  if (delayCalls !== 2) throw new Error('giữa 3 lần quét phải chờ đúng 2 lần, thực tế chờ ' + delayCalls + ' lần');
+  console.log('Bicanh click gives up after three attempts passed');
+}
+
 async function testBicanhUserIdConfig() {
   const bot = new NpcBot({ executeJavaScript: () => 0 }, 1);
   if (bot.userId !== '') throw new Error('userId mặc định phải rỗng');
@@ -683,6 +720,8 @@ testBicanhWaitTurnRetriesPreviousSkill()
   .then(testBicanhFocusReturnsNullBeforeAnchorAndWithoutUserId)
   .then(testBicanhClickPrefersFocusedArticle)
   .then(testBicanhClickFallsBackWhenFocusStale)
+  .then(testBicanhClickRetriesWhenButtonNotReady)
+  .then(testBicanhClickGivesUpAfterThreeAttempts)
   .then(testBicanhUserIdConfig)
   .catch((error) => {
     console.error(error);

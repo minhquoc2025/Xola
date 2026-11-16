@@ -4947,17 +4947,6 @@ class NpcBot {
     if (cooldownDetail && cooldownDetail.skill === skillName) {
       return { clicked: null, waitTurn: false, wrongPerson: false, cooldownDetail, skipCurrent: true };
     }
-    // Focus màn battle mới (chỉ khi đã nhập User ID): game sinh DOM mới
-    // thì màn battle mới nhất của mình sau !bicanh là màn đang chạy — tìm
-    // lại trước mỗi lần bấm để click không trượt sang màn cũ. Log chỉ khi
-    // focus đổi sang màn khác.
-    if (this.userId) {
-      const focused = await this.bicanhFocusBattle();
-      if (focused && focused !== this._bicanhFocusMsgId) {
-        this._bicanhFocusMsgId = focused;
-        this.log('🎯 Bicanh: focus màn battle mới của mình (sau !bicanh)');
-      }
-    }
     const username = this.username || '';
     const userId = this.userId || '';
     const nameNoD = skillName.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -4966,7 +4955,28 @@ class NpcBot {
       .replace(/\u01B0/g, 'u').replace(/\u01AF/g, 'u')
       .toLowerCase();
 
-    const clicked = await this.exec(`(() => {
+    // v88 — game vừa sang tầng (hoặc vừa sửa màn battle) thì nút skill
+    // chưa render kịp: bấm ngay là "Không tìm thấy skill" và loop mất 2s
+    // mỗi lần (log 08:40:30-08:54:20: 1-2 lần không tìm thấy cho mỗi skill,
+    // mỗi tầng 20-30s+; sau mỗi "sang tầng" lần bấm đầu thường trượt).
+    // Bấm lại tối đa 3 lần, mỗi lần cách nhau 700ms, mỗi lần quét lại
+    // focus trước — màn battle mới có nút thì nhận ngay, không phá nhịp
+    // cooldown (chưa bấm thì chưa tính là lượt).
+    let clicked = null;
+    for (let bicanhClickAttempt = 0; bicanhClickAttempt < 3 && !clicked; bicanhClickAttempt++) {
+      if (bicanhClickAttempt > 0) await this.delay(700);
+      // Focus màn battle mới (chỉ khi đã nhập User ID): game sinh DOM mới
+      // thì màn battle mới nhất của mình sau !bicanh là màn đang chạy — tìm
+      // lại trước mỗi lần bấm để click không trượt sang màn cũ. Log chỉ khi
+      // focus đổi sang màn khác.
+      if (this.userId) {
+        const focused = await this.bicanhFocusBattle();
+        if (focused && focused !== this._bicanhFocusMsgId) {
+          this._bicanhFocusMsgId = focused;
+          this.log('🎯 Bicanh: focus màn battle mới của mình (sau !bicanh)');
+        }
+      }
+      clicked = await this.exec(`(() => {
        const nameNoD = ${JSON.stringify(nameNoD)};
        // Màn battle đang focus (bicanhFocusBattle): bấm skill trong đúng
        // màn đó trước; màn focus cũ/mất nút thì rơi xuống quét cũ ở dưới.
@@ -5029,6 +5039,7 @@ class NpcBot {
        }
        return null;
      })()`);
+    }
     return { clicked, waitTurn: false, wrongPerson: false, cooldownDetail, skipCurrent: false };
   }
 
