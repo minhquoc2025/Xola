@@ -4399,6 +4399,33 @@ class NpcBot {
   // === BICANH MODE ===
   //#region Bí cảnh
   // Gửi !bicanh, click nút "Leo Tầng N", rồi spam skill theo danh sách cho đến khi stop
+  // Tầng hiện tại của Bí Cảnh (v82): đọc "Tầng N/600" từ màn battle mới
+  // nhất của mình. Trả về số tầng, hoặc null khi không đọc được — null thì
+  // loop giữ nguyên combo, không đoán bừa.
+  async bicanhCurrentFloor() {
+    const userId = this.userId || '';
+    const username = this.username || '';
+    const floor = await this.exec(`(() => {
+      const userId = ${JSON.stringify(userId)};
+      const username = ${JSON.stringify(username)};
+      const msgs = document.querySelectorAll('[role="article"]');
+      const recent = Array.from(msgs).slice(-40).reverse();
+      for (const msg of recent) {
+        if (msg.getAttribute && msg.getAttribute('data-bot-ephemeral') === 'true') continue;
+        if (userId && !(msg.innerHTML || '').includes(userId)) continue;
+        if (!userId && username) {
+          const first = String(username).normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/\\u0111/g, 'd').replace(/\\u0110/g, 'd').split(' ')[0].toLowerCase();
+          const norm = String(msg.textContent || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/\\u0111/g, 'd').replace(/\\u0110/g, 'd').toLowerCase();
+          if (first && !norm.includes(first)) continue;
+        }
+        const m = String(msg.textContent || '').match(/Tầng\\s*(\\d+)\\s*\\//);
+        if (m) return parseInt(m[1], 10);
+      }
+      return null;
+    })()`);
+    return (typeof floor === 'number' && floor > 0) ? floor : null;
+  }
+
   async bicanhLoop(runId) {
     if (!this.isRunning || this.runId !== runId) return;
 
@@ -4468,7 +4495,23 @@ class NpcBot {
       }
       return this.luanhoiSkillNames[idx % this.luanhoiSkillNames.length];
     };
+    // Tầng đang đánh lúc vào trận — để vòng sau biết khi nào sang tầng mới.
+    let bicanhLastFloor = await this.bicanhCurrentFloor();
     while (this.isRunning && this.runId === runId) {
+      // v82 — sang tầng mới thì chạy lại combo từ đầu, giống Luân Hồi reset
+      // mỗi tầng (và Vân Du v41 reset mỗi trận): tầng mới là trận mới, mọi
+      // skill đều hết hồi, vòng xoay cũ không còn ý nghĩa. Không đọc được
+      // tầng (null) thì giữ nguyên, không đoán.
+      const bicanhFloorNow = await this.bicanhCurrentFloor();
+      if (bicanhFloorNow !== null && bicanhLastFloor !== null && bicanhFloorNow !== bicanhLastFloor) {
+        this._bicanhSkillIdx = 0;
+        bicanhCooldownLeft.clear();
+        bicanhLastClickedSkill = null;
+        bicanhPrevClicked = false;
+        bicanhPrevWasRejected = false;
+        this.log(`🌀 Bicanh: sang tầng ${bicanhFloorNow} — chạy lại combo từ đầu (${bicanhSkillAt(0)})...`);
+      }
+      if (bicanhFloorNow !== null) bicanhLastFloor = bicanhFloorNow;
       const skillName = bicanhSkillAt(this._bicanhSkillIdx);
       if (!skillName) { this._bicanhSkillIdx++; continue; }
       // XOAY CHUẨN, KHÔNG NHẢY SKILL (quyết định của Nguyen 2026-11-02):
