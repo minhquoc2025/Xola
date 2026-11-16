@@ -767,6 +767,20 @@ function updateStatusRow(status) {
     const inBossZone = node === 11 || node === 23 || node === 35 || node === 12 || node === 24 || node === 36;
     setHp(status.vanduHpPct, inBossZone ? 'Ngưỡng hồi: <50% (boss)' : 'Ngưỡng hồi: <20% (thường)');
     setDan(status.vanduDanCount || 0, status.vanduDanEmptyNode, nextBoss);
+  } else if (status.mode === 'bicanh') {
+    // v90 — Bicanh quét số tầng lên thẻ trạng thái (Nguyen: "cho quét số
+    // tầng đi, ví dụ hiện tại đang là 542/600"): giá trị "Tầng N / 600",
+    // thanh tiến trình = N/600. Trước đây Bicanh rơi vào nhánh else nên
+    // thẻ chỉ hiện "Đang chạy" + thanh 0% + "Đang spam skill...".
+    const floor = status.bicanhFloor || 0;
+    const max = 600;
+    if (progressLabel) progressLabel.textContent = 'Tiến trình Bí Cảnh';
+    progressValue.textContent = 'Tầng ' + floor + ' / ' + max;
+    progressFill.style.width = Math.max(0, Math.min(100, (floor / max) * 100)) + '%';
+    showMarkers(false);
+    progressSub.textContent = running ? 'Đang spam skill...' : 'Đã dừng ở tầng ' + floor;
+    setHp(null, 'Không theo dõi HP ở Bicanh');
+    setDan(null);
   } else if (status.mode === 'luanhoi') {
     const cur = status.lastLuanhoiTarget != null ? status.lastLuanhoiTarget : 0;
     const tgt = status.luanhoiTarget || 0;

@@ -836,6 +836,7 @@ class NpcBot {
       vanduTotalTrips: this.vanduTotalTrips,
       vanduCircuit: this.vanduCircuit,
       diangucFloor: this.diangucFloor,
+      bicanhFloor: this.bicanhFloor, // v90: thẻ trạng thái Bicanh (Tầng N/600)
       diangucStep: this.diangucStep,
       climbWinsNeeded: this.climbWinsNeeded,
       climbWinsDone: this.climbWinsDone,
@@ -4573,6 +4574,7 @@ class NpcBot {
     const bicanhMaxFloor = 600;
     // Tầng đang đánh lúc vào trận — để vòng sau biết khi nào sang tầng mới.
     let bicanhLastFloor = await this.bicanhCurrentFloor();
+    this.bicanhFloor = bicanhLastFloor; // v90: để thẻ trạng thái quét được số tầng
     // v86 — mốc số tin nhắn lúc vào trận (chống dừng oan vì màn timeout
     // của lượt trước vẫn còn trong DOM).
     const bicanhStartMsgCount = await this.bicanhMsgCount();
@@ -4593,6 +4595,7 @@ class NpcBot {
         this.log(`🌀 Bicanh: sang tầng ${bicanhFloorNow} — chạy lại combo từ đầu (${bicanhSkillAt(0)})...`);
       }
       if (bicanhFloorNow !== null) bicanhLastFloor = bicanhFloorNow;
+      if (bicanhFloorNow !== null) this.bicanhFloor = bicanhFloorNow; // v90
       // v87 — đã tới tầng tối đa (600) thì dừng bot.
       if (bicanhFloorNow !== null && bicanhFloorNow >= bicanhMaxFloor) {
         this.log(`🏆 Bicanh: đã đạt tầng ${bicanhFloorNow} (tối đa ${bicanhMaxFloor}) — dừng bot.`);

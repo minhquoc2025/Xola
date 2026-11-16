@@ -172,10 +172,46 @@ testBicanhFloorResetRestartsCombo()
   .then(testBicanhCurrentFloorParsesNewestBattle)
   .then(testBicanhFloorNullDoesNotReset)
   .then(testBicanhStopsAtMaxFloor)
+  .then(testBicanhFloorExposedInStatus)
   .catch((error) => {
     console.error(error);
     process.exitCode = 1;
   });
+
+// 5. v90 — tầng hiện tại phải lộ ra getStatus để thẻ trạng thái quét được.
+async function testBicanhFloorExposedInStatus() {
+  const bot = new NpcBot({ executeJavaScript: () => 0 }, 1);
+  bot.isRunning = true;
+  bot.runId = 1;
+  bot.bicanhSkillOrder = [32, 29, 26, 23];
+  bot.log = () => {};
+  let fakeNow = 0;
+  bot.delay = async (ms) => { fakeNow += (ms || 0); };
+  bot.bicanhNowMs = () => fakeNow;
+  bot.sendChat = async () => {};
+  bot.waitForBicanhButton = async () => 'battle';
+  bot.checkBicanhCooldown = async () => 0;
+
+  let calls = 0;
+  bot.bicanhCurrentFloor = async () => { calls++; return calls <= 2 ? 541 : 542; };
+  const seen = [];
+  bot.clickNextBicanhSkill = async (skillName) => {
+    seen.push(skillName);
+    if (seen.length === 5) bot.isRunning = false;
+    return { clicked: skillName, waitTurn: false, wrongPerson: false, cooldownDetail: null, skipCurrent: false };
+  };
+
+  await bot.bicanhLoop(1);
+
+  if (bot.bicanhFloor !== 542) {
+    throw new Error('bot phải ghi tầng hiện tại vào bicanhFloor, thực tế: ' + bot.bicanhFloor);
+  }
+  const status = bot.getStatus();
+  if (status.bicanhFloor !== 542) {
+    throw new Error('getStatus phải lộ bicanhFloor cho thẻ trạng thái, thực tế: ' + JSON.stringify(status.bicanhFloor));
+  }
+  console.log('Bicanh floor exposed in status passed');
+}
 
 // 4. v87 — tới tầng 600 (tối đa) thì dừng ngay, không bấm skill nữa.
 async function testBicanhStopsAtMaxFloor() {
