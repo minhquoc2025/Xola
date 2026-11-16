@@ -885,6 +885,8 @@ testBicanhWaitTurnRetriesPreviousSkill()
   .then(testBicanhClickGivesUpAfterThreeAttempts)
   .then(testBicanhUserIdConfig)
   .then(testBicanhWaitProbesSameSkillAfterThreeWaits)
+  .then(testBicanhCooldownTableRecordsTwoForThreeTurnSkills)
+  .then(testBicanhClickGapIsTwoSeconds)
   .catch((error) => {
     console.error(error);
     process.exitCode = 1;
@@ -944,4 +946,79 @@ async function testBicanhWaitProbesSameSkillAfterThreeWaits() {
     throw new Error('Bicanh phải probe s29 sau 3 vòng chờ, log thực tế: ' + JSON.stringify(logs));
   }
   console.log('Bicanh wait probes same skill after three waits passed');
+}
+
+// 28. v93 — bảng hồi theo từng skill: s29 (3 lượt hồi) tự ghi 2 sau khi
+// dùng (số "còn lại", đã trừ lượt vừa dùng); sau đúng 2 cú bấm khác được
+// chấp nhận thì tới lượt nó phải bấm ngay, KHÔNG chờ/probe. v92/v94 ghi
+// chung 3 nên tới lượt nó vẫn còn 1 lượt → chờ + probe.
+async function testBicanhCooldownTableRecordsTwoForThreeTurnSkills() {
+  const bot = new NpcBot({ executeJavaScript: () => 0 }, 1);
+  bot.isRunning = true;
+  bot.runId = 1;
+  bot.bicanhSkillOrder = [29, 26, 23];
+  const logs = [];
+  bot.log = (...args) => logs.push(args.join(' '));
+  bot.delay = async () => {};
+  bot.sendChat = async () => {};
+  bot.waitForBicanhButton = async () => 'battle';
+  bot.checkBicanhCooldown = async () => 0;
+
+  const s29 = bot.luanhoiSkillNames[28];
+  const s26 = bot.luanhoiSkillNames[25];
+  const s23 = bot.luanhoiSkillNames[22];
+  const seen = [];
+  bot.clickNextBicanhSkill = async (skillName) => {
+    seen.push(skillName);
+    if (seen.length === 4) bot.isRunning = false;
+    return { clicked: skillName, waitTurn: false, wrongPerson: false, cooldownDetail: null, skipCurrent: false };
+  };
+
+  await bot.bicanhLoop(1);
+
+  const expected = [s29, s26, s23, s29];
+  if (JSON.stringify(seen) !== JSON.stringify(expected)) {
+    throw new Error('Bicanh xoay chuẩn phải bấm s29 -> s26 -> s23 -> s29, thực tế: ' + JSON.stringify(seen));
+  }
+  if (logs.some((line) => line.includes('đang hồi còn') && line.includes(s29))) {
+    throw new Error('Bicanh s29 ghi 2 sau khi dùng nên sau 2 lượt khác phải sẵn sàng, không được chờ s29, log thực tế: ' + JSON.stringify(logs));
+  }
+  if (logs.some((line) => line.includes('đã chờ 3 vòng') && line.includes(s29))) {
+    throw new Error('Bicanh s29 không được probe ở lượt thứ 2, log thực tế: ' + JSON.stringify(logs));
+  }
+  console.log('Bicanh cooldown table records two for three-turn skills passed');
+}
+
+// 29. v93 — gap sau mỗi cú bấm Bicanh được chấp nhận là 2s
+// (skillClickDelayMs + 1000, như Vân Du), không còn 1s như v92: bấm
+// nhanh hơn game xử lý lượt là gốc của "Đợi lượt trước xử lý" + map
+// lệch 1–2 lượt (log 10:02–10:10).
+async function testBicanhClickGapIsTwoSeconds() {
+  const bot = new NpcBot({ executeJavaScript: () => 0 }, 1);
+  bot.isRunning = true;
+  bot.runId = 1;
+  bot.bicanhSkillOrder = [29, 26, 23];
+  const delays = [];
+  bot.log = () => {};
+  bot.delay = async (ms) => { delays.push(ms || 0); };
+  bot.sendChat = async () => {};
+  bot.waitForBicanhButton = async () => 'battle';
+  bot.checkBicanhCooldown = async () => 0;
+  bot.rand = () => 0;
+
+  const seen = [];
+  bot.clickNextBicanhSkill = async (skillName) => {
+    seen.push(skillName);
+    if (seen.length === 2) bot.isRunning = false;
+    return { clicked: skillName, waitTurn: false, wrongPerson: false, cooldownDetail: null, skipCurrent: false };
+  };
+
+  await bot.bicanhLoop(1);
+
+  // Delay đầu là rand sau !bicanh (stub 0), sau đó mỗi cú bấm được chấp
+  // nhận phải chờ đúng 2000ms (1000 mặc định + 1000).
+  if (JSON.stringify(delays) !== JSON.stringify([0, 2000, 2000])) {
+    throw new Error('Bicanh gap sau mỗi cú bấm phải là 2000ms, thực tế: ' + JSON.stringify(delays));
+  }
+  console.log('Bicanh click gap is two seconds passed');
 }

@@ -4533,6 +4533,17 @@ class NpcBot {
         else bicanhCooldownLeft.delete(name);
       }
     };
+    // v93 — hồi chiêu theo từng skill (Nguyen 2026-11-16: 32 = 4 lượt,
+    // 29/26/23 = 3 lượt). Số ghi là "còn lại" sau khi dùng: game báo
+    // "Còn 3" ngay sau khi dùng Lôi Đình (log 09:23:08), tức đã trừ lượt
+    // vừa dùng — nên 32 ghi 3, còn lại ghi 2. Game báo số khác thì nhánh
+    // detail ghi đè bằng số thật (như v92). Skill khác (ngoài combo
+    // 32/29/26/23) giữ 3 như cũ.
+    const bicanhCooldownTurns = (skill) => {
+      if (skill === 'Lôi Đình Vạn Quân') return 3;
+      if (skill === 'Hư Không Đại Na Di' || skill === 'Kim Đan Phá Sát' || skill === 'Vạn Kiếm Quy Tông') return 2;
+      return 3;
+    };
     // Skill của click gần nhất mà kết quả (được chấp nhận hay bị từ chối)
     // chưa được xử lý — verdict nằm trong result của lần clickNext sau.
     let bicanhPrevClickPending = null;
@@ -4587,20 +4598,19 @@ class NpcBot {
     // của lượt trước vẫn còn trong DOM).
     const bicanhStartMsgCount = await this.bicanhMsgCount();
     while (this.isRunning && this.runId === runId) {
-      // v82/v83 — sang tầng mới thì chạy lại combo từ đầu, giống Luân Hồi reset
-      // mỗi tầng (và Vân Du v41 reset mỗi trận). NHƯNG tầng mới KHÔNG làm
-      // hết hồi: cooldown của game tồn tại qua tầng (log 2026-11-16 08:10:44
-      // Lôi Đình bấm lại 1s sau lần dùng trước, game báo "Còn 3 turn") nên
-      // map cooldown PHẢI giữ nguyên qua tầng — v82 xóa map nên bot bấm lại
-      // skill vừa dùng và spam tin "đang hồi" (giống lỗi Luân Hồi cũ).
-      // Không đọc được tầng (null) thì giữ nguyên, không đoán.
+      // v93 — sang tầng mới thì TIẾP TỤC vòng xoay, KHÔNG chạy lại từ đầu
+      // (v82 reset idx về 0 đã bỏ: skill tiếp sau skill vừa giết tầng
+      // luôn sẵn sàng vì đã qua 3 lượt, còn reset thì bắt bot chờ đúng
+      // skill vừa dùng — còn 2 lượt — rồi probe, ~6s mỗi tầng, log
+      // 2026-11-16 10:02–10:10). Cooldown của game tồn tại qua tầng nên
+      // map cooldown PHẢI giữ nguyên qua tầng (v83). Không đọc được tầng
+      // (null) thì giữ nguyên, không đoán.
       const bicanhFloorNow = await this.bicanhCurrentFloor();
       if (bicanhFloorNow !== null && bicanhLastFloor !== null && bicanhFloorNow !== bicanhLastFloor) {
-        this._bicanhSkillIdx = 0;
         bicanhLastClickedSkill = null;
         bicanhPrevClicked = false;
         bicanhPrevWasRejected = false;
-        this.log(`🌀 Bicanh: sang tầng ${bicanhFloorNow} — chạy lại combo từ đầu (${bicanhSkillAt(0)})...`);
+        this.log(`🌀 Bicanh: sang tầng ${bicanhFloorNow} — tiếp tục vòng xoay (${bicanhSkillAt(this._bicanhSkillIdx)})...`);
       }
       if (bicanhFloorNow !== null) bicanhLastFloor = bicanhFloorNow;
       if (bicanhFloorNow !== null) this.bicanhFloor = bicanhFloorNow; // v90
@@ -4740,9 +4750,9 @@ class NpcBot {
             bicanhWaitTurnRetries = 0;
             bicanhPrevClicked = true;
             bicanhLastClickedSkill = skillName;
-            // v92 — bấm thử được chấp nhận thì skill này cũng hồi 3 lượt
-            // như click thường (số lượt, không phải mốc thời gian).
-            bicanhCooldownLeft.set(skillName, 3);
+            // v93 — bấm thử được chấp nhận thì skill này cũng hồi theo
+            // bảng từng skill (bicanhCooldownTurns), như click thường.
+            bicanhCooldownLeft.set(skillName, bicanhCooldownTurns(skillName));
             bicanhPrevClickPending = skillName;
             this.log(`🌀 Click skill bicanh: "${forceResult.clicked}"`);
             this._bicanhSkillIdx++;
@@ -4751,7 +4761,7 @@ class NpcBot {
               this.log(`⏳ Cooldown — chờ ${cd}ms`);
               await this.delay(cd);
             } else {
-              await this.delay(this.skillClickDelayMs);
+              await this.delay(this.skillClickDelayMs + 1000); // v93: gap 2s như Vân Du
             }
           } else {
             bicanhPrevClicked = false;
@@ -4788,7 +4798,7 @@ class NpcBot {
         // lần bấm lại skill đó không bị chặn vừa bấm ở trên.
         bicanhLastClickedSkill = null;
         // Chờ lượt trước của game xử lý xong rồi mới click lại skill đó.
-        await this.delay(this.skillClickDelayMs);
+        await this.delay(this.skillClickDelayMs + 1000); // v93: gap 2s như Vân Du
         continue;
       }
       const clicked = result ? result.clicked : null;
@@ -4797,16 +4807,18 @@ class NpcBot {
         bicanhPrevClicked = true;
         bicanhPrevWasRejected = false;
         bicanhLastClickedSkill = skillName;
-        // v92 — tự ghi nhớ skill vừa dùng hồi 3 lượt (giống Luân Hồi v80,
-        // nhưng tính bằng lượt, không phải mốc thời gian như v85): click
+        // v92 — tự ghi nhớ skill vừa dùng (giống Luân Hồi v80, nhưng tính
+        // bằng lượt, không phải mốc thời gian như v85; v93 ghi theo bảng
+        // từng skill): click
         // được chấp nhận không sinh tin "đang hồi" nên không ghi thì bot
         // quên skill này đang hồi; sang tầng mới nó bấm lại ngay và bị
         // game báo hồi (log 2026-11-16 08:10:27/08:10:44). Số 3 khớp số
         // game báo ngay sau khi dùng ("Còn 3 turn", log 09:23:08); mỗi
         // cú bấm khác được chấp nhận trừ tất cả 1 lượt (tick ở trên), nên
         // sau 3 lượt khác skill này về 0 đúng lúc tới lượt nó. Game báo
-        // số khác thì nhánh detail ghi đè bằng số thật.
-        bicanhCooldownLeft.set(skillName, 3);
+        // số khác thì nhánh detail ghi đè bằng số thật (v93: ghi theo
+        // bảng từng skill bicanhCooldownTurns, 32: 3, còn lại: 2).
+        bicanhCooldownLeft.set(skillName, bicanhCooldownTurns(skillName));
         bicanhPrevClickPending = skillName;
         this.log(`🌀 Click skill bicanh: "${clicked}"`);
         // Chỉ tăng index khi click đúng skill đích để giữ đúng quỹ đạo cooldown.
@@ -4816,11 +4828,11 @@ class NpcBot {
           this.log(`⏳ Cooldown — chờ ${cd}ms`);
           await this.delay(cd);
         } else {
-          await this.delay(this.skillClickDelayMs);
+          await this.delay(this.skillClickDelayMs + 1000); // v93: gap 2s như Vân Du
         }
       } else {
         // Không tìm thấy skill đích (đang hồi/chưa render) → KHÔNG nhảy cóc, chờ rồi thử lại
-        // cùng skill để không phá vỡ nhịp cooldown đã tính (vd 3:3:3).
+        // cùng skill để không phá vỡ nhịp cooldown đã tính (v93: 32:3, 29/26/23:2).
         // Lượt này không bấm nên prevClicked = false, lượt sau không trừ
         // cooldown nhầm; prevWasRejected giữ nguyên vì vẫn chưa có click mới.
         bicanhPrevClicked = false;

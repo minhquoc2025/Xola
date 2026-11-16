@@ -3,19 +3,15 @@ const vm = require('vm');
 
 const { NpcBot } = require(path.join(__dirname, '..', 'src', 'main', 'npc-bot.js'));
 
-// 1. Bicanh loop: combo 32,29,26,23 (Lôi Đình, Hư, Kim, Vạn). Đánh tầng 1
-// tới skill thứ 3 thì game sang tầng 2 — vòng sau phải chạy lại từ skill
-// đầu (Lôi Đình), KHÔNG được bấm tiếp Vạn của vòng cũ. Cooldown giữ qua
-// tầng (v83) và tính bằng LƯỢT BẤM ĐƯỢC CHẤP NHẬN (v92, không tính bằng
-// thời gian thật nữa — log thật 2026-11-16: chờ 8s = 0 lượt trôi): Lôi
-// Đình dùng ở tầng 1 ghi 3, tới lúc sang tầng 2 chỉ mới trừ 1 (cú bấm Hư
-// ở tầng 1 được chấp nhận) nên còn 2 lượt — bot CHỜ 2 vòng rồi bấm thử
-// đúng Lôi Đình (probe, không nhảy skill); Hư hồi 3 turn do game báo ở
-// click Kim tầng 1, tới lượt Hư chỉ mới trừ 1 (cú bấm Lôi Đình probe được
-// chấp nhận) nên còn 2 lượt — Hư CŨNG phải chờ rồi probe, KHÔNG được
-// bấm ngay (v85 cho bấm ngay vì thời gian chờ Lôi Đình làm mốc hết hạn
-// — sai: chờ không trôi lượt).
-async function testBicanhFloorResetRestartsCombo() {
+// 1. v93 — Bicanh loop: combo 32,29,26,23 (Lôi Đình, Hư, Kim, Vạn).
+// Đánh tầng 1 tới skill thứ 3 thì game sang tầng 2 — vòng xoay TIẾP
+// TỤC, KHÔNG chạy lại từ đầu: skill tiếp theo là Vạn (sẵn sàng, bấm
+// ngay), rồi quay lại Lôi Đình. Cooldown giữ qua tầng (v83) và tính
+// bằng LƯỢT BẤM ĐƯỢC CHẤP NHẬN (v92): Lôi Đình dùng ở tầng 1 ghi 3,
+// tới lượt nó ở tầng 2 chỉ trừ 2 (cú bấm Hư tầng 1 + cú bấm Vạn tầng 2)
+// nên còn 1 lượt — bot CHỜ rồi bấm thử đúng Lôi Đình (probe, không nhảy
+// skill). Hư hồi 3 turn do game báo ở click Kim tầng 1 (ghi đè số thật).
+async function testBicanhFloorChangeContinuesCombo() {
   const bot = new NpcBot({ executeJavaScript: () => 0 }, 1);
   bot.isRunning = true;
   bot.runId = 1;
@@ -51,34 +47,31 @@ async function testBicanhFloorResetRestartsCombo() {
 
   await bot.bicanhLoop(1);
 
-  // Tầng 1: Lôi Đình -> Hư -> Kim; tầng 2: Lôi Đình -> Hư (chạy lại từ đầu).
-  const expected = [s32, s29, s26, s32, s29];
+  // Tầng 1: Lôi Đình -> Hư -> Kim; sang tầng 2 thì vòng xoay TIẾP TỤC
+  // (v93, không chạy lại từ đầu): Vạn là skill tiếp theo, bấm ngay vì
+  // sẵn sàng; rồi quay lại Lôi Đình — Lôi Đình dùng ở tầng 1 ghi 3, tới
+  // lúc này chỉ trừ 2 (cú bấm Hư ở tầng 1 + cú bấm Vạn ở tầng 2; click
+  // Kim tầng 1 không trừ vì verdict của nó mang tin hồi) nên còn 1 lượt
+  // — bot CHỜ rồi bấm thử đúng Lôi Đình (probe, không nhảy skill).
+  const expected = [s32, s29, s26, s23, s32];
   if (JSON.stringify(seen) !== JSON.stringify(expected)) {
-    throw new Error('Bicanh sang tầng mới phải chạy lại combo từ đầu, thực tế: ' + JSON.stringify(seen));
+    throw new Error('Bicanh sang tầng mới phải tiếp tục vòng xoay, thực tế: ' + JSON.stringify(seen));
   }
-  // Map cooldown tầng cũ PHẢI được giữ (v83) và tính bằng lượt (v92):
-  // sau dòng log "sang tầng 2" phải có lần chờ "đang hồi còn N lượt" cho
-  // Lôi Đình (dùng ở tầng 1 ghi 3, tới lúc sang tầng mới chỉ trừ 1 nên
-  // còn 2 lượt) VÀ một dòng probe "đã chờ 3 vòng... bấm thử" cho Lôi
-  // Đình (chờ không trôi lượt nên bot không được kẹt mãi, cũng không
-  // được nhảy skill). Hư CŨNG phải có lần chờ (hồi 3 turn do game báo ở
-  // click Kim tầng 1, tới lượt Hư chỉ trừ 1 nên còn 2 lượt — v85 sai ở
-  // đây khi cho Hư bấm ngay vì thời gian chờ Lôi Đình làm mốc hết hạn).
-  const floorIdx = logs.findIndex((line) => line.includes('sang tầng 2') && line.includes(s32));
+  const floorIdx = logs.findIndex((line) => line.includes('sang tầng 2') && line.includes('tiếp tục vòng xoay'));
   if (floorIdx < 0) {
-    throw new Error('Bicanh sang tầng phải log rõ là chạy lại combo từ đầu, log thực tế: ' + JSON.stringify(logs));
+    throw new Error('Bicanh sang tầng phải log rõ là tiếp tục vòng xoay, log thực tế: ' + JSON.stringify(logs));
   }
   const afterFloor = logs.slice(floorIdx);
-  if (!afterFloor.some((line) => line.includes('đang hồi còn') && line.includes(s32) && line.includes('lượt — chờ rồi bấm lại'))) {
-    throw new Error('Bicanh sang tầng phải giữ cooldown skill vừa dùng: Lôi Đình dùng ở tầng 1 mới trôi 1 lượt nên phải chờ hồi, không được bấm lại ngay, log thực tế: ' + JSON.stringify(logs));
+  if (afterFloor.some((line) => line.includes('đang hồi còn') && line.includes(s23) && line.includes('lượt — chờ rồi bấm lại'))) {
+    throw new Error('Bicanh sang tầng phải bấm Vạn ngay (sẵn sàng), không được chờ Vạn, log thực tế: ' + JSON.stringify(logs));
+  }
+  if (!afterFloor.some((line) => line.includes('đang hồi còn 1 lượt') && line.includes(s32) && line.includes('lượt — chờ rồi bấm lại'))) {
+    throw new Error('Bicanh sang tầng: Lôi Đình dùng ở tầng 1 tới lượt này phải còn đúng 1 lượt (ghi 3, trừ 2), log thực tế: ' + JSON.stringify(logs));
   }
   if (!afterFloor.some((line) => line.includes('đã chờ 3 vòng') && line.includes(s32) && line.includes('bấm thử'))) {
     throw new Error('Bicanh sang tầng phải probe Lôi Đình sau 3 vòng chờ (chờ không trôi lượt nên không được kẹt mãi), log thực tế: ' + JSON.stringify(logs));
   }
-  if (!afterFloor.some((line) => line.includes('đang hồi còn') && line.includes(s29) && line.includes('lượt — chờ rồi bấm lại'))) {
-    throw new Error('Bicanh sang tầng phải chờ Hư nữa: hồi 3 turn ở tầng 1 chỉ trừ 1 lượt nên tới lượt Hư vẫn còn 2 lượt, không được bấm ngay như v85, log thực tế: ' + JSON.stringify(logs));
-  }
-  console.log('Bicanh floor reset restarts combo passed');
+  console.log('Bicanh floor change continues combo passed');
 }
 
 // 2. bicanhCurrentFloor: đọc "Tầng N/600" từ màn battle mới nhất của mình,
@@ -167,7 +160,7 @@ async function testBicanhFloorNullDoesNotReset() {
   console.log('Bicanh floor null does not reset passed');
 }
 
-testBicanhFloorResetRestartsCombo()
+testBicanhFloorChangeContinuesCombo()
   .then(testBicanhCurrentFloorParsesNewestBattle)
   .then(testBicanhFloorNullDoesNotReset)
   .then(testBicanhStopsAtMaxFloor)
