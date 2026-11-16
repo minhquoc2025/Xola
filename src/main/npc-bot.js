@@ -4498,14 +4498,16 @@ class NpcBot {
     // Tầng đang đánh lúc vào trận — để vòng sau biết khi nào sang tầng mới.
     let bicanhLastFloor = await this.bicanhCurrentFloor();
     while (this.isRunning && this.runId === runId) {
-      // v82 — sang tầng mới thì chạy lại combo từ đầu, giống Luân Hồi reset
-      // mỗi tầng (và Vân Du v41 reset mỗi trận): tầng mới là trận mới, mọi
-      // skill đều hết hồi, vòng xoay cũ không còn ý nghĩa. Không đọc được
-      // tầng (null) thì giữ nguyên, không đoán.
+      // v82/v83 — sang tầng mới thì chạy lại combo từ đầu, giống Luân Hồi reset
+      // mỗi tầng (và Vân Du v41 reset mỗi trận). NHƯNG tầng mới KHÔNG làm
+      // hết hồi: cooldown của game tồn tại qua tầng (log 2026-11-16 08:10:44
+      // Lôi Đình bấm lại 1s sau lần dùng trước, game báo "Còn 3 turn") nên
+      // map cooldown PHẢI giữ nguyên qua tầng — v82 xóa map nên bot bấm lại
+      // skill vừa dùng và spam tin "đang hồi" (giống lỗi Luân Hồi cũ).
+      // Không đọc được tầng (null) thì giữ nguyên, không đoán.
       const bicanhFloorNow = await this.bicanhCurrentFloor();
       if (bicanhFloorNow !== null && bicanhLastFloor !== null && bicanhFloorNow !== bicanhLastFloor) {
         this._bicanhSkillIdx = 0;
-        bicanhCooldownLeft.clear();
         bicanhLastClickedSkill = null;
         bicanhPrevClicked = false;
         bicanhPrevWasRejected = false;
@@ -4610,6 +4612,9 @@ class NpcBot {
             bicanhWaitTurnRetries = 0;
             bicanhPrevClicked = true;
             bicanhLastClickedSkill = skillName;
+            // v83 — bấm thử được chấp nhận thì skill này cũng hồi 3 turn
+            // như click thường (xem chú thích ở nhánh click thường dưới).
+            bicanhCooldownLeft.set(skillName, 3);
             this.log(`🌀 Click skill bicanh: "${forceResult.clicked}"`);
             this._bicanhSkillIdx++;
             const cd = await this.checkBicanhCooldown();
@@ -4661,6 +4666,13 @@ class NpcBot {
         bicanhPrevClicked = true;
         bicanhPrevWasRejected = false;
         bicanhLastClickedSkill = skillName;
+        // v83 — tự ghi nhớ skill vừa dùng hồi 3 turn (giống Luân Hồi v80):
+        // click được chấp nhận không sinh tin "đang hồi" nên không ghi thì
+        // bot quên skill này đang hồi; sang tầng mới nó bấm lại ngay và bị
+        // game báo hồi (log 2026-11-16 08:10:27/08:10:44). Map trừ dần theo
+        // lượt được chấp nhận ở các vòng sau, nên sau đúng 3 lượt khác skill
+        // này sẵn sàng lại — khớp nhịp xoay 4 skill hiện tại.
+        bicanhCooldownLeft.set(skillName, 3);
         this.log(`🌀 Click skill bicanh: "${clicked}"`);
         // Chỉ tăng index khi click đúng skill đích để giữ đúng quỹ đạo cooldown.
         this._bicanhSkillIdx++;

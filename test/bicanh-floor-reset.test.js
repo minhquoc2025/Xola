@@ -5,9 +5,12 @@ const { NpcBot } = require(path.join(__dirname, '..', 'src', 'main', 'npc-bot.js
 
 // 1. Bicanh loop: combo 32,29,26,23 (Lôi Đình, Hư, Kim, Vạn). Đánh tầng 1
 // tới skill thứ 3 thì game sang tầng 2 — vòng sau phải chạy lại từ skill
-// đầu (Lôi Đình), KHÔNG được bấm tiếp Vạn của vòng cũ. Đồng thời map
-// cooldown của tầng cũ phải bị xóa: click Kim ở tầng 1 ghi Hư hồi 3 turn,
-// sang tầng 2 bot phải bấm Hư ngay, không được chờ "đang hồi" của tầng cũ.
+// đầu (Lôi Đình), KHÔNG được bấm tiếp Vạn của vòng cũ. NHƯNG cooldown
+// phải được giữ nguyên qua tầng (v83, sửa sai v82): Lôi Đình vừa dùng ở
+// tầng 1 còn hồi 2 turn khi sang tầng 2 (tự ghi, xem bicanhLoop), Hư hồi
+// 3 turn do game báo ở click Kim — sang tầng 2 bot phải CHỜ cả hai chứ
+// không được bấm lại ngay (log thật 2026-11-16 08:10:44: bấm lại Lôi Đình
+// 1s sau lần dùng trước, game báo "Còn 3 turn").
 async function testBicanhFloorResetRestartsCombo() {
   const bot = new NpcBot({ executeJavaScript: () => 0 }, 1);
   bot.isRunning = true;
@@ -47,13 +50,19 @@ async function testBicanhFloorResetRestartsCombo() {
   if (JSON.stringify(seen) !== JSON.stringify(expected)) {
     throw new Error('Bicanh sang tầng mới phải chạy lại combo từ đầu, thực tế: ' + JSON.stringify(seen));
   }
-  if (!logs.some((line) => line.includes('sang tầng 2') && line.includes(s32))) {
+  // Map cooldown tầng cũ PHẢI được giữ (v83): sau dòng log "sang tầng 2"
+  // phải có lần chờ "đang hồi còn N lượt" cho Lôi Đình (vừa dùng ở tầng 1,
+  // tự ghi hồi 3 turn) và cho Hư (game báo hồi 3 turn ở click Kim tầng 1).
+  const floorIdx = logs.findIndex((line) => line.includes('sang tầng 2') && line.includes(s32));
+  if (floorIdx < 0) {
     throw new Error('Bicanh sang tầng phải log rõ là chạy lại combo từ đầu, log thực tế: ' + JSON.stringify(logs));
   }
-  // Map cooldown tầng cũ phải bị xóa: Hư ở tầng 2 được bấm ngay, không có
-  // lần chờ "đang hồi còn N lượt" nào cho Hư sau khi sang tầng.
-  if (logs.some((line) => line.includes('đang hồi còn') && line.includes('lượt — chờ rồi bấm lại'))) {
-    throw new Error('Bicanh sang tầng phải xóa cooldown tầng cũ, không được chờ hồi chiêu cũ, log thực tế: ' + JSON.stringify(logs));
+  const afterFloor = logs.slice(floorIdx);
+  if (!afterFloor.some((line) => line.includes('đang hồi còn') && line.includes(s32) && line.includes('lượt — chờ rồi bấm lại'))) {
+    throw new Error('Bicanh sang tầng phải giữ cooldown skill vừa dùng: Lôi Đình dùng ở tầng 1 phải được chờ hồi, không được bấm lại ngay, log thực tế: ' + JSON.stringify(logs));
+  }
+  if (!afterFloor.some((line) => line.includes('đang hồi còn') && line.includes(s29) && line.includes('lượt — chờ rồi bấm lại'))) {
+    throw new Error('Bicanh sang tầng phải giữ map cooldown tầng cũ: Hư hồi 3 turn ở tầng 1 phải được chờ ở tầng 2, log thực tế: ' + JSON.stringify(logs));
   }
   console.log('Bicanh floor reset restarts combo passed');
 }
