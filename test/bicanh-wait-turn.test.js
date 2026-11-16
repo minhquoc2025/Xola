@@ -632,10 +632,10 @@ function focusSandbox(articles) {
 }
 function focusBattleArticles() {
   const skill = 'Hư Không Đại Na Di';
-  const old1 = focusArticle('old1', 'Bí Cảnh tầng 5 Quất Bất Lực', `<@!${BICANH_FOCUS_UID}> Bí Cảnh tầng 5`, [focusButton(skill)]);
+  const old1 = focusArticle('old1', 'Bí Cảnh — Tầng 5/600 · Quất Bất Lực', `<@!${BICANH_FOCUS_UID}> Bí Cảnh — Tầng 5/600`, [focusButton(skill)]);
   const cmd1 = focusArticle('cmd1', '!bicanh', `avatars/${BICANH_FOCUS_UID}/abc.png !bicanh`, []);
-  const batA = focusArticle('batA', 'Bí Cảnh tầng 6', `<@!${BICANH_FOCUS_UID}> Bí Cảnh tầng 6`, [focusButton(skill)]);
-  const batB = focusArticle('batB', 'Bí Cảnh tầng 6', `<@!${BICANH_FOCUS_UID}> Bí Cảnh tầng 6`, [focusButton(skill)]);
+  const batA = focusArticle('batA', 'Bí Cảnh — Tầng 6/600', `<@!${BICANH_FOCUS_UID}> Bí Cảnh — Tầng 6/600`, [focusButton(skill)]);
+  const batB = focusArticle('batB', 'Bí Cảnh — Tầng 6/600', `<@!${BICANH_FOCUS_UID}> Bí Cảnh — Tầng 6/600`, [focusButton(skill)]);
   return { old1, cmd1, batA, batB, skill };
 }
 function focusBot(articles, sandbox) {
@@ -662,9 +662,9 @@ async function testBicanhFocusPicksLatestPostAnchorBattle() {
 
 async function testBicanhFocusSkipsOtherPlayerAndNonSkillScreens() {
   const { old1, cmd1, batA, skill } = focusBattleArticles();
-  const other = focusArticle('other', 'Bí Cảnh tầng 6', 'Bí Cảnh tầng 6 người khác', [focusButton(skill)]);
-  const noSkill = focusArticle('noskill', 'Bí Cảnh tầng 6', `<@!${BICANH_FOCUS_UID}> Bí Cảnh tầng 6`, [focusButton('Tiếp Tục')]);
-  const sandbox = focusSandbox([old1, cmd1, batA, other, noSkill]);
+  const other = focusArticle('other', 'Bí Cảnh — Tầng 6/600', 'Bí Cảnh — Tầng 6/600 người khác', [focusButton(skill)]);
+  const noSkill = focusArticle('noskill', 'Bí Cảnh — Tầng 6/600', `<@!${BICANH_FOCUS_UID}> Bí Cảnh — Tầng 6/600`, [focusButton('Tiếp Tục')]);
+  const sandbox = focusSandbox([old1, cmd1, noSkill, batA, other]);
   const bot = focusBot([old1, cmd1, batA, other, noSkill], sandbox);
   const focused = await bot.bicanhFocusBattle();
   if (focused !== 'batA') throw new Error('focus phải bỏ qua màn người khác và màn không có nút skill, thực tế: ' + focused);
@@ -701,7 +701,9 @@ async function testBicanhClickPrefersFocusedArticle() {
   console.log('Bicanh click prefers focused article passed');
 }
 
-async function testBicanhClickFallsBackWhenFocusStale() {
+async function testBicanhClickWaitsWhenNewestBattleButtonDisabled() {
+  // v91 — nút màn battle mới nhất bị khóa thì CHỜ (trả null), không được
+  // rơi xuống bấm màn cũ: bấm màn cũ game không tính, trận mới hết giờ.
   const { cmd1, batA, batB, skill } = focusBattleArticles();
   batB._buttons[0].disabled = true;
   const sandbox = focusSandbox([cmd1, batA, batB]);
@@ -714,9 +716,51 @@ async function testBicanhClickFallsBackWhenFocusStale() {
   bot.peekBicanhEphemeralDetail = async () => null;
   bot.dismissEphemeralMessages = async () => {};
   const result = await bot.clickNextBicanhSkill(skill);
-  if (!result || !result.clicked) throw new Error('focus cũ mất nút thì phải rơi xuống quét cũ và bấm được, thực tế: ' + JSON.stringify(result));
-  if (!batA._buttons[0].clicked) throw new Error('fallback phải bấm nút skill ở màn cũ (batA)');
-  console.log('Bicanh click falls back when focus stale passed');
+  if (result && result.clicked) throw new Error('màn mới nhất bị khóa nút thì click phải null (chờ), thực tế: ' + JSON.stringify(result));
+  if (batA._buttons[0].clicked) throw new Error('không được rơi xuống bấm nút skill ở màn cũ (batA)');
+  console.log('Bicanh click waits when newest battle button disabled passed');
+}
+
+// 17. v91 — màn mới chưa render nút thì focus null, không rơi xuống màn cũ.
+async function testBicanhFocusIgnoresOldBattleWhenNewNotReady() {
+  const { skill } = focusBattleArticles();
+  const cmd = focusArticle('cmd', '!bicanh', `avatars/${BICANH_FOCUS_UID}/abc.png !bicanh`, []);
+  const oldBattle = focusArticle('oldBattle', 'Bí Cảnh — Tầng 541/600', `<@!${BICANH_FOCUS_UID}> Bí Cảnh — Tầng 541/600`, [focusButton(skill)]);
+  const newBattle = focusArticle('newBattle', 'Bí Cảnh — Tầng 542/600', `<@!${BICANH_FOCUS_UID}> Bí Cảnh — Tầng 542/600`, []);
+  const sandbox = focusSandbox([cmd, oldBattle, newBattle]);
+  const bot = focusBot([cmd, oldBattle, newBattle], sandbox);
+  bot._bicanhMsgBaseline = 0;
+  const focused = await bot.bicanhFocusBattle();
+  if (focused !== null) throw new Error('màn mới chưa render nút thì focus phải null, không được rơi xuống màn cũ, thực tế: ' + focused);
+  if (sandbox.window.botBicanhFocusMsgId) throw new Error('focus phải được xóa, không giữ id màn cũ, thực tế: ' + sandbox.window.botBicanhFocusMsgId);
+  if (oldBattle.getAttribute('data-bicanh-focus') === 'true') throw new Error('màn cũ không được giữ dấu focus');
+  console.log('Bicanh focus ignores old battle when new not ready passed');
+}
+
+// 18. v91 — click chỉ bấm trong màn mới nhất: màn mới chưa có nút thì
+// không bấm màn cũ; màn mới có nút thì bấm đúng màn mới.
+async function testBicanhClickOnlyNewestBattle() {
+  const { skill } = focusBattleArticles();
+  const cmd = focusArticle('cmd', '!bicanh', `avatars/${BICANH_FOCUS_UID}/abc.png !bicanh`, []);
+  const oldBattle = focusArticle('oldBattle', 'Bí Cảnh — Tầng 541/600', `<@!${BICANH_FOCUS_UID}> Bí Cảnh — Tầng 541/600`, [focusButton(skill)]);
+  const newBattle = focusArticle('newBattle', 'Bí Cảnh — Tầng 542/600', `<@!${BICANH_FOCUS_UID}> Bí Cảnh — Tầng 542/600`, []);
+  const sandbox = focusSandbox([cmd, oldBattle, newBattle]);
+  const bot = focusBot([cmd, oldBattle, newBattle], sandbox);
+  bot._bicanhMsgBaseline = 0;
+  bot.peekBicanhEphemeralDetail = async () => null;
+  bot.dismissEphemeralMessages = async () => {};
+  bot.delay = async () => {};
+  const result = await bot.clickNextBicanhSkill(skill);
+  if (result && result.clicked) throw new Error('màn mới chưa có nút thì click phải null, thực tế: ' + JSON.stringify(result));
+  if (oldBattle._buttons[0].clicked) throw new Error('không được bấm nút skill ở màn cũ (tầng 541)');
+  // Màn mới render nút xong thì bấm đúng màn mới.
+  const newBtn = focusButton(skill);
+  newBattle._buttons.push(newBtn);
+  const result2 = await bot.clickNextBicanhSkill(skill);
+  if (!result2 || !result2.clicked) throw new Error('màn mới có nút thì phải bấm được, thực tế: ' + JSON.stringify(result2));
+  if (!newBtn.clicked) throw new Error('click phải rơi vào nút skill ở màn mới (tầng 542)');
+  if (oldBattle._buttons[0].clicked) throw new Error('click không được rơi vào màn cũ (tầng 541)');
+  console.log('Bicanh click only newest battle passed');
 }
 
 async function testBicanhClickRetriesWhenButtonNotReady() {
@@ -783,7 +827,9 @@ testBicanhWaitTurnRetriesPreviousSkill()
   .then(testBicanhFocusSkipsOtherPlayerAndNonSkillScreens)
   .then(testBicanhFocusReturnsNullBeforeAnchorAndWithoutUserId)
   .then(testBicanhClickPrefersFocusedArticle)
-  .then(testBicanhClickFallsBackWhenFocusStale)
+  .then(testBicanhClickWaitsWhenNewestBattleButtonDisabled)
+  .then(testBicanhFocusIgnoresOldBattleWhenNewNotReady)
+  .then(testBicanhClickOnlyNewestBattle)
   .then(testBicanhClickRetriesWhenButtonNotReady)
   .then(testBicanhClickGivesUpAfterThreeAttempts)
   .then(testBicanhUserIdConfig)

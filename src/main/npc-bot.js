@@ -4905,27 +4905,39 @@ class NpcBot {
           break;
         }
         const list = anchor >= 0 ? msgs.slice(anchor + 1) : msgs.slice(baseline);
+        // v91 — chỉ nhận màn battle MỚI NHẤT (Fox/Nguyen 2026-11-16: game
+        // sang tầng là ra message battle mới, màn cũ vẫn còn nút skill —
+        // bấm vào thì game không tính, trận mới hết giờ, timeout tầng 561).
+        // Tìm màn mới nhất khớp "Tầng N/600" trước, rồi chỉ xét nút trong
+        // đúng màn đó: màn mới chưa render nút thì trả null (đợi rồi bấm
+        // lại), KHÔNG rơi xuống màn cũ.
+        const clearFocus = () => {
+          document.querySelectorAll('[data-bicanh-focus="true"]').forEach(m => m.removeAttribute('data-bicanh-focus'));
+          window.botBicanhFocusMsgId = '';
+        };
+        let battle = null;
         for (let i = list.length - 1; i >= 0; i--) {
           const msg = list[i];
           if (msg.getAttribute && msg.getAttribute('data-bot-ephemeral') === 'true') continue;
           const html = msg.innerHTML || '';
           if (!html.includes(userId)) continue;
-          const btns = msg.querySelectorAll('button, [role="button"]');
-          let hasSkill = false;
-          for (const btn of btns) {
-            if (btn.disabled) continue;
-            if (btn.offsetParent === null) continue;
-            const clean = norm(btn.textContent);
-            if (!clean) continue;
-            if (skillNames.some(name => name && (clean === name || clean.includes(name)))) { hasSkill = true; break; }
-          }
-          if (!hasSkill) continue;
-          document.querySelectorAll('[data-bicanh-focus="true"]').forEach(m => m.removeAttribute('data-bicanh-focus'));
-          msg.setAttribute('data-bicanh-focus', 'true');
-          window.botBicanhFocusMsgId = msg.id || '';
-          return msg.id || '';
+          if (/Tầng\\s*(\\d+)\\s*\\//.test(msg.textContent || '')) { battle = msg; break; }
         }
-        return null;
+        if (!battle) { clearFocus(); return null; }
+        const btns = battle.querySelectorAll('button, [role="button"]');
+        let hasSkill = false;
+        for (const btn of btns) {
+          if (btn.disabled) continue;
+          if (btn.offsetParent === null) continue;
+          const clean = norm(btn.textContent);
+          if (!clean) continue;
+          if (skillNames.some(name => name && (clean === name || clean.includes(name)))) { hasSkill = true; break; }
+        }
+        if (!hasSkill) { clearFocus(); return null; }
+        clearFocus();
+        battle.setAttribute('data-bicanh-focus', 'true');
+        window.botBicanhFocusMsgId = battle.id || '';
+        return battle.id || '';
       })()`);
   }
 
@@ -5035,23 +5047,28 @@ class NpcBot {
        const userId = ${JSON.stringify(userId)};
        const msgs = document.querySelectorAll('[role="article"]');
        const recent = Array.from(msgs).slice(-40).reverse();
+       // v91 — chỉ bấm trong màn battle MỚI NHẤT (khớp "Tầng N/600"):
+       // màn cũ vẫn còn nút nhưng bấm vào game không tính, trận mới hết
+       // giờ (timeout tầng 561). Màn mới chưa có nút thì trả null để loop
+       // đợi rồi bấm lại, không rơi xuống màn cũ.
+       let battle = null;
        for (const msg of recent) {
-         const rawText = msg.textContent || '';
-         const norm = rawText.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\u0111/g,'d').replace(/\u0110/g,'d').toLowerCase();
+         if (msg.getAttribute && msg.getAttribute('data-bot-ephemeral') === 'true') continue;
          if (userId && !(msg.innerHTML || '').includes(userId)) continue;
-         if (!userId && username && !isOwnedGameMessage(rawText, username, ['bicanh', 'bi cảnh', 'bí cảnh', 'thap', 'tầng', 'leo tầng', 'fight', 'battle', 'đánh'])) continue;
-         const btns = msg.querySelectorAll('button, [role="button"]');
-         if (btns.length === 0) continue;
-         for (const btn of btns) {
-           if (btn.disabled) continue;
-           const raw = (btn.textContent || '').trim();
-           if (!raw || /[@|!]/.test(raw)) continue;
-           const clean = raw.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\u0111/g,'d').replace(/\u0110/g,'d').toLowerCase();
-           if (clean === nameNoD || clean.includes(nameNoD)) {
-             btn.disabled = false;
-             btn.click();
-             return raw;
-           }
+         if (!userId && username && !isOwnedGameMessage(msg.textContent || '', username, ['bicanh', 'bi cảnh', 'bí cảnh', 'thap', 'tầng', 'leo tầng', 'fight', 'battle', 'đánh'])) continue;
+         if (/Tầng\\s*(\\d+)\\s*\\//.test(msg.textContent || '')) { battle = msg; break; }
+       }
+       if (!battle) return null;
+       const btns = battle.querySelectorAll('button, [role="button"]');
+       for (const btn of btns) {
+         if (btn.disabled) continue;
+         const raw = (btn.textContent || '').trim();
+         if (!raw || /[@|!]/.test(raw)) continue;
+         const clean = raw.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\u0111/g,'d').replace(/\u0110/g,'d').toLowerCase();
+         if (clean === nameNoD || clean.includes(nameNoD)) {
+           btn.disabled = false;
+           btn.click();
+           return raw;
          }
        }
        return null;
