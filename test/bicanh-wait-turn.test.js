@@ -887,6 +887,15 @@ testBicanhWaitTurnRetriesPreviousSkill()
   .then(testBicanhWaitProbesSameSkillAfterThreeWaits)
   .then(testBicanhCooldownTableRecordsTwoForThreeTurnSkills)
   .then(testBicanhClickGapIsTwoSeconds)
+  .then(testBicanhFocusFollowsUnownedRegenNextFloor)
+  .then(testBicanhFocusIgnoresUnownedRegenSameFloor)
+  .then(testBicanhFocusIgnoresUnownedForeignHigherFloor)
+  .then(testBicanhFocusIgnoresUnownedForeignLowerFloor)
+  .then(testBicanhFocusIgnoresUnownedBattleWithoutFloorText)
+  .then(testBicanhFocusWaitsWhenUnownedRegenNotReady)
+  .then(testBicanhClickFollowsUnownedRegenNextFloor)
+  .then(testBicanhCurrentFloorReadsUnownedRegenNextFloor)
+  .then(testBicanhCurrentFloorIgnoresUnownedForeignHigherFloor)
   .catch((error) => {
     console.error(error);
     process.exitCode = 1;
@@ -1022,3 +1031,151 @@ async function testBicanhClickGapIsTwoSeconds() {
   }
   console.log('Bicanh click gap is two seconds passed');
 }
+
+// 30. v95 — màn regen KHÔNG có user id, tầng = tầng màn mình + 1
+// (587 -> 588, log live 2026-11-16 13:56-14:12): focus phải chuyển sang
+// màn mới, đánh dấu unowned, ghi đúng tầng mới/cũ.
+async function testBicanhFocusFollowsUnownedRegenNextFloor() {
+  const { skill } = focusBattleArticles();
+  const cmd = focusArticle('cmd', '!bicanh', `avatars/${BICANH_FOCUS_UID}/abc.png !bicanh`, []);
+  const oldBattle = focusArticle('oldBattle', 'Bí Cảnh [👑 Đỗ Kiếp] — Tầng 587/600', `<@!${BICANH_FOCUS_UID}> Bí Cảnh — Tầng 587/600`, [focusButton(skill)]);
+  const newBattle = focusArticle('newBattle', 'Bí Cảnh [👑 Đỗ Kiếp] — Tầng 588/600', 'Bí Cảnh [👑 Đỗ Kiếp] — Tầng 588/600', [focusButton(skill)]);
+  const sandbox = focusSandbox([cmd, oldBattle, newBattle]);
+  const bot = focusBot([cmd, oldBattle, newBattle], sandbox);
+  bot._bicanhMsgBaseline = 0;
+  const focused = await bot.bicanhFocusBattle();
+  if (focused !== 'newBattle') throw new Error('màn regen 588 không id (tầng +1) thì focus phải chuyển sang màn mới, thực tế: ' + focused);
+  if (!bot._bicanhFocusInfo || bot._bicanhFocusInfo.unowned !== true) throw new Error('focus regen phải đánh dấu unowned, thực tế: ' + JSON.stringify(bot._bicanhFocusInfo));
+  if (bot._bicanhFocusInfo.newFloor !== 588 || bot._bicanhFocusInfo.ownedFloor !== 587) throw new Error('focus regen phải ghi tầng mới 588 / cũ 587, thực tế: ' + JSON.stringify(bot._bicanhFocusInfo));
+  if (oldBattle.getAttribute('data-bicanh-focus') === 'true') throw new Error('màn cũ không được giữ dấu focus');
+  console.log('Bicanh focus follows unowned regen next floor passed');
+}
+
+// 31. v95 — màn mới không id nhưng CÙNG tầng với màn mình (587 -> 587):
+// giữ màn mình (chống bấm nhầm battle người khác cùng tầng).
+async function testBicanhFocusIgnoresUnownedRegenSameFloor() {
+  const { skill } = focusBattleArticles();
+  const cmd = focusArticle('cmd', '!bicanh', `avatars/${BICANH_FOCUS_UID}/abc.png !bicanh`, []);
+  const oldBattle = focusArticle('oldBattle', 'Bí Cảnh [👑 Đỗ Kiếp] — Tầng 587/600', `<@!${BICANH_FOCUS_UID}> Bí Cảnh — Tầng 587/600`, [focusButton(skill)]);
+  const newBattle = focusArticle('newBattle', 'Bí Cảnh [👑 Đỗ Kiếp] — Tầng 587/600', 'Bí Cảnh [👑 Đỗ Kiếp] — Tầng 587/600', [focusButton(skill)]);
+  const sandbox = focusSandbox([cmd, oldBattle, newBattle]);
+  const bot = focusBot([cmd, oldBattle, newBattle], sandbox);
+  bot._bicanhMsgBaseline = 0;
+  const focused = await bot.bicanhFocusBattle();
+  if (focused !== 'oldBattle') throw new Error('màn mới không id cùng tầng thì focus phải giữ màn mình, thực tế: ' + focused);
+  console.log('Bicanh focus ignores unowned regen same floor passed');
+}
+
+// 32. v95 — màn mới không id, tầng cao hơn +1 (587 -> 590, battle lạ):
+// giữ màn mình.
+async function testBicanhFocusIgnoresUnownedForeignHigherFloor() {
+  const { skill } = focusBattleArticles();
+  const cmd = focusArticle('cmd', '!bicanh', `avatars/${BICANH_FOCUS_UID}/abc.png !bicanh`, []);
+  const oldBattle = focusArticle('oldBattle', 'Bí Cảnh [👑 Đỗ Kiếp] — Tầng 587/600', `<@!${BICANH_FOCUS_UID}> Bí Cảnh — Tầng 587/600`, [focusButton(skill)]);
+  const newBattle = focusArticle('newBattle', 'Bí Cảnh [👑 Đỗ Kiếp] — Tầng 590/600', 'Bí Cảnh [👑 Đỗ Kiếp] — Tầng 590/600', [focusButton(skill)]);
+  const sandbox = focusSandbox([cmd, oldBattle, newBattle]);
+  const bot = focusBot([cmd, oldBattle, newBattle], sandbox);
+  bot._bicanhMsgBaseline = 0;
+  const focused = await bot.bicanhFocusBattle();
+  if (focused !== 'oldBattle') throw new Error('màn mới không id tầng 590 (không phải +1) thì focus phải giữ màn mình, thực tế: ' + focused);
+  console.log('Bicanh focus ignores unowned foreign higher floor passed');
+}
+
+// 33. v95 — màn mới không id, tầng thấp hơn (587 -> 585, battle lạ):
+// giữ màn mình.
+async function testBicanhFocusIgnoresUnownedForeignLowerFloor() {
+  const { skill } = focusBattleArticles();
+  const cmd = focusArticle('cmd', '!bicanh', `avatars/${BICANH_FOCUS_UID}/abc.png !bicanh`, []);
+  const oldBattle = focusArticle('oldBattle', 'Bí Cảnh [👑 Đỗ Kiếp] — Tầng 587/600', `<@!${BICANH_FOCUS_UID}> Bí Cảnh — Tầng 587/600`, [focusButton(skill)]);
+  const newBattle = focusArticle('newBattle', 'Bí Cảnh [👑 Đỗ Kiếp] — Tầng 585/600', 'Bí Cảnh [👑 Đỗ Kiếp] — Tầng 585/600', [focusButton(skill)]);
+  const sandbox = focusSandbox([cmd, oldBattle, newBattle]);
+  const bot = focusBot([cmd, oldBattle, newBattle], sandbox);
+  bot._bicanhMsgBaseline = 0;
+  const focused = await bot.bicanhFocusBattle();
+  if (focused !== 'oldBattle') throw new Error('màn mới không id tầng thấp hơn thì focus phải giữ màn mình, thực tế: ' + focused);
+  console.log('Bicanh focus ignores unowned foreign lower floor passed');
+}
+
+// 34. v95 — màn mới không id, có nút skill nhưng KHÔNG có chữ tầng:
+// giữ màn mình (không đọc được tầng thì không đoán).
+async function testBicanhFocusIgnoresUnownedBattleWithoutFloorText() {
+  const { skill } = focusBattleArticles();
+  const cmd = focusArticle('cmd', '!bicanh', `avatars/${BICANH_FOCUS_UID}/abc.png !bicanh`, []);
+  const oldBattle = focusArticle('oldBattle', 'Bí Cảnh [👑 Đỗ Kiếp] — Tầng 587/600', `<@!${BICANH_FOCUS_UID}> Bí Cảnh — Tầng 587/600`, [focusButton(skill)]);
+  const newBattle = focusArticle('newBattle', 'Bí Cảnh Vực Sâu', 'Bí Cảnh Vực Sâu', [focusButton(skill)]);
+  const sandbox = focusSandbox([cmd, oldBattle, newBattle]);
+  const bot = focusBot([cmd, oldBattle, newBattle], sandbox);
+  bot._bicanhMsgBaseline = 0;
+  const focused = await bot.bicanhFocusBattle();
+  if (focused !== 'oldBattle') throw new Error('màn mới không id và không có chữ tầng thì focus phải giữ màn mình, thực tế: ' + focused);
+  console.log('Bicanh focus ignores unowned battle without floor text passed');
+}
+
+// 35. v95 — màn regen 588 không id, tầng +1, nhưng CHƯA render nút:
+// focus phải null (đợi), không được rơi xuống màn cũ.
+async function testBicanhFocusWaitsWhenUnownedRegenNotReady() {
+  const { skill } = focusBattleArticles();
+  const cmd = focusArticle('cmd', '!bicanh', `avatars/${BICANH_FOCUS_UID}/abc.png !bicanh`, []);
+  const oldBattle = focusArticle('oldBattle', 'Bí Cảnh [👑 Đỗ Kiếp] — Tầng 587/600', `<@!${BICANH_FOCUS_UID}> Bí Cảnh — Tầng 587/600`, [focusButton(skill)]);
+  const newBattle = focusArticle('newBattle', 'Bí Cảnh [👑 Đỗ Kiếp] — Tầng 588/600', 'Bí Cảnh [👑 Đỗ Kiếp] — Tầng 588/600', []);
+  const sandbox = focusSandbox([cmd, oldBattle, newBattle]);
+  const bot = focusBot([cmd, oldBattle, newBattle], sandbox);
+  bot._bicanhMsgBaseline = 0;
+  const focused = await bot.bicanhFocusBattle();
+  if (focused !== null) throw new Error('màn regen 588 chưa render nút thì focus phải null (đợi), không được rơi xuống màn cũ, thực tế: ' + focused);
+  if (sandbox.window.botBicanhFocusMsgId) throw new Error('focus phải được xóa, không giữ id màn cũ, thực tế: ' + sandbox.window.botBicanhFocusMsgId);
+  if (oldBattle.getAttribute('data-bicanh-focus') === 'true') throw new Error('màn cũ không được giữ dấu focus');
+  console.log('Bicanh focus waits when unowned regen not ready passed');
+}
+
+// 36. v95 — click phải bấm trong màn regen 588 không id, không bấm màn
+// cũ 587, và log 🔀 khi chuyển sang màn không id.
+async function testBicanhClickFollowsUnownedRegenNextFloor() {
+  const { skill } = focusBattleArticles();
+  const cmd = focusArticle('cmd', '!bicanh', `avatars/${BICANH_FOCUS_UID}/abc.png !bicanh`, []);
+  const oldBattle = focusArticle('oldBattle', 'Bí Cảnh [👑 Đỗ Kiếp] — Tầng 587/600', `<@!${BICANH_FOCUS_UID}> Bí Cảnh — Tầng 587/600`, [focusButton(skill)]);
+  const newBattle = focusArticle('newBattle', 'Bí Cảnh [👑 Đỗ Kiếp] — Tầng 588/600', 'Bí Cảnh [👑 Đỗ Kiếp] — Tầng 588/600', [focusButton(skill)]);
+  const sandbox = focusSandbox([cmd, oldBattle, newBattle]);
+  const bot = focusBot([cmd, oldBattle, newBattle], sandbox);
+  bot._bicanhMsgBaseline = 0;
+  bot.peekBicanhEphemeralDetail = async () => null;
+  bot.dismissEphemeralMessages = async () => {};
+  bot.delay = async () => {};
+  const logs = [];
+  bot.log = (...args) => logs.push(args.join(' '));
+  const result = await bot.clickNextBicanhSkill(skill);
+  if (!result || !result.clicked) throw new Error('màn regen 588 không id thì phải bấm được, thực tế: ' + JSON.stringify(result));
+  if (!newBattle._buttons[0].clicked) throw new Error('click phải rơi vào nút skill ở màn regen 588');
+  if (oldBattle._buttons[0].clicked) throw new Error('click không được rơi vào màn cũ 587');
+  if (!logs.some((line) => line.includes('🔀') && line.includes('588'))) throw new Error('chuyển sang màn không id phải log 🔀 tầng 588, log thực tế: ' + JSON.stringify(logs));
+  console.log('Bicanh click follows unowned regen next floor passed');
+}
+
+// 37. v95 — bicanhCurrentFloor phải đọc tầng màn regen 588 không id
+// (để loop log "sang tầng 588" và thẻ trạng thái cập nhật).
+async function testBicanhCurrentFloorReadsUnownedRegenNextFloor() {
+  const { skill } = focusBattleArticles();
+  const cmd = focusArticle('cmd', '!bicanh', `avatars/${BICANH_FOCUS_UID}/abc.png !bicanh`, []);
+  const oldBattle = focusArticle('oldBattle', 'Bí Cảnh [👑 Đỗ Kiếp] — Tầng 587/600', `<@!${BICANH_FOCUS_UID}> Bí Cảnh — Tầng 587/600`, [focusButton(skill)]);
+  const newBattle = focusArticle('newBattle', 'Bí Cảnh [👑 Đỗ Kiếp] — Tầng 588/600', 'Bí Cảnh [👑 Đỗ Kiếp] — Tầng 588/600', [focusButton(skill)]);
+  const sandbox = focusSandbox([cmd, oldBattle, newBattle]);
+  const bot = focusBot([cmd, oldBattle, newBattle], sandbox);
+  const floor = await bot.bicanhCurrentFloor();
+  if (floor !== 588) throw new Error('tầng hiện tại phải đọc màn regen 588 không id, thực tế: ' + floor);
+  console.log('Bicanh current floor reads unowned regen next floor passed');
+}
+
+// 38. v95 — bicanhCurrentFloor bỏ qua màn lạ không id tầng cao hơn +1
+// (587 -> 590): vẫn đọc tầng màn của mình.
+async function testBicanhCurrentFloorIgnoresUnownedForeignHigherFloor() {
+  const { skill } = focusBattleArticles();
+  const cmd = focusArticle('cmd', '!bicanh', `avatars/${BICANH_FOCUS_UID}/abc.png !bicanh`, []);
+  const oldBattle = focusArticle('oldBattle', 'Bí Cảnh [👑 Đỗ Kiếp] — Tầng 587/600', `<@!${BICANH_FOCUS_UID}> Bí Cảnh — Tầng 587/600`, [focusButton(skill)]);
+  const newBattle = focusArticle('newBattle', 'Bí Cảnh [👑 Đỗ Kiếp] — Tầng 590/600', 'Bí Cảnh [👑 Đỗ Kiếp] — Tầng 590/600', [focusButton(skill)]);
+  const sandbox = focusSandbox([cmd, oldBattle, newBattle]);
+  const bot = focusBot([cmd, oldBattle, newBattle], sandbox);
+  const floor = await bot.bicanhCurrentFloor();
+  if (floor !== 587) throw new Error('tầng hiện tại phải giữ 587 khi màn lạ 590 không id, thực tế: ' + floor);
+  console.log('Bicanh current floor ignores unowned foreign higher floor passed');
+}
+

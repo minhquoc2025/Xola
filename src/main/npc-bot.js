@@ -4417,18 +4417,38 @@ class NpcBot {
       const username = ${JSON.stringify(username)};
       const msgs = document.querySelectorAll('[role="article"]');
       const recent = Array.from(msgs).slice(-40).reverse();
-      for (const msg of recent) {
-        if (msg.getAttribute && msg.getAttribute('data-bot-ephemeral') === 'true') continue;
-        if (userId && !(msg.innerHTML || '').includes(userId)) continue;
-        if (!userId && username) {
+      // v95 — như bicanhFocusBattle: màn mới nhất thắng kể cả không có
+      // user id, chỉ khi tầng của nó = tầng màn của mình + 1 (game sinh
+      // lại màn battle khi battle lỗi; màn mới là tin APP không có id).
+      // Tầng bằng / khác +1 / không đọc được, hoặc không còn màn nào của
+      // mình, thì giữ tầng màn của mình (null nếu chưa có).
+      const floorOfMsg = (msg) => {
+        const m = String(msg.textContent || '').match(/Tầng\\s*(\\d+)\\s*\\//);
+        return m ? parseInt(m[1], 10) : null;
+      };
+      const isOwnedMsg = (msg) => {
+        if (userId) return (msg.innerHTML || '').includes(userId);
+        if (username) {
           const first = String(username).normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/\\u0111/g, 'd').replace(/\\u0110/g, 'd').split(' ')[0].toLowerCase();
           const norm = String(msg.textContent || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/\\u0111/g, 'd').replace(/\\u0110/g, 'd').toLowerCase();
-          if (first && !norm.includes(first)) continue;
+          return !first || norm.includes(first);
         }
-        const m = String(msg.textContent || '').match(/Tầng\\s*(\\d+)\\s*\\//);
-        if (m) return parseInt(m[1], 10);
+        return true;
+      };
+      let newestFloor = null;
+      let ownedFloor = null;
+      let newestIsOwned = false;
+      for (const msg of recent) {
+        if (msg.getAttribute && msg.getAttribute('data-bot-ephemeral') === 'true') continue;
+        const f = floorOfMsg(msg);
+        if (f === null) continue;
+        if (newestFloor === null) { newestFloor = f; newestIsOwned = isOwnedMsg(msg); }
+        if (isOwnedMsg(msg)) { ownedFloor = f; break; }
       }
-      return null;
+      if (newestFloor === null) return null;
+      if (newestIsOwned) return newestFloor;
+      if (ownedFloor !== null && newestFloor === ownedFloor + 1) return newestFloor;
+      return ownedFloor;
     })()`);
     return (typeof floor === 'number' && floor > 0) ? floor : null;
   }
@@ -4938,7 +4958,7 @@ class NpcBot {
     const normalized = skillNames.map(name => String(name || '').normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '').replace(/\u0111/gi, 'd').replace(/\u01A1/gi, 'o').replace(/\u01B0/gi, 'u')
       .toLowerCase().replace(/\s+/g, ' ').trim());
-    return await this.exec(`(() => {
+    const focusRaw = await this.exec(`(() => {
         const userId = ${JSON.stringify(userId)};
         const cmd = ${JSON.stringify(this.bicanhCmd || '!bicanh')};
         const baseline = ${JSON.stringify(this._bicanhMsgBaseline || 0)};
@@ -4985,15 +5005,49 @@ class NpcBot {
           }
           return false;
         };
+        // v95 — màn battle mới nhất sau neo thắng KỂ CẢ không có user
+        // id trong innerHTML (log 13:56-14:12: màn 587 là reply của
+        // !bicanh nên có id, màn 588 game sinh ra khi battle lỗi là tin
+        // APP không reply tới mình nên KHÔNG có id — v94 bỏ qua nó, bot
+        // cứ bấm màn 587 cũ tới khi 588 hết giờ). Màn lạ chỉ thắng khi
+        // tầng của nó đọc được VÀ = tầng màn của mình + 1 (sinh lại lên
+        // tầng mới); tầng bằng / thấp hơn / cao hơn +1 / không đọc được
+        // thì giữ màn của mình — chống bấm nhầm battle của người khác
+        // trong cùng thread (test cũ: màn người khác cùng tầng 6 phải
+        // bị bỏ qua). Không còn màn nào của mình thì chờ, không đoán.
+        const floorOf = (msg) => {
+          const m = String(msg.textContent || '').match(/Tầng\\s*(\\d+)\\s*\\//);
+          return m ? parseInt(m[1], 10) : null;
+        };
         let battle = null;
+        let ownedBattle = null;
         for (let i = list.length - 1; i >= 0; i--) {
           const msg = list[i];
           if (msg.getAttribute && msg.getAttribute('data-bot-ephemeral') === 'true') continue;
+          if (!isBattleDom(msg)) continue;
+          if (!battle) battle = msg;
           const html = msg.innerHTML || '';
-          if (!html.includes(userId)) continue;
-          if (isBattleDom(msg)) { battle = msg; break; }
+          if (html.includes(userId)) { ownedBattle = msg; break; }
         }
-        if (!battle) { clearFocus(); return null; }
+        let unownedSwitch = false;
+        let newFloor = null;
+        let ownedFloor = null;
+        let rejected = null;
+        if (battle && ownedBattle && battle !== ownedBattle) {
+          newFloor = floorOf(battle);
+          ownedFloor = floorOf(ownedBattle);
+          if (newFloor !== null && ownedFloor !== null && newFloor === ownedFloor + 1) {
+            unownedSwitch = true;
+          } else {
+            rejected = { id: battle.id || '', floor: newFloor };
+            battle = ownedBattle;
+          }
+        } else if (battle && !ownedBattle) {
+          newFloor = floorOf(battle);
+          rejected = { id: battle.id || '', floor: newFloor };
+          battle = null;
+        }
+        if (!battle) { clearFocus(); return JSON.stringify({ id: null, unowned: false, newFloor: null, ownedFloor: null, rejected }); }
         const btns = battle.querySelectorAll('button, [role="button"]');
         let hasSkill = false;
         for (const btn of btns) {
@@ -5003,12 +5057,18 @@ class NpcBot {
           if (!clean) continue;
           if (skillNames.some(name => name && (clean === name || clean.includes(name)))) { hasSkill = true; break; }
         }
-        if (!hasSkill) { clearFocus(); return null; }
+        if (!hasSkill) { clearFocus(); return JSON.stringify({ id: null, unowned: false, newFloor: null, ownedFloor: null, rejected }); }
         clearFocus();
         battle.setAttribute('data-bicanh-focus', 'true');
         window.botBicanhFocusMsgId = battle.id || '';
-        return battle.id || '';
+        return JSON.stringify({ id: battle.id || '', unowned: unownedSwitch, newFloor, ownedFloor, rejected });
       })()`);
+    let focusInfo = null;
+    try { focusInfo = (typeof focusRaw === 'string' && focusRaw) ? JSON.parse(focusRaw) : null; } catch (e) { focusInfo = null; }
+    if (!focusInfo && typeof focusRaw === 'string' && focusRaw) focusInfo = { id: focusRaw, unowned: false, newFloor: null, ownedFloor: null, rejected: null };
+    this._bicanhFocusInfo = focusInfo;
+    if (!focusInfo || !focusInfo.id) return null;
+    return focusInfo.id;
   }
 
   // Click skill bicanh theo tên. Trả về { clicked, waitTurn, wrongPerson, interactionFailed, cooldownDetail, skipCurrent }:
@@ -5077,7 +5137,17 @@ class NpcBot {
         const focused = await this.bicanhFocusBattle();
         if (focused && focused !== this._bicanhFocusMsgId) {
           this._bicanhFocusMsgId = focused;
-          this.log('🎯 Bicanh: focus màn battle mới của mình (sau !bicanh)');
+          const info = this._bicanhFocusInfo;
+          if (info && info.unowned) {
+            this.log(`🔀 Bicanh: theo màn battle mới tầng ${info.newFloor} (tin APP, không có user id trong tin nhắn) — màn cũ tầng ${info.ownedFloor === null ? '?' : info.ownedFloor} không còn là màn đang chạy...`);
+          } else {
+            this.log('🎯 Bicanh: focus màn battle mới của mình (sau !bicanh)');
+          }
+        }
+        const rej = this._bicanhFocusInfo && this._bicanhFocusInfo.rejected;
+        if (rej && rej.id && rej.id !== this._bicanhFocusRejectedId) {
+          this._bicanhFocusRejectedId = rej.id;
+          this.log(`⚠️ Bicanh: màn battle mới nhất tầng ${rej.floor === null ? '?' : rej.floor} không có user id và không phải tầng tiếp theo — giữ màn của mình, không bấm màn lạ...`);
         }
       }
       clicked = await this.exec(`(() => {
@@ -5129,20 +5199,41 @@ class NpcBot {
        // v94 — chỉ bấm trong màn battle MỚI NHẤT: nhận diện bằng nút
        // skill HOẶC "Tầng N/600" (như bicanhFocusBattle). Màn mới chưa
        // có nút thì trả null để loop đợi rồi bấm lại, không rơi xuống cũ.
-       let battle = null;
-       for (const msg of recent) {
-         if (msg.getAttribute && msg.getAttribute('data-bot-ephemeral') === 'true') continue;
-         if (userId && !(msg.innerHTML || '').includes(userId)) continue;
-         if (!userId && username && !isOwnedGameMessage(msg.textContent || '', username, ['bicanh', 'bi cảnh', 'bí cảnh', 'thap', 'tầng', 'leo tầng', 'fight', 'battle', 'đánh'])) continue;
-         if (/Tầng\\s*(\\d+)\\s*\\//.test(msg.textContent || '')) { battle = msg; break; }
+       // v95 — như bicanhFocusBattle: màn mới nhất thắng kể cả không
+       // có user id, chỉ khi tầng của nó = tầng màn của mình + 1.
+       const floorOfMsg = (msg) => {
+         const m = String(msg.textContent || '').match(/Tầng\\s*(\\d+)\\s*\\//);
+         return m ? parseInt(m[1], 10) : null;
+       };
+       const isOwnedMsg = (msg) => {
+         if (userId) return (msg.innerHTML || '').includes(userId);
+         if (username) return isOwnedGameMessage(msg.textContent || '', username, ['bicanh', 'bi cảnh', 'bí cảnh', 'thap', 'tầng', 'leo tầng', 'fight', 'battle', 'đánh']);
+         return true;
+       };
+       const isBattleMsg = (msg) => {
+         if (/Tầng\\s*(\\d+)\\s*\\//.test(msg.textContent || '')) return true;
          const domBtns = msg.querySelectorAll('button, [role="button"]');
-         let hasSkillBtn = false;
          for (const btn of domBtns) {
            const clean = norm(btn.textContent);
            if (!clean) continue;
-           if (skillNames.some(name => name && (clean === name || clean.includes(name)))) { hasSkillBtn = true; break; }
+           if (skillNames.some(name => name && (clean === name || clean.includes(name)))) return true;
          }
-         if (hasSkillBtn) { battle = msg; break; }
+         return false;
+       };
+       let battle = null;
+       let ownedBattle = null;
+       for (const msg of recent) {
+         if (msg.getAttribute && msg.getAttribute('data-bot-ephemeral') === 'true') continue;
+         if (!isBattleMsg(msg)) continue;
+         if (!battle) battle = msg;
+         if (isOwnedMsg(msg)) { ownedBattle = msg; break; }
+       }
+       if (battle && ownedBattle && battle !== ownedBattle) {
+         const newFloor = floorOfMsg(battle);
+         const ownedFloor = floorOfMsg(ownedBattle);
+         if (!(newFloor !== null && ownedFloor !== null && newFloor === ownedFloor + 1)) battle = ownedBattle;
+       } else if (battle && !ownedBattle) {
+         battle = null;
        }
        if (!battle) return null;
        const btns = battle.querySelectorAll('button, [role="button"]');
