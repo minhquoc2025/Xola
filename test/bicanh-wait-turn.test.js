@@ -55,6 +55,53 @@ async function testBicanhWaitTurnRetriesPreviousSkill() {
   console.log('Bicanh wait-turn retries previous skill passed');
 }
 
+// 1b. v89 — "Tương tác này không thành công" thì bấm lại skill trước đó.
+async function testBicanhInteractionFailedRetriesPreviousSkill() {
+  const bot = new NpcBot({ executeJavaScript: () => 0 }, 1);
+  bot.isRunning = true;
+  bot.runId = 1;
+  bot.bicanhSkillOrder = [29, 26, 23];
+  const logs = [];
+  bot.log = (...args) => logs.push(args.join(' '));
+  let fakeNow = 0;
+  bot.delay = async (ms) => { fakeNow += (ms || 0); };
+  bot.bicanhNowMs = () => fakeNow;
+  bot.sendChat = async () => {};
+  bot.waitForBicanhButton = async () => 'battle';
+  bot.checkBicanhCooldown = async () => 0;
+
+  const s29 = bot.luanhoiSkillNames[28];
+  const s26 = bot.luanhoiSkillNames[25];
+  const s23 = bot.luanhoiSkillNames[22];
+  const seen = [];
+  let calls = 0;
+  bot.clickNextBicanhSkill = async (skillName) => {
+    seen.push(skillName);
+    calls++;
+    // Lần click thứ 4 là skill 29 của vòng sau, nhưng clickNext phát hiện tin
+    // "Tương tác này không thành công" còn sót từ lần click 23 trước đó ->
+    // báo interactionFailed, không click 29.
+    if (calls === 4) return { clicked: null, interactionFailed: true };
+    // Lần thứ 5 phải là click lại 23, sau đó dừng loop để test kết thúc.
+    if (calls === 5) {
+      bot.isRunning = false;
+      return { clicked: skillName, interactionFailed: false };
+    }
+    return { clicked: skillName, interactionFailed: false };
+  };
+
+  await bot.bicanhLoop(1);
+
+  const expected = [s29, s26, s23, s29, s23];
+  if (JSON.stringify(seen) !== JSON.stringify(expected)) {
+    throw new Error('Bicanh interaction-failed phải click lại skill trước đó, thực tế: ' + JSON.stringify(seen));
+  }
+  if (!logs.some((line) => line.includes('Tương tác này không thành công') && line.includes(s23))) {
+    throw new Error('Bicanh interaction-failed phải log rõ là click lại skill trước đó, log thực tế: ' + JSON.stringify(logs));
+  }
+  console.log('Bicanh interaction-failed retries previous skill passed');
+}
+
 // 2. peekBicanhEphemeralKind: phân biệt 2 loại tin nhắn trước khi dismiss.
 function makePeekBot(messages) {
   return new NpcBot({
@@ -104,6 +151,21 @@ async function testPeekBicanhEphemeralKind() {
     throw new Error('peek phải tìm được tin "Đợi lượt..." ở thẻ bọc class ephemeral');
   }
   console.log('Bicanh ephemeral peek classification passed');
+}
+
+// 3b. v89 — peek nhận ra tin "Tương tác này không thành công".
+async function testPeekInteractionFailed() {
+  const failBot = makePeekBot([msg('Tương tác này không thành công. Chỉ bạn mới có thể thấy điều này • Bỏ qua tin nhắn')]);
+  const detail = await failBot.peekBicanhEphemeralDetail();
+  if (!detail || detail.kind !== 'interaction-failed') {
+    throw new Error('peek phải nhận ra "Tương tác này không thành công", thực tế: ' + JSON.stringify(detail));
+  }
+  // Ưu tiên hơn "đang hồi" (trả về ngay như wait-turn).
+  const bothBot = makePeekBot([msg('⏳ Kim Đan Phá Sát đang hồi! Còn 2 turn.'), msg('Tương tác này không thành công.')]);
+  if (await bothBot.peekBicanhEphemeralKind() !== 'interaction-failed') {
+    throw new Error('peek phải ưu tiên "Tương tác này không thành công" hơn "đang hồi"');
+  }
+  console.log('Bicanh interaction-failed peek passed');
 }
 
 // 3. peek detail: parse được skill + số turn từ tin "đang hồi".
@@ -703,8 +765,10 @@ async function testBicanhUserIdConfig() {
 }
 
 testBicanhWaitTurnRetriesPreviousSkill()
+  .then(testBicanhInteractionFailedRetriesPreviousSkill)
   .then(testPeekBicanhEphemeralKind)
   .then(testPeekBicanhEphemeralDetail)
+  .then(testPeekInteractionFailed)
   .then(testBicanhCooldownSkip)
   .then(testDismissMarksParentArticle)
   .then(testBicanhSkipCurrentCooldown)

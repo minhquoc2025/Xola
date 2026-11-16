@@ -2040,6 +2040,12 @@ class NpcBot {
          // tính cho trận của mình. Xử lý như wait-turn (lùi về skill trước
          // để bấm lại), KHÔNG được tiến combo hay trừ cooldown.
          if (text.includes('co phai may dau')) return { kind: 'wrong-person', skill: null, turns: null };
+         // v89 — 'tuong tac nay khong thanh cong' (Discord báo khi click nút
+         // mà game không phản hồi kịp): click vừa rồi chưa được game tính,
+         // nên lùi về skill trước để bấm lại, giống 'doi luot'. Ưu tiên trả
+         // về ngay như wait-turn (Nguyen chốt 2026-11-16: "bot quét được
+         // dòng này thì cho click lại skill đó").
+         if (text.includes('tuong tac nay khong thanh cong')) return { kind: 'interaction-failed', skill: null, turns: null };
          if (text.includes('dang hoi') && !cooldown) {
            let skill = null;
            for (const pair of skillPairs) {
@@ -4668,7 +4674,7 @@ class NpcBot {
         }
         // v85: mốc hồi tính bằng thời gian thật, không trừ tay ở đây nữa.
       }
-      if (result && (result.waitTurn || result.wrongPerson)) {
+      if (result && (result.waitTurn || result.wrongPerson || result.interactionFailed)) {
         // Tin bị từ chối còn sót từ lượt click trước: skill đó chưa được
         // game tính, nên lùi index về skill đó để click lại, KHÔNG tiến tới
         // skillName hiện tại. Vd combo 29,26,23: click 23 bị báo đợi lượt,
@@ -4676,6 +4682,9 @@ class NpcBot {
         // báo hồi chiêu liên tục; bot mới click lại 23 cho tới khi game nhận lượt.
         // "Có phải mày đâu!" cũng vậy, chỉ khác nguyên nhân: click trước bấm
         // nhầm nút của người khác nên cũng chưa được tính cho trận của mình.
+        // "Tương tác này không thành công" cũng vậy (v89): Discord báo khi
+        // click nút mà game không phản hồi kịp — click đó chưa được tính,
+        // bấm lại skill đó.
         if (bicanhPrevWasRejected) {
           // Tin bị từ chối lặp lại mà không có click nào ở giữa: tin này
           // không thể sinh ra từ 1 click mới, nên nó là tin cũ/trùng mà
@@ -4725,6 +4734,8 @@ class NpcBot {
         // lại skill hiện tại, KHÔNG lùi về skill cuối vòng trước (sai thứ tự).
         if (result.waitTurn) {
           this.log(`⏳ Game báo "Đợi lượt trước xử lý xong đã!" (lần ${bicanhWaitTurnRetries}) — lượt trước chưa được tính, click lại "${prevSkillName || 'skill trước đó'}" thay vì tiến tới "${skillName}"...`);
+        } else if (result.interactionFailed) {
+          this.log(`🔁 Game báo "Tương tác này không thành công" — click trước chưa được tính, click lại "${prevSkillName || 'skill trước đó'}" thay vì tiến tới "${skillName}"...`);
         } else {
           this.log(`🤡 Game báo "Có phải mày đâu!" — click trước bấm nhầm của người khác, chưa được tính, click lại "${prevSkillName || 'skill trước đó'}" thay vì tiến tới "${skillName}"...`);
         }
@@ -4915,7 +4926,7 @@ class NpcBot {
       })()`);
   }
 
-  // Click skill bicanh theo tên. Trả về { clicked, waitTurn, wrongPerson, cooldownDetail, skipCurrent }:
+  // Click skill bicanh theo tên. Trả về { clicked, waitTurn, wrongPerson, interactionFailed, cooldownDetail, skipCurrent }:
    // waitTurn = true nghĩa là trước khi click skill này, game còn sót tin nhắn
    // "Đợi lượt trước xử lý xong đã!" — tức skill ở lượt trước chưa được tính,
    // và tin nhắn đó đã được dismiss ở đây. Loop phải lùi về skill trước đó để
@@ -4942,6 +4953,9 @@ class NpcBot {
     }
     if (ephemeralDetail && ephemeralDetail.kind === 'wrong-person') {
       return { clicked: null, waitTurn: false, wrongPerson: true, cooldownDetail: null, skipCurrent: false };
+    }
+    if (ephemeralDetail && ephemeralDetail.kind === 'interaction-failed') {
+      return { clicked: null, waitTurn: false, wrongPerson: false, interactionFailed: true, cooldownDetail: null, skipCurrent: false };
     }
     const cooldownDetail = (ephemeralDetail && ephemeralDetail.kind === 'cooldown') ? ephemeralDetail : null;
     if (cooldownDetail && cooldownDetail.skill === skillName) {
