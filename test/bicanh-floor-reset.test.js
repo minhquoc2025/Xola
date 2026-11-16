@@ -5,14 +5,16 @@ const { NpcBot } = require(path.join(__dirname, '..', 'src', 'main', 'npc-bot.js
 
 // 1. Bicanh loop: combo 32,29,26,23 (Lôi Đình, Hư, Kim, Vạn). Đánh tầng 1
 // tới skill thứ 3 thì game sang tầng 2 — vòng sau phải chạy lại từ skill
-// đầu (Lôi Đình), KHÔNG được bấm tiếp Vạn của vòng cũ. Cooldown vẫn được
-// giữ nguyên qua tầng (v83) và tính bằng THỜI GIAN THẬT (v85, 1 lượt ≈
-// 1800ms): Lôi Đình dùng ở tầng 1 (mốc +5400ms) tới lúc sang tầng 2 mới
-// trôi ~3000ms nên còn ~2 lượt — bot phải CHỜ 2 lần rồi mới bấm; còn Hư
-// hồi 3 turn do game báo ở click Kim (mốc +5400ms) thì trong lúc chờ Lôi
-// Đình thời gian đã trôi qua, tới lượt Hư là hết hồi nên bấm ngay,
-// KHÔNG chờ thừa. v84 (tick mỗi vòng lặp) thì ngược lại: Lôi Đình bấm
-// ngay (hết sớm hơn game ~1 lượt) còn Hư chờ 1 lượt — sai cả hai đầu.
+// đầu (Lôi Đình), KHÔNG được bấm tiếp Vạn của vòng cũ. Cooldown giữ qua
+// tầng (v83) và tính bằng LƯỢT BẤM ĐƯỢC CHẤP NHẬN (v92, không tính bằng
+// thời gian thật nữa — log thật 2026-11-16: chờ 8s = 0 lượt trôi): Lôi
+// Đình dùng ở tầng 1 ghi 3, tới lúc sang tầng 2 chỉ mới trừ 1 (cú bấm Hư
+// ở tầng 1 được chấp nhận) nên còn 2 lượt — bot CHỜ 2 vòng rồi bấm thử
+// đúng Lôi Đình (probe, không nhảy skill); Hư hồi 3 turn do game báo ở
+// click Kim tầng 1, tới lượt Hư chỉ mới trừ 1 (cú bấm Lôi Đình probe được
+// chấp nhận) nên còn 2 lượt — Hư CŨNG phải chờ rồi probe, KHÔNG được
+// bấm ngay (v85 cho bấm ngay vì thời gian chờ Lôi Đình làm mốc hết hạn
+// — sai: chờ không trôi lượt).
 async function testBicanhFloorResetRestartsCombo() {
   const bot = new NpcBot({ executeJavaScript: () => 0 }, 1);
   bot.isRunning = true;
@@ -20,13 +22,9 @@ async function testBicanhFloorResetRestartsCombo() {
   bot.bicanhSkillOrder = [32, 29, 26, 23];
   const logs = [];
   bot.log = (...args) => logs.push(args.join(' '));
-  let fakeNow = 0;
-  // v85: đồng hồ giả — mỗi lần delay() đẩy thời gian theo đúng ms được delay
-  // (click 1000ms, chờ/không tìm thấy 2000ms), để cooldown tính bằng thời
-  // gian thật có cái để trôi trong test (delay thật là no-op thì đồng hồ
-  // thật gần như không nhúc nhích và bot chờ mãi không hết hồi).
-  bot.delay = async (ms) => { fakeNow += (ms || 0); };
-  bot.bicanhNowMs = () => fakeNow;
+  // v92: không còn đồng hồ giả — cooldown tính bằng lượt bấm được chấp nhận,
+  // delay chỉ là chờ, không làm lượt trôi.
+  bot.delay = async () => {};
   bot.sendChat = async () => {};
   bot.waitForBicanhButton = async () => 'battle';
   bot.checkBicanhCooldown = async () => 0;
@@ -58,22 +56,27 @@ async function testBicanhFloorResetRestartsCombo() {
   if (JSON.stringify(seen) !== JSON.stringify(expected)) {
     throw new Error('Bicanh sang tầng mới phải chạy lại combo từ đầu, thực tế: ' + JSON.stringify(seen));
   }
-  // Map cooldown tầng cũ PHẢI được giữ (v83) và tính bằng thời gian thật
-  // (v85): sau dòng log "sang tầng 2" phải có lần chờ "đang hồi còn N lượt"
-  // cho Lôi Đình (dùng ở tầng 1, tới lúc sang tầng mới trôi ~3000ms nên còn
-  // ~2 lượt), và KHÔNG được có lần chờ nào cho Hư (hồi 3 turn do game báo
-  // ở click Kim tầng 1, nhưng trong lúc chờ Lôi Đình thời gian đã trôi qua
-  // nên tới lượt Hư là hết hồi — v84 chờ thừa Hư 1 lượt ở đây).
+  // Map cooldown tầng cũ PHẢI được giữ (v83) và tính bằng lượt (v92):
+  // sau dòng log "sang tầng 2" phải có lần chờ "đang hồi còn N lượt" cho
+  // Lôi Đình (dùng ở tầng 1 ghi 3, tới lúc sang tầng mới chỉ trừ 1 nên
+  // còn 2 lượt) VÀ một dòng probe "đã chờ 3 vòng... bấm thử" cho Lôi
+  // Đình (chờ không trôi lượt nên bot không được kẹt mãi, cũng không
+  // được nhảy skill). Hư CŨNG phải có lần chờ (hồi 3 turn do game báo ở
+  // click Kim tầng 1, tới lượt Hư chỉ trừ 1 nên còn 2 lượt — v85 sai ở
+  // đây khi cho Hư bấm ngay vì thời gian chờ Lôi Đình làm mốc hết hạn).
   const floorIdx = logs.findIndex((line) => line.includes('sang tầng 2') && line.includes(s32));
   if (floorIdx < 0) {
     throw new Error('Bicanh sang tầng phải log rõ là chạy lại combo từ đầu, log thực tế: ' + JSON.stringify(logs));
   }
   const afterFloor = logs.slice(floorIdx);
   if (!afterFloor.some((line) => line.includes('đang hồi còn') && line.includes(s32) && line.includes('lượt — chờ rồi bấm lại'))) {
-    throw new Error('Bicanh sang tầng phải giữ cooldown skill vừa dùng: Lôi Đình dùng ở tầng 1 mới trôi ~3000ms nên phải chờ hồi, không được bấm lại ngay, log thực tế: ' + JSON.stringify(logs));
+    throw new Error('Bicanh sang tầng phải giữ cooldown skill vừa dùng: Lôi Đình dùng ở tầng 1 mới trôi 1 lượt nên phải chờ hồi, không được bấm lại ngay, log thực tế: ' + JSON.stringify(logs));
   }
-  if (afterFloor.some((line) => line.includes('đang hồi còn') && line.includes(s29) && line.includes('lượt — chờ rồi bấm lại'))) {
-    throw new Error('Bicanh sang tầng không được chờ thừa Hư: hồi 3 turn ở tầng 1 đã trôi qua trong lúc chờ Lôi Đình nên tới lượt Hư phải bấm ngay, log thực tế: ' + JSON.stringify(logs));
+  if (!afterFloor.some((line) => line.includes('đã chờ 3 vòng') && line.includes(s32) && line.includes('bấm thử'))) {
+    throw new Error('Bicanh sang tầng phải probe Lôi Đình sau 3 vòng chờ (chờ không trôi lượt nên không được kẹt mãi), log thực tế: ' + JSON.stringify(logs));
+  }
+  if (!afterFloor.some((line) => line.includes('đang hồi còn') && line.includes(s29) && line.includes('lượt — chờ rồi bấm lại'))) {
+    throw new Error('Bicanh sang tầng phải chờ Hư nữa: hồi 3 turn ở tầng 1 chỉ trừ 1 lượt nên tới lượt Hư vẫn còn 2 lượt, không được bấm ngay như v85, log thực tế: ' + JSON.stringify(logs));
   }
   console.log('Bicanh floor reset restarts combo passed');
 }
@@ -132,13 +135,9 @@ async function testBicanhFloorNullDoesNotReset() {
   bot.bicanhSkillOrder = [32, 29, 26, 23];
   const logs = [];
   bot.log = (...args) => logs.push(args.join(' '));
-  let fakeNow = 0;
-  // v85: đồng hồ giả — mỗi lần delay() đẩy thời gian theo đúng ms được delay
-  // (click 1000ms, chờ/không tìm thấy 2000ms), để cooldown tính bằng thời
-  // gian thật có cái để trôi trong test (delay thật là no-op thì đồng hồ
-  // thật gần như không nhúc nhích và bot chờ mãi không hết hồi).
-  bot.delay = async (ms) => { fakeNow += (ms || 0); };
-  bot.bicanhNowMs = () => fakeNow;
+  // v92: không còn đồng hồ giả — cooldown tính bằng lượt bấm được chấp nhận,
+  // delay chỉ là chờ, không làm lượt trôi.
+  bot.delay = async () => {};
   bot.sendChat = async () => {};
   bot.waitForBicanhButton = async () => 'battle';
   bot.checkBicanhCooldown = async () => 0;
@@ -185,9 +184,9 @@ async function testBicanhFloorExposedInStatus() {
   bot.runId = 1;
   bot.bicanhSkillOrder = [32, 29, 26, 23];
   bot.log = () => {};
-  let fakeNow = 0;
-  bot.delay = async (ms) => { fakeNow += (ms || 0); };
-  bot.bicanhNowMs = () => fakeNow;
+  // v92: không còn đồng hồ giả — cooldown tính bằng lượt bấm được chấp nhận,
+  // delay chỉ là chờ, không làm lượt trôi.
+  bot.delay = async () => {};
   bot.sendChat = async () => {};
   bot.waitForBicanhButton = async () => 'battle';
   bot.checkBicanhCooldown = async () => 0;

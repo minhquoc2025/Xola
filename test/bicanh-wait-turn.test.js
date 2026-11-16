@@ -13,13 +13,9 @@ async function testBicanhWaitTurnRetriesPreviousSkill() {
   bot.bicanhSkillOrder = [29, 26, 23];
   const logs = [];
   bot.log = (...args) => logs.push(args.join(' '));
-  let fakeNow = 0;
-  // v85: đồng hồ giả — mỗi lần delay() đẩy thời gian theo đúng ms được delay
-  // (click 1000ms, chờ/không tìm thấy 2000ms), để cooldown tính bằng thời
-  // gian thật có cái để trôi trong test (delay thật là no-op thì đồng hồ
-  // thật gần như không nhúc nhích và bot chờ mãi không hết hồi).
-  bot.delay = async (ms) => { fakeNow += (ms || 0); };
-  bot.bicanhNowMs = () => fakeNow;
+  // v92: không còn đồng hồ giả — cooldown tính bằng lượt bấm được chấp nhận,
+  // delay chỉ là chờ, không làm lượt trôi.
+  bot.delay = async () => {};
   bot.sendChat = async () => {};
   bot.waitForBicanhButton = async () => 'battle';
   bot.checkBicanhCooldown = async () => 0;
@@ -63,9 +59,9 @@ async function testBicanhInteractionFailedRetriesPreviousSkill() {
   bot.bicanhSkillOrder = [29, 26, 23];
   const logs = [];
   bot.log = (...args) => logs.push(args.join(' '));
-  let fakeNow = 0;
-  bot.delay = async (ms) => { fakeNow += (ms || 0); };
-  bot.bicanhNowMs = () => fakeNow;
+  // v92: không còn đồng hồ giả — cooldown tính bằng lượt bấm được chấp nhận,
+  // delay chỉ là chờ, không làm lượt trôi.
+  bot.delay = async () => {};
   bot.sendChat = async () => {};
   bot.waitForBicanhButton = async () => 'battle';
   bot.checkBicanhCooldown = async () => 0;
@@ -183,9 +179,11 @@ async function testPeekBicanhEphemeralDetail() {
   console.log('Bicanh ephemeral peek detail passed');
 }
 
-// 4. Loop Bicanh: skill bị báo hồi 2 turn (≈3600ms) thì phải chờ tới khi
-// hết hồi theo thời gian rồi bấm lại đúng skill đó, thay vì bấm lại ngay
-// vòng sau và lại bị báo hồi (v85: mốc hồi = now + turns * 1800ms).
+// 4. Loop Bicanh: skill bị báo hồi 2 turn thì phải chờ rồi bấm lại đúng
+// skill đó, thay vì bấm lại ngay vòng sau và lại bị báo hồi (v92: hồi
+// tính bằng lượt bấm được chấp nhận, không tính bằng thời gian — s29 ghi
+// 2, tới lượt nó chỉ trừ 1 (cú bấm s23 được chấp nhận) nên còn 1 lượt,
+// bot chờ 2 vòng rồi bấm thử đúng s29 (probe, không nhảy skill)).
 async function testBicanhCooldownSkip() {
   const bot = new NpcBot({ executeJavaScript: () => 0 }, 1);
   bot.isRunning = true;
@@ -193,13 +191,9 @@ async function testBicanhCooldownSkip() {
   bot.bicanhSkillOrder = [29, 26, 23];
   const logs = [];
   bot.log = (...args) => logs.push(args.join(' '));
-  let fakeNow = 0;
-  // v85: đồng hồ giả — mỗi lần delay() đẩy thời gian theo đúng ms được delay
-  // (click 1000ms, chờ/không tìm thấy 2000ms), để cooldown tính bằng thời
-  // gian thật có cái để trôi trong test (delay thật là no-op thì đồng hồ
-  // thật gần như không nhúc nhích và bot chờ mãi không hết hồi).
-  bot.delay = async (ms) => { fakeNow += (ms || 0); };
-  bot.bicanhNowMs = () => fakeNow;
+  // v92: không còn đồng hồ giả — cooldown tính bằng lượt bấm được chấp nhận,
+  // delay chỉ là chờ, không làm lượt trôi.
+  bot.delay = async () => {};
   bot.sendChat = async () => {};
   bot.waitForBicanhButton = async () => 'battle';
   bot.checkBicanhCooldown = async () => 0;
@@ -222,8 +216,8 @@ async function testBicanhCooldownSkip() {
 
   await bot.bicanhLoop(1);
 
-  // Xoay chuẩn: s29 bị ghi hồi 2 turn (≈3600ms), tới lượt s29 (sau s23,
-  // ~3000ms đã trôi) còn ~1 lượt nên bot phải CHỜ rồi bấm lại đúng s29,
+  // Xoay chuẩn: s29 bị ghi hồi 2 turn, tới lượt s29 (sau s23 được chấp
+  // nhận, trừ 1) còn 1 lượt nên bot phải CHỜ 2 vòng rồi bấm thử đúng s29,
   // KHÔNG nhảy tới s26/s23 nữa.
   const expected = [s29, s26, s23, s29];
   if (JSON.stringify(seen) !== JSON.stringify(expected)) {
@@ -269,8 +263,9 @@ async function testDismissMarksParentArticle() {
 }
 
 // 6. Loop Bicanh: clickNext báo skipCurrent (tin hồi chiêu đúng là skill
-// sắp bấm) thì loop phải CHỜ và bấm lại đúng skill đó sau khi map trừ
-// về 0, KHÔNG tiến tới skill khác (xoay chuẩn).
+// sắp bấm) thì loop phải CHỜ và bấm lại đúng skill đó, KHÔNG tiến tới
+// skill khác (xoay chuẩn). v92: chờ không trừ map — sau 3 vòng chờ bot
+// bấm thử đúng skill đó (probe) thay vì đợi mốc thời gian hết hạn như v85.
 async function testBicanhSkipCurrentCooldown() {
   const bot = new NpcBot({ executeJavaScript: () => 0 }, 1);
   bot.isRunning = true;
@@ -278,13 +273,9 @@ async function testBicanhSkipCurrentCooldown() {
   bot.bicanhSkillOrder = [29, 26, 23];
   const logs = [];
   bot.log = (...args) => logs.push(args.join(' '));
-  let fakeNow = 0;
-  // v85: đồng hồ giả — mỗi lần delay() đẩy thời gian theo đúng ms được delay
-  // (click 1000ms, chờ/không tìm thấy 2000ms), để cooldown tính bằng thời
-  // gian thật có cái để trôi trong test (delay thật là no-op thì đồng hồ
-  // thật gần như không nhúc nhích và bot chờ mãi không hết hồi).
-  bot.delay = async (ms) => { fakeNow += (ms || 0); };
-  bot.bicanhNowMs = () => fakeNow;
+  // v92: không còn đồng hồ giả — cooldown tính bằng lượt bấm được chấp nhận,
+  // delay chỉ là chờ, không làm lượt trôi.
+  bot.delay = async () => {};
   bot.sendChat = async () => {};
   bot.waitForBicanhButton = async () => 'battle';
   bot.checkBicanhCooldown = async () => 0;
@@ -307,8 +298,8 @@ async function testBicanhSkipCurrentCooldown() {
 
   await bot.bicanhLoop(1);
 
-  // Xoay chuẩn: s29 lần đầu đã biết đang hồi 2 turn, bot chờ, map trừ
-  // dần về 0, rồi bấm lại đúng s29, không qua s26/s23 ở giữa.
+  // Xoay chuẩn: s29 lần đầu đã biết đang hồi 2 turn, bot chờ 2 vòng rồi
+  // bấm thử đúng s29 (probe), không qua s26/s23 ở giữa.
   const expected = [s29, s29];
   if (JSON.stringify(seen) !== JSON.stringify(expected)) {
     throw new Error('Bicanh skipCurrent xoay chuẩn phải chờ và bấm lại đúng skill, thực tế: ' + JSON.stringify(seen));
@@ -364,13 +355,9 @@ async function testBicanhWrongPersonRetriesPreviousSkill() {
   bot.bicanhSkillOrder = [29, 26, 23];
   const logs = [];
   bot.log = (...args) => logs.push(args.join(' '));
-  let fakeNow = 0;
-  // v85: đồng hồ giả — mỗi lần delay() đẩy thời gian theo đúng ms được delay
-  // (click 1000ms, chờ/không tìm thấy 2000ms), để cooldown tính bằng thời
-  // gian thật có cái để trôi trong test (delay thật là no-op thì đồng hồ
-  // thật gần như không nhúc nhích và bot chờ mãi không hết hồi).
-  bot.delay = async (ms) => { fakeNow += (ms || 0); };
-  bot.bicanhNowMs = () => fakeNow;
+  // v92: không còn đồng hồ giả — cooldown tính bằng lượt bấm được chấp nhận,
+  // delay chỉ là chờ, không làm lượt trôi.
+  bot.delay = async () => {};
   bot.sendChat = async () => {};
   bot.waitForBicanhButton = async () => 'battle';
   bot.checkBicanhCooldown = async () => 0;
@@ -432,13 +419,9 @@ async function testBicanhDuplicateWaitTurnDoesNotStepBackTwice() {
   bot.bicanhSkillOrder = [29, 26, 23];
   const logs = [];
   bot.log = (...args) => logs.push(args.join(' '));
-  let fakeNow = 0;
-  // v85: đồng hồ giả — mỗi lần delay() đẩy thời gian theo đúng ms được delay
-  // (click 1000ms, chờ/không tìm thấy 2000ms), để cooldown tính bằng thời
-  // gian thật có cái để trôi trong test (delay thật là no-op thì đồng hồ
-  // thật gần như không nhúc nhích và bot chờ mãi không hết hồi).
-  bot.delay = async (ms) => { fakeNow += (ms || 0); };
-  bot.bicanhNowMs = () => fakeNow;
+  // v92: không còn đồng hồ giả — cooldown tính bằng lượt bấm được chấp nhận,
+  // delay chỉ là chờ, không làm lượt trôi.
+  bot.delay = async () => {};
   bot.sendChat = async () => {};
   bot.waitForBicanhButton = async () => 'battle';
   bot.checkBicanhCooldown = async () => 0;
@@ -476,24 +459,22 @@ async function testBicanhDuplicateWaitTurnDoesNotStepBackTwice() {
   console.log('Bicanh duplicate wait-turn does not step back twice passed');
 }
 
-// 12. Không tìm thấy nút tốn 2s mỗi lần nên thời gian vẫn trôi (v85):
-// s29 hồi 2 turn (≈3600ms), s23 bị "không tìm thấy" 2 lần liên tiếp
-// (4000ms) thì tới lượt s29 là hết hồi — bot bấm đúng s29 khi tới lượt,
-// không bấm sớm (v84 tick mỗi vòng lặp thì s29 hết sớm hơn game ~1 lượt).
-async function testBicanhNotFoundAdvancesRealTime() {
+// 12. v92 — "không tìm thấy" KHÔNG làm lượt trôi: s29 hồi 2 turn, s23
+// bị "không tìm thấy" 2 lần liên tiếp thì tới lượt s29 vẫn còn 1 lượt
+// (chỉ trừ 1 là lượt của cú bấm s26 được chấp nhận trước đó) — bot phải
+// CHỜ rồi bấm thử đúng s29 (probe), không được bấm ngay như v85 (v85 cho
+// là 4000ms đã trôi qua nên hết hồi — sai: chờ/không tìm thấy không trôi
+// lượt, log thật 2026-11-16: chờ 8s = 0 lượt).
+async function testBicanhNotFoundDoesNotTickCooldown() {
   const bot = new NpcBot({ executeJavaScript: () => 0 }, 1);
   bot.isRunning = true;
   bot.runId = 1;
   bot.bicanhSkillOrder = [29, 26, 23];
   const logs = [];
   bot.log = (...args) => logs.push(args.join(' '));
-  let fakeNow = 0;
-  // v85: đồng hồ giả — mỗi lần delay() đẩy thời gian theo đúng ms được delay
-  // (click 1000ms, chờ/không tìm thấy 2000ms), để cooldown tính bằng thời
-  // gian thật có cái để trôi trong test (delay thật là no-op thì đồng hồ
-  // thật gần như không nhúc nhích và bot chờ mãi không hết hồi).
-  bot.delay = async (ms) => { fakeNow += (ms || 0); };
-  bot.bicanhNowMs = () => fakeNow;
+  // v92: không còn đồng hồ giả — cooldown tính bằng lượt bấm được chấp nhận,
+  // delay chỉ là chờ, không làm lượt trôi.
+  bot.delay = async () => {};
   bot.sendChat = async () => {};
   bot.waitForBicanhButton = async () => 'battle';
   bot.checkBicanhCooldown = async () => 0;
@@ -518,20 +499,31 @@ async function testBicanhNotFoundAdvancesRealTime() {
 
   await bot.bicanhLoop(1);
 
-  // Xoay chuẩn: s29 (lần 1) -> s26 (ghi s29=2 turn ≈ 3600ms) -> s23
-  // không tìm thấy x2 (4000ms trôi qua) -> s23 bấm được -> tới lượt s29
-  // là hết hồi nên bấm đúng s29, không nhảy qua s26/s23 nữa.
+  // Xoay chuẩn: s29 (lần 1) -> s26 (ghi s29=2 turn) -> s23 không tìm
+  // thấy x2 (không trừ lượt nào) -> s23 bấm được (trừ 1: s29 còn 1) ->
+  // tới lượt s29 bot CHỜ 2 vòng rồi bấm thử đúng s29 (probe), không nhảy
+  // qua s26/s23 nữa.
   const expected = [s29, s26, s23, s23, s23, s29];
   if (JSON.stringify(seen) !== JSON.stringify(expected)) {
     throw new Error('Bicanh not-found không được trừ cooldown mỗi lần, thực tế: ' + JSON.stringify(seen));
   }
-  console.log('Bicanh not-found advances real time passed');
+  // v92: lần chờ s29 phải ghi "còn 1 lượt" (không tìm thấy không trừ),
+  // và phải có dòng probe sau 3 vòng chờ (chờ không trôi lượt nên không
+  // được kẹt mãi, cũng không được bấm ngay như v85).
+  if (!logs.some((line) => line.includes('đang hồi còn 1 lượt') && line.includes(s29))) {
+    throw new Error('Bicanh not-found không được trừ cooldown: tới lượt s29 phải còn đúng 1 lượt, log thực tế: ' + JSON.stringify(logs));
+  }
+  if (!logs.some((line) => line.includes('đã chờ 3 vòng') && line.includes(s29) && line.includes('bấm thử'))) {
+    throw new Error('Bicanh not-found phải probe s29 sau 3 vòng chờ, log thực tế: ' + JSON.stringify(logs));
+  }
+  console.log('Bicanh not-found does not tick cooldown passed');
 }
 
 // 13. Xoay chuẩn thay cho chặn vừa bấm: thứ tự Kim -> Hư, với Vạn đã
 // ghi hồi 1 và Kim đã ghi hồi 2 trước lần bấm Hư, thì tới lượt Vạn bot
-// phải CHỜ cho Vạn hết hồi rồi bấm đúng Vạn, không nhảy skill khác, và
-// không bấm lại Hư ở giữa.
+// phải CHỜ rồi bấm thử đúng Vạn (probe), không nhảy skill khác, và
+// không bấm lại Hư ở giữa. v92: Vạn ghi 1, tới lượt nó chỉ trừ 1 (cú
+// bấm Hư được chấp nhận) — chờ 2 vòng rồi probe, không đợi thời gian.
 async function testBicanhDoesNotReclickJustUsedSkillAfterSkips() {
   const bot = new NpcBot({ executeJavaScript: () => 0 }, 1);
   bot.isRunning = true;
@@ -539,13 +531,9 @@ async function testBicanhDoesNotReclickJustUsedSkillAfterSkips() {
   bot.bicanhSkillOrder = [26, 29, 23];
   const logs = [];
   bot.log = (...args) => logs.push(args.join(' '));
-  let fakeNow = 0;
-  // v85: đồng hồ giả — mỗi lần delay() đẩy thời gian theo đúng ms được delay
-  // (click 1000ms, chờ/không tìm thấy 2000ms), để cooldown tính bằng thời
-  // gian thật có cái để trôi trong test (delay thật là no-op thì đồng hồ
-  // thật gần như không nhúc nhích và bot chờ mãi không hết hồi).
-  bot.delay = async (ms) => { fakeNow += (ms || 0); };
-  bot.bicanhNowMs = () => fakeNow;
+  // v92: không còn đồng hồ giả — cooldown tính bằng lượt bấm được chấp nhận,
+  // delay chỉ là chờ, không làm lượt trôi.
+  bot.delay = async () => {};
   bot.sendChat = async () => {};
   bot.waitForBicanhButton = async () => 'battle';
   bot.checkBicanhCooldown = async () => 0;
@@ -572,8 +560,8 @@ async function testBicanhDoesNotReclickJustUsedSkillAfterSkips() {
 
   await bot.bicanhLoop(1);
 
-  // Xoay chuẩn: Kim -> Hư -> Vạn, Vạn hết hồi sau 1 lần chờ thì bấm đúng
-  // Vạn, không có lần bấm Hư thứ 2 chen vào giữa.
+  // Xoay chuẩn: Kim -> Hư -> Vạn, Vạn chờ 2 vòng rồi bấm thử đúng Vạn
+  // (probe), không có lần bấm Hư thứ 2 chen vào giữa.
   const expected = [s26, s29, s23];
   if (JSON.stringify(seen) !== JSON.stringify(expected)) {
     throw new Error('Bicanh xoay chuẩn phải bấm đúng thứ tự Kim -> Hư -> Vạn, thực tế: ' + JSON.stringify(seen));
@@ -821,7 +809,7 @@ testBicanhWaitTurnRetriesPreviousSkill()
   .then(testBicanhWrongPersonRetriesPreviousSkill)
   .then(testClickNextWrongPersonDoesNotClick)
   .then(testBicanhDuplicateWaitTurnDoesNotStepBackTwice)
-  .then(testBicanhNotFoundAdvancesRealTime)
+  .then(testBicanhNotFoundDoesNotTickCooldown)
   .then(testBicanhDoesNotReclickJustUsedSkillAfterSkips)
   .then(testBicanhFocusPicksLatestPostAnchorBattle)
   .then(testBicanhFocusSkipsOtherPlayerAndNonSkillScreens)
@@ -833,7 +821,64 @@ testBicanhWaitTurnRetriesPreviousSkill()
   .then(testBicanhClickRetriesWhenButtonNotReady)
   .then(testBicanhClickGivesUpAfterThreeAttempts)
   .then(testBicanhUserIdConfig)
+  .then(testBicanhWaitProbesSameSkillAfterThreeWaits)
   .catch((error) => {
     console.error(error);
     process.exitCode = 1;
   });
+
+// 27. v92 — nhánh chờ probe sau đúng 3 vòng: skill đã biết đang hồi 3
+// turn, không có click nào khác ở giữa, thì bot phải chờ 3 vòng rồi bấm
+// THỬ đúng skill đó (không nhảy sang skill khác), và các dòng chờ phải
+// ghi cùng một số "còn 3 lượt" (map KHÔNG trừ trong lúc chờ — v85 thì
+// các dòng chờ giảm dần 3->2->1 vì thời gian trôi, và không có dòng probe).
+async function testBicanhWaitProbesSameSkillAfterThreeWaits() {
+  const bot = new NpcBot({ executeJavaScript: () => 0 }, 1);
+  bot.isRunning = true;
+  bot.runId = 1;
+  bot.bicanhSkillOrder = [29, 26, 23];
+  const logs = [];
+  bot.log = (...args) => logs.push(args.join(' '));
+  bot.delay = async () => {};
+  bot.sendChat = async () => {};
+  bot.waitForBicanhButton = async () => 'battle';
+  bot.checkBicanhCooldown = async () => 0;
+
+  const s29 = bot.luanhoiSkillNames[28];
+  const s26 = bot.luanhoiSkillNames[25];
+  const s23 = bot.luanhoiSkillNames[22];
+  const seen = [];
+  const counts = {};
+  bot.clickNextBicanhSkill = async (skillName) => {
+    seen.push(skillName);
+    counts[skillName] = (counts[skillName] || 0) + 1;
+    // Lần đầu tới s29: đã biết s29 đang hồi 3 turn, không được bấm nó.
+    if (skillName === s29 && counts[s29] === 1) {
+      return { clicked: null, waitTurn: false, cooldownDetail: { kind: 'cooldown', skill: s29, turns: 3 }, skipCurrent: true };
+    }
+    if (skillName === s29 && counts[s29] === 2) bot.isRunning = false;
+    return { clicked: skillName, waitTurn: false, cooldownDetail: null, skipCurrent: false };
+  };
+
+  await bot.bicanhLoop(1);
+
+  // Chỉ bấm thử đúng s29 (lần skipCurrent + lần probe), không qua s26/s23.
+  const expected = [s29, s29];
+  if (JSON.stringify(seen) !== JSON.stringify(expected)) {
+    throw new Error('Bicanh probe phải bấm thử đúng skill đang chờ, không nhảy skill khác, thực tế: ' + JSON.stringify(seen));
+  }
+  // Mọi dòng chờ cho s29 phải ghi cùng "còn 3 lượt" (map không trừ khi chờ).
+  // Chỉ tính dòng chờ ở nhánh chờ ("lượt — chờ rồi bấm lại"), không tính
+  // dòng skipCurrent ("3 turn — đã biết trước khi bấm") ở trên.
+  const waitLines = logs.filter((line) => line.includes('lượt — chờ rồi bấm lại') && line.includes(s29));
+  if (waitLines.length < 2) {
+    throw new Error('Bicanh probe phải chờ ít nhất 2 vòng trước khi bấm thử, log thực tế: ' + JSON.stringify(logs));
+  }
+  if (waitLines.some((line) => !line.includes('còn 3 lượt'))) {
+    throw new Error('Bicanh chờ không được trừ map: mọi dòng chờ s29 phải ghi "còn 3 lượt", log thực tế: ' + JSON.stringify(logs));
+  }
+  if (!logs.some((line) => line.includes('đã chờ 3 vòng') && line.includes(s29) && line.includes('bấm thử'))) {
+    throw new Error('Bicanh phải probe s29 sau 3 vòng chờ, log thực tế: ' + JSON.stringify(logs));
+  }
+  console.log('Bicanh wait probes same skill after three waits passed');
+}

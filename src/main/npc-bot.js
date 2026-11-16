@@ -4484,10 +4484,6 @@ class NpcBot {
     return (typeof floor === 'number' && floor > 0) ? floor : null;
   }
 
-  // v85 — đồng hồ của Bicanh: mặc định là thời gian thật; test giả lập
-  // bằng cách gán lại hàm này và cho delay() đẩy đồng hồ giả theo ms.
-  bicanhNowMs() { return Date.now(); }
-
   async bicanhLoop(runId) {
     if (!this.isRunning || this.runId !== runId) return;
 
@@ -4517,24 +4513,36 @@ class NpcBot {
     // Spam skill theo danh sách, lặp lại cho đến khi user bấm stop
     this._bicanhSkillIdx = 0;
     let bicanhWaitTurnRetries = 0;
-    // Cooldown theo skill, tính bằng THỜI GIAN THẬT (v85): map giữ mốc
-    // "sẵn sàng lại lúc nào" (ms) thay vì đếm lượt. 1 lượt game ≈ 1800ms
-    // (ước lượng từ log thật: 17 click/28s ở tầng 510; bot bấm ~1s/lượt
-    // nên đếm vòng lặp (v84) hết hồi sớm hơn game ~1 lượt và bot bấm
-    // sớm, game báo "đang hồi" — bằng chứng 08:39:00 game báo "Còn 1
-    // turn" ngay trước khi bot định bấm dù map đã về 0. Đếm click chấp
-    // nhận (v83) thì ngược lại: chờ/không tìm thấy không trừ nên map kẹt,
-    // bot chờ thừa (mỗi tầng 15-90s). Thời gian thật đúng ở cả hai pha:
-    // click nhanh hay chờ lâu thì hồi vẫn trôi theo đồng hồ game.
-    // Tin "đang hồi" của game (nhánh detail) ghi đè mốc bằng số thật.
-    const bicanhCooldownUntil = new Map();
-    const bicanhTurnMs = 1800;
-    // Số lượt hồi còn lại của 1 skill, làm tròn lên (0 = sẵn sàng).
-    const bicanhLeftTurns = (skill) => {
-      const until = bicanhCooldownUntil.get(skill) || 0;
-      const leftMs = until - this.bicanhNowMs();
-      return leftMs > 0 ? Math.ceil(leftMs / bicanhTurnMs) : 0;
+    // v92 — Cooldown theo skill, tính bằng LƯỢT GAME (không tính bằng
+    // thời gian thật nữa — v85 sai gốc, chứng cứ log thật 2026-11-16:
+    // 09:22:56-09:23:03 chờ 8s = 0 lượt trôi (Lôi Đình báo "Còn 3 turn"
+    // sau cú bấm 09:22:55); 09:20:52-59 chờ 5s = 0 lượt, chỉ cú bấm Hư
+    // Không được chấp nhận mới trôi 1 lượt. Lượt chỉ trôi khi có cú bấm
+    // ĐƯỢC CHẤP NHẬN (tick ở dưới, khi verdict của click trước là sạch).
+    // Map giữ đúng số lượt game báo: skill vừa bấm ghi 3, game báo bao
+    // nhiêu ghi bấy nhiêu, chờ/không tìm thấy KHÔNG trừ (chờ không trôi
+    // lượt). Nhánh chờ (đầu vòng) vì vậy không tự hết hồi theo thời gian
+    // mà phải probe sau 3 vòng chờ (xem dưới).
+    const bicanhCooldownLeft = new Map();
+    // Số lượt hồi còn lại của 1 skill (0 = sẵn sàng).
+    const bicanhLeftTurns = (skill) => bicanhCooldownLeft.get(skill) || 0;
+    // 1 lượt game trôi: trừ tất cả các entry đi 1 (hết thì xóa).
+    const bicanhTickTurn = () => {
+      for (const [name, turns] of Array.from(bicanhCooldownLeft)) {
+        if (turns > 1) bicanhCooldownLeft.set(name, turns - 1);
+        else bicanhCooldownLeft.delete(name);
+      }
     };
+    // Skill của click gần nhất mà kết quả (được chấp nhận hay bị từ chối)
+    // chưa được xử lý — verdict nằm trong result của lần clickNext sau.
+    let bicanhPrevClickPending = null;
+    // Đếm số vòng chờ liên tiếp cho cùng 1 skill (nhánh chờ đầu vòng).
+    let bicanhWaitSkill = null;
+    let bicanhWaitStall = 0;
+    // True khi nhánh chờ quyết định bấm thử (probe) đúng skill đang hồi —
+    // probe được miễn chặn "vừa bấm" ở dưới vì mục đích của probe chính
+    // là bấm lại skill đó để game xác nhận.
+    let bicanhProbe = false;
     let bicanhConsecutiveSkips = 0;
     // bicanhPrevClicked: lượt clickNext ngay trước đó có bấm được nút nào
     // không. Giữ lại làm trạng thái vòng lặp; từ v85 cooldown tính bằng
@@ -4614,34 +4622,50 @@ class NpcBot {
       }
       const skillName = bicanhSkillAt(this._bicanhSkillIdx);
       if (!skillName) { this._bicanhSkillIdx++; continue; }
-      // XOAY CHUẨN, KHÔNG NHẢY SKILL (quyết định của Nguyen 2026-11-02):
+      // XOAY CHUẨN, KHÔNG NHẢY SKILL (quyết định của Nguyen 2026-11-02,
+      // tái khẳng định 2026-11-16 09:44: "Vẫn chờ, không nhảy skill"):
       // mỗi vòng chỉ chạy đúng Hư - Kim - Vạn - Hư - Kim - Vạn, theo đúng
       // thứ tự combo. Skill nào đang hồi thì CHỜ VÀ BẤM LẠI ĐÚNG SKILL ĐÓ,
       // KHÔNG tiến tới skill khác. Nhảy tới skill khác là phá vòng: skill
       // nhảy tới cũng chưa đủ 3 turn hồi kể từ lần dùng trước của nó, nên
       // nó cũng bị báo hồi, rồi lại nhảy, rồi cả vòng loạn lên (log
-      // 09:41). Hồi tính bằng thời gian thật (v85): chờ 2s là thời gian
-      // trôi qua, tới lượt thì skill tự hết hồi — không trừ tay ở đây.
+      // 09:41). v92: chờ KHÔNG làm lượt trôi (log 2026-11-16 chứng minh
+      // 8s chờ = 0 lượt), nên chờ mãi không tự hết hồi — sau 3 vòng chờ
+      // (~6s) mà lượt vẫn chưa trôi thì bấm THỬ đúng skill này (probe)
+      // để game trả lời thật: được chấp nhận thì xoay tiếp, bị báo hồi
+      // thì ghi lại đúng số game báo rồi chờ tiếp. Probe KHÔNG phải nhảy
+      // skill: nó chỉ bấm đúng skill đang chờ, không bấm skill khác.
       const bicanhLeft = bicanhLeftTurns(skillName);
       if (bicanhLeft > 0) {
-        this.log(`⏳ "${skillName}" đang hồi còn ${bicanhLeft} lượt — chờ rồi bấm lại đúng skill này, không nhảy tới skill khác...`);
-        await this.delay(this.skillRetryWaitMs);
-        continue;
+        if (bicanhWaitSkill !== skillName) { bicanhWaitSkill = skillName; bicanhWaitStall = 0; }
+        bicanhWaitStall++;
+        if (bicanhWaitStall < 3) {
+          this.log(`⏳ "${skillName}" đang hồi còn ${bicanhLeft} lượt — chờ rồi bấm lại đúng skill này, không nhảy tới skill khác...`);
+          await this.delay(this.skillRetryWaitMs);
+          continue;
+        }
+        this.log(`⏳ "${skillName}" đang hồi còn ${bicanhLeft} lượt — đã chờ ${bicanhWaitStall} vòng mà lượt chưa trôi, bấm thử đúng skill này để game xác nhận (không nhảy skill)...`);
+        bicanhWaitStall = 0;
+        bicanhProbe = true;
+        // Rơi xuống dưới: qua chặn "vừa bấm" (probe được miễn), tới clickNext.
+      } else {
+        bicanhWaitStall = 0;
+        bicanhWaitSkill = null;
       }
       // Chặn bấm lại skill vừa bấm (giữ nguyên từ 1816bc0, chỉ dùng làm
       // phao cứu khi vòng bị lệch): trong vòng chuẩn thì nhánh này không
       // bao giờ chạm tới, vì sau 1 lần bấm thì index đã tiến tới skill
       // khác rồi.
       const bicanhJustUsed = Boolean(bicanhLastClickedSkill && skillName === bicanhLastClickedSkill);
-      if (bicanhJustUsed) {
+      if (bicanhJustUsed && !bicanhProbe) {
         bicanhConsecutiveSkips++;
         if (bicanhConsecutiveSkips >= bicanhComboLength) {
           let earliest = null;
-          for (const [name, until] of bicanhCooldownUntil) {
-            if (!earliest || until < earliest[1]) earliest = [name, until];
+          for (const [name, turns] of bicanhCooldownLeft) {
+            if (turns > 0 && (!earliest || turns < earliest[1])) earliest = [name, turns];
           }
           this.log(`⏭️ Tất cả skill Bicanh đều chưa sẵn sàng — chờ ${this.skillRetryWaitMs}ms rồi thử lại "${earliest ? earliest[0] : skillName}"...`);
-          if (earliest) bicanhCooldownUntil.set(earliest[0], this.bicanhNowMs());
+          if (earliest) bicanhCooldownLeft.delete(earliest[0]);
           bicanhConsecutiveSkips = 0;
           await this.delay(this.skillRetryWaitMs);
           continue;
@@ -4651,6 +4675,7 @@ class NpcBot {
         continue;
       }
       const result = await this.clickNextBicanhSkill(skillName);
+      bicanhProbe = false;
       bicanhConsecutiveSkips = 0;
       // Tin hồi chiêu đúng là skill sắp bấm này: đã biết đang hồi thì đừng
       // bấm, ghi nhớ cooldown rồi CHỜ VÀ BẤM LẠI ĐÚNG SKILL NÀY ở vòng
@@ -4660,22 +4685,36 @@ class NpcBot {
       if (result && result.skipCurrent && result.cooldownDetail) {
         const detail = result.cooldownDetail;
         if (detail.skill && detail.turns) {
-          bicanhCooldownUntil.set(detail.skill, this.bicanhNowMs() + detail.turns * bicanhTurnMs);
+          bicanhCooldownLeft.set(detail.skill, detail.turns);
           this.log(`⏳ "${detail.skill}" đang hồi còn ${detail.turns} turn — đã biết trước khi bấm, chờ rồi bấm lại đúng skill này, không nhảy skill khác...`);
         }
+        // Lượt này không bấm nên không tính là lượt game; click trước đó
+        // (nếu có) coi như đã xử lý xong mà không trừ lượt (an toàn: tin
+        // hồi này là về skill hiện tại, không chứng minh click trước được
+        // chấp nhận — trừ nhầm sẽ làm map hết sớm như v85).
+        bicanhPrevClickPending = null;
         bicanhPrevClicked = false;
         await this.delay(this.skillRetryWaitMs);
         continue;
       }
+      // v92 — lượt game chỉ trôi khi click TRƯỚC được chấp nhận (xem A2).
+      // Verdict trong result là của click trước (peek chạy ở đầu clickNext):
+      // sạch (không cooldown/wait/wrong-person/interaction-failed) => click
+      // trước được chấp nhận => trừ tất cả 1 lượt; bị từ chối (bất kỳ loại
+      // nào) hoặc result null => lượt không trôi => KHÔNG trừ. Xóa mốc chờ
+      // để lần sau không trừ nhầm 2 lần cho cùng 1 click.
+      const bicanhPrevRejected = !result || !!(result.cooldownDetail || result.waitTurn || result.wrongPerson || result.interactionFailed);
+      if (bicanhPrevClickPending && !bicanhPrevRejected) bicanhTickTurn();
+      bicanhPrevClickPending = null;
       // Tin mới từ lượt click TRƯỚC đó, đọc được ở đầu clickNext lần này:
+      // số lượt game báo là sự thật duy nhất — ghi đúng số đó (v92).
       if (result && result.cooldownDetail) {
         const detail = result.cooldownDetail;
         const targetSkill = detail.skill || (this._bicanhSkillIdx > 0 ? bicanhSkillAt(this._bicanhSkillIdx - 1) : null);
         if (targetSkill && detail.turns) {
-          bicanhCooldownUntil.set(targetSkill, this.bicanhNowMs() + detail.turns * bicanhTurnMs);
+          bicanhCooldownLeft.set(targetSkill, detail.turns);
           this.log(`⏳ "${targetSkill}" đang hồi còn ${detail.turns} turn — ghi nhớ, sẽ chờ rồi bấm lại đúng skill này khi tới lượt nó, không nhảy skill khác...`);
         }
-        // v85: mốc hồi tính bằng thời gian thật, không trừ tay ở đây nữa.
       }
       if (result && (result.waitTurn || result.wrongPerson || result.interactionFailed)) {
         // Tin bị từ chối còn sót từ lượt click trước: skill đó chưa được
@@ -4701,9 +4740,10 @@ class NpcBot {
             bicanhWaitTurnRetries = 0;
             bicanhPrevClicked = true;
             bicanhLastClickedSkill = skillName;
-            // v83/v85 — bấm thử được chấp nhận thì skill này cũng hồi 3 turn
-            // như click thường (mốc = now + 3 lượt game).
-            bicanhCooldownUntil.set(skillName, this.bicanhNowMs() + 3 * bicanhTurnMs);
+            // v92 — bấm thử được chấp nhận thì skill này cũng hồi 3 lượt
+            // như click thường (số lượt, không phải mốc thời gian).
+            bicanhCooldownLeft.set(skillName, 3);
+            bicanhPrevClickPending = skillName;
             this.log(`🌀 Click skill bicanh: "${forceResult.clicked}"`);
             this._bicanhSkillIdx++;
             const cd = await this.checkBicanhCooldown();
@@ -4757,14 +4797,17 @@ class NpcBot {
         bicanhPrevClicked = true;
         bicanhPrevWasRejected = false;
         bicanhLastClickedSkill = skillName;
-        // v83/v85 — tự ghi nhớ skill vừa dùng hồi 3 turn (giống Luân Hồi v80):
-        // click được chấp nhận không sinh tin "đang hồi" nên không ghi thì
-        // bot quên skill này đang hồi; sang tầng mới nó bấm lại ngay và bị
-        // game báo hồi (log 2026-11-16 08:10:27/08:10:44). Hồi tính bằng
-        // thời gian thật: skill sẵn sàng lại sau 3 lượt game ≈ 5400ms —
-        // khớp nhịp xoay 4 skill hiện tại; game báo số khác thì nhánh
-        // detail ghi đè mốc bằng số thật.
-        bicanhCooldownUntil.set(skillName, this.bicanhNowMs() + 3 * bicanhTurnMs);
+        // v92 — tự ghi nhớ skill vừa dùng hồi 3 lượt (giống Luân Hồi v80,
+        // nhưng tính bằng lượt, không phải mốc thời gian như v85): click
+        // được chấp nhận không sinh tin "đang hồi" nên không ghi thì bot
+        // quên skill này đang hồi; sang tầng mới nó bấm lại ngay và bị
+        // game báo hồi (log 2026-11-16 08:10:27/08:10:44). Số 3 khớp số
+        // game báo ngay sau khi dùng ("Còn 3 turn", log 09:23:08); mỗi
+        // cú bấm khác được chấp nhận trừ tất cả 1 lượt (tick ở trên), nên
+        // sau 3 lượt khác skill này về 0 đúng lúc tới lượt nó. Game báo
+        // số khác thì nhánh detail ghi đè bằng số thật.
+        bicanhCooldownLeft.set(skillName, 3);
+        bicanhPrevClickPending = skillName;
         this.log(`🌀 Click skill bicanh: "${clicked}"`);
         // Chỉ tăng index khi click đúng skill đích để giữ đúng quỹ đạo cooldown.
         this._bicanhSkillIdx++;
