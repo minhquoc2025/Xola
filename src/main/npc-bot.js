@@ -5929,6 +5929,38 @@ class NpcBot {
     return 'mua-cuu-chuyen';
   }
 
+  // V98: cặp (hiện tại, tối đa) của người chơi — cùng 2 nguồn với
+  // vanduPlayerHpPct (dòng Trạng Thái "Hiệp cái: ... HP", rồi cặp
+  // "Hiệp cái:"/"Hòa:" cuối trong Diễn Biến). vanduEnemyInfo dùng để
+  // loại dòng HP của người chơi khỏi kết quả quái (log 2026-11-17).
+  vanduPlayerHpPair(text) {
+    const raw = String(text || '');
+    const toNum = (s) => Number(String(s).replace(/[.,]/g, ''));
+    const ok = (cur, max) => Number.isFinite(cur) && Number.isFinite(max) && max >= 1000 && cur <= max;
+    const statusRe = /Hiệp cái:\s*([\d.,]+)\s*\/\s*([\d.,]+)\s*HP/gi;
+    let m;
+    let last = null;
+    while ((m = statusRe.exec(raw)) !== null) {
+      const cur = toNum(m[1]);
+      const max = toNum(m[2]);
+      if (ok(cur, max)) last = { cur, max };
+    }
+    if (last) return last;
+    const diemIdx = raw.search(/Diễn Biến Hiệp Đấu/i);
+    if (diemIdx >= 0) {
+      const section = raw.slice(diemIdx);
+      const re = /(?:Hiệp cái|Hòa)\s*:\s*([\d.,]+)\s*\/\s*([\d.,]+)/g;
+      let last2 = null;
+      while ((m = re.exec(section)) !== null) {
+        const cur = toNum(m[1]);
+        const max = toNum(m[2]);
+        if (ok(cur, max)) last2 = { cur, max };
+      }
+      if (last2) return last2;
+    }
+    return null;
+  }
+
   vanduPlayerHpPct(text) {
     const raw = String(text || '');
     const pctOf = (curS, maxS) => {
@@ -6048,43 +6080,94 @@ class NpcBot {
     return `${entries.length} thẻ (${this.vanduBuffClicks || 0} lần click) [${sectStr || 'chưa có tông'}${counterPart}] -> ${cardList}`;
   }
 
+  // V98: bỏ tiền tố viền embed ("│", khoảng trắng, ký tự trang trí)
+  // khỏi tên quái để log sạch ("│  Thích Anh Hiệp v2" -> "Thích Anh Hiệp v2").
+  vanduCleanEnemyName(title) {
+    return String(title || '').replace(/^[^\p{L}\p{N}\[]+/u, '').trim();
+  }
+
   // V80: Trích xuất thông tin quái / boss từ màn hình battle
   vanduEnemyInfo(text) {
     const raw = String(text || '');
-    const lines = raw.split(/\r?\n/);
+    const hpLineRe = /^([^:\n]+?)\s*:\s*([\d.,]+)\s*\/\s*([\d.,]+)\s*(?:HP)?(?:\s*\((\d+)\s*%\))?/i;
+    const skipPrefixes = ['hiep cai', 'hoa', 'khi huyet', 'tiet diem', 'tien trinh'];
+    const isPlayerTitle = (titleNorm) => skipPrefixes.some((p) => titleNorm.startsWith(p));
+    const playerPair = this.vanduPlayerHpPair(raw);
+    // V98 (log 2026-11-17, chạy v96): mọi trận đều ghi "Máu Quái ==
+    // Máu Tôi" (100/100, 76/76, 98/98...) và tên quái luôn là
+    // "│ Thích Anh Hiệp v2" — bản cũ lấy dòng "Tên: hiện tại/tối đa"
+    // ĐẦU TIÊN không nằm trong danh sách skip, mà trên màn này dòng
+    // Trạng Thái của NGƯỜI CHƠI không còn là "Hiệp cái:" nữa mà là dòng
+    // tên nhân vật ("Thích Anh Hiệp v2: ..."), nên bị lấy nhầm làm quái
+    // (tên + HP đều là của người chơi); dòng quái thật (thứ hai trong
+    // Trạng Thái) không bao giờ tới được vì `break`. Sửa: chỉ quét trong
+    // mục TRẠNG THÁI, dòng HP đầu tiên trong mục là của người chơi (dòng
+    // "Hiệp cái:" nếu có, không thì dòng đầu tiên), quái là dòng HP tiếp
+    // theo; chặn thêm bằng cặp (hiện tại, tối đa) của người chơi (dòng
+    // nào trùng cặp đó thì là dòng của người chơi, hoặc quái gương có HP
+    // gắn với người chơi — trường hợp đó log bằng nhau là đúng).
+    const stateIdx = raw.search(/trạng thái/i);
+    const dienIdx = stateIdx >= 0 ? raw.slice(stateIdx).search(/diễn biến/i) : -1;
+    const section = stateIdx >= 0
+      ? raw.slice(stateIdx, dienIdx >= 0 ? stateIdx + dienIdx : undefined)
+      : raw;
+    const collect = (scope) => {
+      const found = [];
+      for (const line of String(scope).split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        const m = trimmed.match(hpLineRe);
+        if (!m) continue;
+        found.push({
+          title: m[1].trim(),
+          titleNorm: this.vanduNormalize(m[1].trim()),
+          cur: Number(m[2].replace(/[.,]/g, '')),
+          max: Number(m[3].replace(/[.,]/g, '')),
+          pct: m[4] !== undefined ? Number(m[4]) : null,
+          rawCur: m[2],
+          rawMax: m[3],
+        });
+      }
+      return found;
+    };
+    const pick = (found) => {
+      if (found.length === 0) return null;
+      // Dòng người chơi: dòng có nhãn skip ("Hiệp cái:"...), nếu không
+      // có thì dòng HP đầu tiên trong mục (người chơi luôn liệt kê
+      // trước quái trong Trạng Thái).
+      let playerIdx = found.findIndex((l) => isPlayerTitle(l.titleNorm));
+      if (playerIdx < 0) playerIdx = 0;
+      for (let i = 0; i < found.length; i++) {
+        if (i === playerIdx) continue;
+        const l = found[i];
+        // Trùng cặp (hiện tại, tối đa) với người chơi -> dòng của người
+        // chơi (vd Diễn Biến ghi lại), không phải quái.
+        if (playerPair && l.cur === playerPair.cur && l.max === playerPair.max) continue;
+        return l;
+      }
+      return null;
+    };
+    let picked = pick(collect(section));
+    if (!picked && section !== raw) picked = pick(collect(raw));
     let name = '';
     let hpCur = '';
     let hpMax = '';
     let hpPct = null;
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      const m = trimmed.match(/^([^:\n]+?)\s*:\s*([\d.,]+)\s*\/\s*([\d.,]+)\s*(?:HP)?(?:\s*\((\d+)\s*%\))?/i);
-      if (m) {
-        const title = m[1].trim();
-        const titleNorm = this.vanduNormalize(title);
-        if (titleNorm.startsWith('hiep cai') || titleNorm.startsWith('hoa') || titleNorm.startsWith('khi huyet') || titleNorm.startsWith('tiet diem') || titleNorm.startsWith('tien trinh')) {
-          continue;
-        }
-        name = title;
-        hpCur = m[2];
-        hpMax = m[3];
-        if (m[4] !== undefined) {
-          hpPct = Number(m[4]);
-        } else {
-          const curN = Number(m[2].replace(/[.,]/g, ''));
-          const maxN = Number(m[3].replace(/[.,]/g, ''));
-          if (maxN > 0) hpPct = Math.round((100 * curN) / maxN);
-        }
-        break;
+    if (picked) {
+      name = this.vanduCleanEnemyName(picked.title);
+      hpCur = picked.rawCur;
+      hpMax = picked.rawMax;
+      if (picked.pct !== null) {
+        hpPct = picked.pct;
+      } else if (picked.max > 0) {
+        hpPct = Math.round((100 * picked.cur) / picked.max);
       }
     }
 
     if (!name || name === 'Quái') {
       const bossMatch = raw.match(/bị phong tỏa bởi\s*(\[[^\]]+\]\s*[^\n!]+)/i) ||
         raw.match(/(?:chém gục|hạ gục|đối đầu|gặp)\s*(\[[^\]]+\]\s*[\p{L}\p{N}\s]+)/iu);
-      if (bossMatch) name = bossMatch[1].trim();
+      if (bossMatch) name = this.vanduCleanEnemyName(bossMatch[1].trim());
     }
 
     const counterSect = this.vanduCounterSectFromText(raw);
