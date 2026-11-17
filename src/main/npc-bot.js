@@ -97,6 +97,7 @@ class NpcBot {
     this.vanduSkillIdx = 0;
     this.vanduNode = 0;
     this.vanduLastBuffNode = 0; // V69: Tiết lúc chọn buff gần nhất (xem vanduIsBossByFlow)
+    this.vanduBuffClicks = 0; // V80: tổng số lần đã click chọn buff trong chuyến
     this.vanduDanCount = 0;
     this.vanduHpPct = null; // V71: % HP người chơi đọc gần nhất (thẻ HP Neon)
     this.vanduDanEmptyNode = null; // V71: Tiết lúc đan về 0 (thẻ Đan: "HẾT ĐAN từ Tiết X")
@@ -5964,6 +5965,70 @@ class NpcBot {
     return (n === 11 || n === 23 || n === 35) && this.vanduLastBuffNode === n;
   }
 
+  // V80: Tóm tắt thông tin buff hiện có kèm số lượng click và tông
+  vanduFormatBuffSummary() {
+    const owned = this.vanduOwnedBuffs || {};
+    const entries = Object.entries(owned);
+    if (entries.length === 0) return 'chưa có buff nào';
+    const cardList = entries.map(([name, count]) => `${name}${count > 1 ? ` (★${count})` : ''}`).join(', ');
+    const sectStr = Object.entries(this.vanduSectCounts || {})
+      .filter(([, v]) => v > 0)
+      .map(([k, v]) => `${k}:${v}`)
+      .join(', ');
+    const counterPart = this.vanduCounterPicks ? ` | Khắc chế: ${this.vanduCounterPicks}` : '';
+    return `${entries.length} thẻ (${this.vanduBuffClicks || 0} lần click) [${sectStr || 'chưa có tông'}${counterPart}] -> ${cardList}`;
+  }
+
+  // V80: Trích xuất thông tin quái / boss từ màn hình battle
+  vanduEnemyInfo(text) {
+    const raw = String(text || '');
+    const lines = raw.split(/\r?\n/);
+    let name = '';
+    let hpCur = '';
+    let hpMax = '';
+    let hpPct = null;
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      const m = trimmed.match(/^([^:\n]+?)\s*:\s*([\d.,]+)\s*\/\s*([\d.,]+)\s*(?:HP)?(?:\s*\((\d+)\s*%\))?/i);
+      if (m) {
+        const title = m[1].trim();
+        const titleNorm = this.vanduNormalize(title);
+        if (titleNorm.startsWith('hiep cai') || titleNorm.startsWith('hoa') || titleNorm.startsWith('khi huyet') || titleNorm.startsWith('tiet diem') || titleNorm.startsWith('tien trinh')) {
+          continue;
+        }
+        name = title;
+        hpCur = m[2];
+        hpMax = m[3];
+        if (m[4] !== undefined) {
+          hpPct = Number(m[4]);
+        } else {
+          const curN = Number(m[2].replace(/[.,]/g, ''));
+          const maxN = Number(m[3].replace(/[.,]/g, ''));
+          if (maxN > 0) hpPct = Math.round((100 * curN) / maxN);
+        }
+        break;
+      }
+    }
+
+    if (!name || name === 'Quái') {
+      const bossMatch = raw.match(/bị phong tỏa bởi\s*(\[[^\]]+\]\s*[^\n!]+)/i) ||
+        raw.match(/(?:chém gục|hạ gục|đối đầu|gặp)\s*(\[[^\]]+\]\s*[\p{L}\p{N}\s]+)/iu);
+      if (bossMatch) name = bossMatch[1].trim();
+    }
+
+    const counterSect = this.vanduCounterSectFromText(raw);
+
+    return {
+      name: name || 'Quái',
+      hpCur,
+      hpMax,
+      hpPct,
+      counterSect,
+    };
+  }
+
   // V65 (anh 2026-11-12, anh Tiet 13/36): dem so buff trong tui tu
   // chinh man hien tai — man Loi Kiep hien "8 The Buff", bang cong
   // huong hien "Tui Buff 4/12". Tra ve null neu man khong ghi so.
@@ -6629,8 +6694,15 @@ class NpcBot {
     const skillGapMs = (this.skillClickDelayMs || 1000) + 1000;
     const startedAt = Date.now();
     let noHealLogged = false; // V69: log chẩn đoán không-hồi 1 lần/trận
+    let battleLogged = false; // V80: log thông tin chi tiết đối thủ, HP, và buff hiện có
+    let enemyName = '';
+    let lastPlayerHp = null;
+    let lastEnemyHpPct = null;
+    let roundCount = 0;
+    let battleEndedReason = '';
     while (this.isRunning && this.runId === runId) {
       if (Date.now() - startedAt > this.battleTimeoutMs) {
+        battleEndedReason = 'timeout';
         this.vanduLog('⚠️ Vân Du: trận quá lâu, quay lại vòng quét chính');
         return;
       }
@@ -6639,10 +6711,16 @@ class NpcBot {
       if (!screen) { await this.delay(2000); continue; }
       const norm = this.vanduNormalize(screen.text);
       const btnNorm = screen.buttons.map(b => this.vanduNormalize(b));
-      if (btnNorm.some(b => b.includes('tro ve giang ho'))) return;
+      if (btnNorm.some(b => b.includes('tro ve giang ho'))) {
+        battleEndedReason = 'defeat';
+        break;
+      }
       const isBattle = norm.includes('trang thai chien truong') || norm.includes('dien bien hiep dau') ||
         this.vanduSkillOrder.some(s => btnNorm.some(b => b.includes(this.vanduNormalize(s))));
-      if (!isBattle) return;
+      if (!isBattle) {
+        battleEndedReason = 'victory';
+        break;
+      }
       // V68: đọc lại Tiết từ chính màn battle — boss chen vào không qua
       // màn cửa Tiết 12 nên node cũ còn 11, ngưỡng hồi sai thành 20%.
       const battleNode = this.vanduParseNode(screen.text);
@@ -6660,7 +6738,15 @@ class NpcBot {
       // Giới hạn là số đan đang có (tối đa 3, đồng bộ theo nút ở trên);
       // hết đan thì không còn nút để bấm nên tự dừng.
       const hp = this.vanduPlayerHpPct(screen.text);
-      if (hp !== null) this.vanduHpPct = hp; // V71: thẻ HP Neon đọc từ đây
+      if (hp !== null) {
+        this.vanduHpPct = hp; // V71: thẻ HP Neon đọc từ đây
+        lastPlayerHp = hp;
+      }
+      const enemy = this.vanduEnemyInfo(screen.text);
+      if (enemy.name && enemy.name !== 'Quái') enemyName = enemy.name;
+      else if (!enemyName && enemy.name) enemyName = enemy.name;
+      if (enemy.hpPct !== null) lastEnemyHpPct = enemy.hpPct;
+
       const itemBtns = screen.buttons.filter(b => {
         const n = this.vanduNormalize(b);
         return n.includes('cuu chuyen hoan hon') && !n.includes('mua');
@@ -6683,7 +6769,20 @@ class NpcBot {
       // V69: thêm nhận diện theo luồng (trận sau bảng buff ở Tiết
       // 11/23/35 là boss 12/24/36) vì màn battle lúc đánh không mang
       // 2 chữ đó — log 10:57:43 vẫn không hồi dù đã có v68.
-      const isBossBattle = this.vanduIsBossBattle(screen.text) || this.vanduIsBossByFlow();
+      const isBossBattle = this.vanduIsBossBattle(screen.text) || this.vanduIsBossByFlow() ||
+        this.vanduNode === 12 || this.vanduNode === 24 || this.vanduNode === 36;
+
+      // V80: log chi tiết đối thủ và buff sở hữu khi bắt đầu trận
+      if (!battleLogged) {
+        battleLogged = true;
+        const bossTag = isBossBattle ? '👑 BOSS' : '⚔️ QUÁI';
+        const enemyHpDesc = enemy.hpPct !== null ? `${enemy.hpPct}%` : (enemy.hpCur ? `${enemy.hpCur}/${enemy.hpMax}` : '?');
+        const counterDesc = enemy.counterSect ? ` (khắc chế: ${enemy.counterSect} Tông)` : '';
+        const playerHpDesc = hp !== null ? `${hp}%` : '?';
+        this.vanduLog(`⚔️ Vân Du: [Trận đấu ${bossTag}] Đối thủ: ${enemyName || 'Quái'}${counterDesc} | Máu Quái: ${enemyHpDesc} | Máu Tôi: ${playerHpDesc} | Đan: ${itemBtns.length}/3`);
+        this.vanduLog(`📜 Vân Du: Tình trạng buff hiện có (đã click: ${this.vanduBuffClicks || 0} lần): ${this.vanduFormatBuffSummary()}`);
+      }
+
       const healThreshold = isBossBattle ? 50 : this.vanduHealThreshold(this.vanduNode);
       // V69: chẩn đoán — máu <50% ở vùng chuyển boss (Tiết 11/23/35)
       // mà không hồi thì log 1 lần/trận để lần sau biết bot đã thấy gì.
@@ -6728,11 +6827,23 @@ class NpcBot {
         }
       }
       if (clicked) {
-        this.vanduLog(`⚔️ Vân Du: ${clicked}`);
+        roundCount++;
+        const myHpStr = hp !== null ? `${hp}%` : '?';
+        const enemyHpStr = enemy.hpPct !== null ? `${enemy.hpPct}%` : '?';
+        this.vanduLog(`⚔️ Vân Du: hiệp ${roundCount} - ${clicked} (Tôi: ${myHpStr} | Quái: ${enemyHpStr} | Đan: ${itemBtns.length}/3)`);
       } else {
         this.logDebug('Vân Du: không có skill nào bấm được lúc này, chờ quét lại');
       }
       await this.delay(Math.max(500, skillGapMs));
+    }
+    // V80: Kết quả kết thúc trận đấu
+    if (battleEndedReason === 'defeat') {
+      const myHpDesc = lastPlayerHp !== null ? `${lastPlayerHp}%` : '0%';
+      const enemyHpDesc = lastEnemyHpPct !== null ? `${lastEnemyHpPct}%` : '?';
+      this.vanduLog(`💀 Vân Du: THẤT BẠI trước ${enemyName || 'Quái'} ở Tiết ${this.vanduNode || '?'}! (Tôi: ${myHpDesc} | Quái còn: ${enemyHpDesc}) | Đã click: ${this.vanduBuffClicks || 0} buff | Danh sách buff: ${this.vanduFormatBuffSummary()}`);
+    } else if (battleEndedReason === 'victory') {
+      const myHpDesc = lastPlayerHp !== null ? `${lastPlayerHp}%` : '?';
+      this.vanduLog(`🏆 Vân Du: CHIẾN THẮNG ${enemyName || 'Quái'} (Tiết ${this.vanduNode || '?'})! (Tôi còn: ${myHpDesc} HP | Đan: ${this.vanduDanCount}/3)`);
     }
   }
 
@@ -6753,6 +6864,7 @@ class NpcBot {
     this.vanduSkillIdx = 0;
     this.vanduNode = 0;
     this.vanduLastBuffNode = 0; // V69: reset theo chuyến như vanduNode
+    this.vanduBuffClicks = 0; // V80: reset đếm click buff theo chuyến
     this.vanduDanCount = 0;
     this.vanduHpPct = null; // V71: reset theo chuyến như vanduNode
     this.vanduDanEmptyNode = null; // V71: reset theo chuyến như vanduNode
@@ -6831,6 +6943,7 @@ class NpcBot {
           this.vanduSkillIdx = 0;
           this.vanduNode = 0;
           this.vanduLastBuffNode = 0; // V69: reset theo chuyến như vanduNode
+          this.vanduBuffClicks = 0; // V80: reset đếm click buff theo chuyến
           this.vanduDanCount = 0;
           this.vanduHpPct = null; // V71: reset theo chuyến như vanduNode
           this.vanduDanEmptyNode = null; // V71: reset theo chuyến như vanduNode
@@ -7335,6 +7448,7 @@ class NpcBot {
         let rerolls = 0;
         let rerollBlocked = false;
         let picked = false;
+        let boardLogged = false; // V80: ghi nhận bảng buff xuất hiện
         while (this.isRunning && this.runId === runId && !picked) {
           const cur = await this.vanduScanLatest();
           if (!cur) break;
@@ -7362,6 +7476,20 @@ class NpcBot {
           // Không đọc được số thì dự phòng tối đa 4 lượt mỗi bảng.
           const remaining = this.vanduRerollRemaining(cur.text || '', cur.buttons || []);
           const allowReroll = !rerollBlocked && !!doiVanBtn && (remaining !== null ? remaining > 0 : rerolls < 4);
+
+          // V80: Log chi tiết các lựa chọn xuất hiện trên bảng buff lần đầu
+          if (!boardLogged && buffButtons.length > 0) {
+            boardLogged = true;
+            const boardDesc = buffButtons.map((b, i) => {
+              const c = this.vanduParseBuffCard(b);
+              const r = cardRarities && cardRarities[i] !== undefined ? cardRarities[i] : this.vanduBuffRarity(b);
+              const s = (cardSects && cardSects[i]) || c.sect || '?';
+              const rName = r === 4 ? 'Vàng' : r === 3 ? 'Tím' : r === 2 ? 'Lam' : r === 1 ? 'Lục' : '?';
+              return `${c.name || b}(${s}:${rName})`;
+            }).join(', ');
+            this.vanduLog(`📋 Vân Du: bảng buff gồm [${boardDesc}] | Khắc chế quái: ${counterSect || 'chưa rõ'}`);
+          }
+
           const choice = this.vanduChooseBuff(buffButtons, this.vanduSectCounts, this.vanduOwnedBuffs, allowReroll, counterSect, cardRarities, this.vanduCounterPicks, cardSects);
           if (!choice) {
             // V33: chỉ xảy ra khi sổ bot ghi max hết mà bảng vẫn hiện lá
@@ -7412,8 +7540,12 @@ class NpcBot {
             if (ownedKey) this.vanduOwnedBuffs[ownedKey] = prevOwned + 1;
             if (isNewBuff && card.sect) this.vanduSectCounts[card.sect] = (this.vanduSectCounts[card.sect] || 0) + 1;
             if (isNewBuff && choice.reason === 'counter') this.vanduCounterPicks = (this.vanduCounterPicks || 0) + 1;
+            this.vanduBuffClicks = (this.vanduBuffClicks || 0) + 1;
+            const newLevel = (ownedKey && this.vanduOwnedBuffs[ownedKey]) || 1;
             const reasonTag = choice.reason ? ` [${choice.reason}]` : '';
-            this.vanduLog(`✨ Vân Du: chọn buff "${clicked}"${reasonTag}`);
+            const totalCards = Object.keys(this.vanduOwnedBuffs).length;
+            const sectSummary = Object.entries(this.vanduSectCounts).filter(([, v]) => v > 0).map(([k, v]) => `${k}:${v}`).join(', ');
+            this.vanduLog(`✨ Vân Du: chọn buff #${this.vanduBuffClicks} "${clicked}"${reasonTag} (★${newLevel}) | Túi: ${totalCards} thẻ [${sectSummary || 'trống'}]`);
             // V69: ghi Tiết lúc chọn buff — trận sau bảng buff ở Tiết
             // 11/23/35 là boss 12/24/36 (boss chen vào không qua màn cửa).
             this.vanduLastBuffNode = this.vanduNode;
