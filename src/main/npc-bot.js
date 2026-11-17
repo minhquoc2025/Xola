@@ -2941,6 +2941,40 @@ class NpcBot {
   //#endregion
   // ================= LUÂN HỒI MODE =================
   //#region Luân Hồi
+  // V97: "Hết Giờ! Mày do dự quá lâu, Luân Hồi tháp đã đóng!" (ảnh anh
+  // gửi 2026-11-17 10:01) — tháp đóng vì hết giờ. Cần CẢ 2 cụm: "hết giờ"
+  // trơ còn xuất hiện ở chỗ khác, và "Luân Hồi tháp" trơ còn nằm trong
+  // nhiều tin khác; chỉ cặp "hết giờ + tháp đã đóng" mới là hết lượt.
+  luanhoiIsTimeoutEnd(text) {
+    const t = String(text || '').toLowerCase();
+    return /hết giờ|het gio/.test(t) && /luân hồi tháp đã đóng|luan hoi thap da dong/.test(t);
+  }
+
+  // V97: quét tin "Hết Giờ" đóng tháp ở pre-battle (chưa vào trận nên
+  // tick chưa chạy, không ai phát hiện) — cùng luật owned như tick bước 0
+  // (tin owned theo reply-chain sau !luanhoi + chứa User ID / tên mình).
+  // Trả về text gốc của tin timeout, hoặc null nếu không thấy.
+  async luanhoiCheckTimeoutEnd() {
+    await this.markLuanhoiMessages();
+    const userId = this.userId || '';
+    const username = this.username || '';
+    const res = await this.exec(`(() => {
+      const userId = ${JSON.stringify(userId)};
+      const username = ${JSON.stringify(username)};
+      const msgs = document.querySelectorAll('[role="article"]');
+      const recent = Array.from(msgs).slice(-30).reverse();
+      for (const msg of recent) {
+        if (msg.getAttribute('data-luanhoi-owned') !== 'true') continue;
+        const rawText = msg.textContent || '';
+        if (userId ? !(msg.innerHTML || '').includes(userId) : (username && !rawText.includes(username))) continue;
+        const text = rawText.toLowerCase();
+        if (/hết giờ|het gio/.test(text) && /luân hồi tháp đã đóng|luan hoi thap da dong/.test(text)) return rawText;
+      }
+      return null;
+    })()`);
+    return res || null;
+  }
+
   async luanhoiLoop(runId) {
     if (!this.isRunning || this.runId !== runId) return;
 
@@ -3084,11 +3118,19 @@ class NpcBot {
       await this.delay(this.rand(700, 1200));
     }
 
+    // V97: tháp đóng vì hết giờ mà pre-battle không thấy màn chọn buff —
+    // kiểm tra tin "Hết Giờ" rồi tính thua 1 lượt, gõ lại !luanhoi (rơi
+    // xuống đường isLossFinal bên dưới như thua trận thường). Không thấy
+    // tin timeout thì mới thử lại vòng kế như cũ.
+    let preBattleTimeoutText = null;
     if (!entered) {
-      this.log('⚠️ Luân hồi: quá lâu không thấy màn chọn buff. Thử lại vòng kế...');
-      await this.cooldownWait(10, runId);
-      if (this.isRunning && this.runId === runId) this.luanhoiFightLoop(runId);
-      return;
+      preBattleTimeoutText = await this.luanhoiCheckTimeoutEnd();
+      if (!preBattleTimeoutText) {
+        this.log('⚠️ Luân hồi: quá lâu không thấy màn chọn buff. Thử lại vòng kế...');
+        await this.cooldownWait(10, runId);
+        if (this.isRunning && this.runId === runId) this.luanhoiFightLoop(runId);
+        return;
+      }
     }
 
     if (!enteredFast) {
@@ -3099,7 +3141,9 @@ class NpcBot {
     }
 
     const isAlreadyFighting = await this.checkAlreadyFighting();
-    const battleResult = await this.luanhoiBattle(isAlreadyFighting, runId);
+    const battleResult = preBattleTimeoutText
+      ? { ended: true, result: 'loss', rewardText: preBattleTimeoutText }
+      : await this.luanhoiBattle(isAlreadyFighting, runId);
 
     if (!this.isRunning || this.runId !== runId) return;
 
@@ -3118,7 +3162,8 @@ class NpcBot {
     // tháp (Ngã Xuống / Kết Thúc Luân Hồi) thì vẫn tính là thua 1 lượt, không để
     // lượt đó trôi qua mà không đếm (đó là lý do trước đây counter kẹt ở 0 / N).
     const isTowerEndLoss = !!(battleResult && battleResult.rewardText &&
-      /ngã xuống luân hồi tháp|nga xuong luan hoi thap|kết thúc luân hồi|ket thuc luan hoi/i.test(battleResult.rewardText) &&
+      (/ngã xuống luân hồi tháp|nga xuong luan hoi thap|kết thúc luân hồi|ket thuc luan hoi/i.test(battleResult.rewardText) ||
+        this.luanhoiIsTimeoutEnd(battleResult.rewardText)) &&
       !/chiến thắng|thắng!/i.test(battleResult.rewardText));
     const isLossFinal = isLoss || (battleResult && battleResult.ended && isTowerEndLoss);
 
@@ -3139,7 +3184,8 @@ class NpcBot {
       }
     } else if (isLossFinal) {
       this.stats.losses++;
-      this.log('❌ THUA BOSS!');
+      // V97: hết giờ đóng tháp thì log đúng lý do thay vì "THUA BOSS!".
+      this.log(this.luanhoiIsTimeoutEnd(battleResult && battleResult.rewardText) ? '⏰ Hết giờ — Luân Hồi tháp đã đóng!' : '❌ THUA BOSS!');
       if (battleResult && battleResult.rewardText) {
         this.parseLuanhoiRewards(battleResult.rewardText, 'loss');
       }
@@ -3474,8 +3520,13 @@ class NpcBot {
           if (!okOwn(msg, rawText)) continue;
         const text = rawText.toLowerCase();
         const isTowerEnd = /ngã xuống luân hồi tháp|nga xuong luan hoi thap|kết thúc luân hồi tháp|ket thuc luan hoi thap|kết thúc luân hồi|ket thuc luan hoi/.test(text);
+        // V97: "Hết Giờ! Mày do dự quá lâu, Luân Hồi tháp đã đóng!" — tháp
+        // đóng vì hết giờ: cũng là hết 1 lượt, tính thua rồi gõ lại
+        // !luanhoi. Cần CẢ 2 cụm (hết giờ + tháp đã đóng) để không nhận
+        // nhầm tin "Hết thời gian ở tầng N" của Bicanh hay "hết giờ" lẻ.
+        const isTimeoutEnd = /hết giờ|het gio/.test(text) && /luân hồi tháp đã đóng|luan hoi thap da dong/.test(text);
         const isWinText = /chiến thắng|thắng!/.test(text);
-        if (isTowerEnd && !isWinText) {
+        if ((isTowerEnd || isTimeoutEnd) && !isWinText) {
           return { type: 'end', result: 'loss', rewardText: rawText };
         }
       }
@@ -3571,7 +3622,8 @@ class NpcBot {
           if (!okOwn(msg, rawText)) continue;
           const text = rawText.toLowerCase();
           const hasWin = /chiến thắng|thắng!/.test(text);
-          const hasLoss = /thất bại|bạn đã thua|thua!|ngã xuống luân hồi tháp|nga xuong luan hoi thap|kết thúc luân hồi|ket thuc luan hoi/.test(text);
+          const hasLoss = /thất bại|bạn đã thua|thua!|ngã xuống luân hồi tháp|nga xuong luan hoi thap|kết thúc luân hồi|ket thuc luan hoi/.test(text) ||
+            (/hết giờ|het gio/.test(text) && /luân hồi tháp đã đóng|luan hoi thap da dong/.test(text)); // V97: Hết Giờ đóng tháp
           const btns = msg.querySelectorAll('button, [role="button"]');
           let hasBuff = false;
           for (const b of btns) {
