@@ -5965,6 +5965,23 @@ class NpcBot {
     return (n === 11 || n === 23 || n === 35) && this.vanduLastBuffNode === n;
   }
 
+  // V96 (nối commit fix vandu bbd3bcb): nhận diện bảng THUA trận để vòng
+  // battle không ghi nhầm thành CHIẾN THẮNG. Mẫu thật (walkthrough
+  // 2026-11-04 bước 22, thua boss 12): "[Thiên Sơn Tuyết Lãnh] Trùng
+  // Chinh Đạo Tâm — Rơi Về Chặng 7", "Đạo hữu vừa bị sóng cấm chế chấn
+  // thương đánh bật lùi về Tiết Điểm 7! May nhờ Đạo Tâm Mệnh Hồn che
+  // chở...". Bảng cuối (hết Đạo Tâm): "Tử Trận Trước [Hư Ảo] Thiết Mao
+  // Hắc Lang → Hết sinh mệnh đạo tâm, thất bại tại Tiết Điểm 12/36!".
+  // Chỉ khớp các cụm đặc hiệu này — KHÔNG khớp "thất bại" trơ (còn xuất
+  // hiện ở bảng bẫy Phá Phong Ấn, không phải thua trận). Bảng qua ải
+  // ("Tiếp Tục Hành Trình" sau giải đố đúng, walkthrough bước 26) không
+  // có các cụm này nên không bị nhận nhầm — code cũ đã dặn phân biệt
+  // theo nội dung bảng, không chỉ theo nhãn nút.
+  vanduIsDefeatScreen(norm) {
+    const t = String(norm || '');
+    return /roi ve chang|lui ve tiet diem|dao tam menh hon|tu tran truoc|het sinh menh dao tam|that bai tai tiet diem/.test(t);
+  }
+
   // V80: Tóm tắt thông tin buff hiện có kèm số lượng click và tông
   vanduFormatBuffSummary() {
     const owned = this.vanduOwnedBuffs || {};
@@ -6704,6 +6721,11 @@ class NpcBot {
       if (Date.now() - startedAt > this.battleTimeoutMs) {
         battleEndedReason = 'timeout';
         this.vanduLog('⚠️ Vân Du: trận quá lâu, quay lại vòng quét chính');
+        // V96: timeout cũng là 1 kết cục cần nghiên cứu (đánh boss 24 mãi
+        // không chết thì cũng như thua) — ghi tổng kết kèm buff như defeat.
+        const myHpDesc = lastPlayerHp !== null ? `${lastPlayerHp}%` : '?';
+        const enemyHpDesc = lastEnemyHpPct !== null ? `${lastEnemyHpPct}%` : '?';
+        this.vanduLog(`⏱️ Vân Du: trận với ${enemyName || 'Quái'} ở Tiết ${this.vanduNode || '?'} QUÁ LÂU (timeout sau ${Math.round((Date.now() - startedAt) / 1000)}s, đã đánh ${roundCount} hiệp) — chưa phân thắng bại (Tôi: ${myHpDesc} | Quái còn: ${enemyHpDesc}) | Buff: ${this.vanduFormatBuffSummary()}`);
         return;
       }
       await this.dismissEphemeralMessages();
@@ -6712,6 +6734,14 @@ class NpcBot {
       const norm = this.vanduNormalize(screen.text);
       const btnNorm = screen.buttons.map(b => this.vanduNormalize(b));
       if (btnNorm.some(b => b.includes('tro ve giang ho'))) {
+        battleEndedReason = 'defeat';
+        break;
+      }
+      // V96: thua trận còn Đạo Tâm thì game hiện bảng "Rơi Về Chặng"
+      // (không còn màn battle) — trước đây rơi xuống nhánh victory bên
+      // dưới và log nhầm CHIẾN THẮNG, sai đúng dữ liệu cần nghiên cứu
+      // (thua boss 24 mà log thắng thì không biết buff nào thua).
+      if (this.vanduIsDefeatScreen(norm)) {
         battleEndedReason = 'defeat';
         break;
       }
@@ -6840,10 +6870,12 @@ class NpcBot {
     if (battleEndedReason === 'defeat') {
       const myHpDesc = lastPlayerHp !== null ? `${lastPlayerHp}%` : '0%';
       const enemyHpDesc = lastEnemyHpPct !== null ? `${lastEnemyHpPct}%` : '?';
-      this.vanduLog(`💀 Vân Du: THẤT BẠI trước ${enemyName || 'Quái'} ở Tiết ${this.vanduNode || '?'}! (Tôi: ${myHpDesc} | Quái còn: ${enemyHpDesc}) | Đã click: ${this.vanduBuffClicks || 0} buff | Danh sách buff: ${this.vanduFormatBuffSummary()}`);
+      this.vanduLog(`💀 Vân Du: THẤT BẠI trước ${enemyName || 'Quái'} ở Tiết ${this.vanduNode || '?'}! (Tôi: ${myHpDesc} | Quái còn: ${enemyHpDesc} | Hiệp: ${roundCount}) | Đã click: ${this.vanduBuffClicks || 0} buff | Danh sách buff: ${this.vanduFormatBuffSummary()}`);
     } else if (battleEndedReason === 'victory') {
       const myHpDesc = lastPlayerHp !== null ? `${lastPlayerHp}%` : '?';
-      this.vanduLog(`🏆 Vân Du: CHIẾN THẮNG ${enemyName || 'Quái'} (Tiết ${this.vanduNode || '?'})! (Tôi còn: ${myHpDesc} HP | Đan: ${this.vanduDanCount}/3)`);
+      // V96: thắng mà không ghi buff thì không biết bộ buff nào thắng
+      // boss — ghi kèm như dòng defeat để so được thắng/thua theo buff.
+      this.vanduLog(`🏆 Vân Du: CHIẾN THẮNG ${enemyName || 'Quái'} (Tiết ${this.vanduNode || '?'})! (Tôi còn: ${myHpDesc} HP | Đan: ${this.vanduDanCount}/3 | Hiệp: ${roundCount}) | Buff: ${this.vanduFormatBuffSummary()}`);
     }
   }
 
@@ -7518,6 +7550,11 @@ class NpcBot {
               continue;
             }
             rerolls++;
+            // V96: bảng sau Đổi Vận là bảng mới — log lại lựa chọn mới để
+            // biết Đổi có ra lá tốt hơn không (không reset thì boardLogged
+            // còn true, bảng mới không được log; nếu game chậm chưa đổi
+            // bảng thì chỉ log trùng 1 dòng, không hại).
+            boardLogged = false;
             if (remaining !== null) this.vanduLog(`🔄 Vân Du: Đổi Vận (bảng báo còn ${remaining} lượt trước khi bấm)`);
             else this.vanduLog(`🔄 Vân Du: Đổi Vận lần ${rerolls} (không đọc được số lượt, tối đa 4)`);
             await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
