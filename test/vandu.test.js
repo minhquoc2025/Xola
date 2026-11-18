@@ -569,17 +569,27 @@ bot.vanduNode = 5;
 eq(bot.vanduChooseBuff(['[Ma] M [Ma Tông - Lam]', '[Thuật] T [Thuật Tông - Vàng (Thần Thoại)]'], { Thuật: 5 }, {}, false, 'Ma').buttonText, '[Ma] M [Ma Tông - Lam]', 'V49: Tiet 5 nhung Thuat da du 5 -> counter thang');
 console.log('ALL VANDU TESTS PASSED (V49)');
 
-// V50 (anh 2026-11-06): tui 12 buff theo quai — 6 khac che + 5 Thuat + 1 Van vang;
-// rieng Cuong The (khac che Thuật) thi 6 Thuật + 5 Khí + 1 Vận vang.
+// V99 (anh 2026-11-18): Đại Lĩnh Vực tối đa 5 thẻ (3 Trung, 5 Đại, > 5 không thêm quyền lợi).
+// Khóa cứng trần 5 thẻ mỗi tông để không lãng phí slot các tông khác.
+// Giai đoạn 1 (1-12): 5 Thuật để qua ải 12.
+// Giai đoạn 2 (13-24+): 5 Khí để thủ qua Boss 24 & 36 + dồn sao cho thẻ đã có.
 bot.vanduNode = 15;
-eq(bot.vanduChooseBuff(['[Ma] M [Ma Tông - Lam]', '[Kiếm] K [Kiếm Tông - Lam]'], {}, {}, false, 'Ma', null, 5).reason, 'counter', 'V50: khac che Ma, da chon 5 van lay la thu 6');
-eq(bot.vanduChooseBuff(['[Khí] K [Khí Tông - Lam]', '[Thuật] T [Thuật Tông - Vàng (Thần Thoại)]'], {}, {}, false, 'Khí', null, 5).reason, 'counter', 'V50: Cuong Bao, Tiet 15, la Khi thu 6 thang Thuat Vang');
+eq(bot.vanduChooseBuff(['[Ma] M [Ma Tông - Lam]', '[Kiếm] K [Kiếm Tông - Lam]'], {}, {}, false, 'Ma', null, 5).reason, 'remaining', 'V99: khac che Ma da du 5 -> khoa tran 5 khong lay la thu 6, roi ve remaining');
+eq(bot.vanduChooseBuff(['[Khí] K [Khí Tông - Lam]', '[Thuật] T [Thuật Tông - Vàng (Thần Thoại)]'], {}, {}, false, 'Khí', null, 5).reason, 'thuat', 'V99: Khi da du 5, khong lay Khi thu 6 ma lay Thuat Vang');
 bot.vanduNode = 5;
-eq(bot.vanduChooseBuff(['[Thuật] T [Thuật Tông - Lam]', '[Khí] K [Khí Tông - Lam]'], { Thuật: 5 }, {}, false, 'Thuật', null, 0).reason, 'thuat', 'V50: Cuong The, da co 5 Thuat van lay la thu 6');
-eq(bot.vanduChooseBuff(['[Thuật] T [Thuật Tông - Lam]', '[Khí] K [Khí Tông - Lam]'], { Thuật: 6 }, {}, false, 'Thuật', null, 0).reason, 'khi', 'V50: Cuong The, Thuat du 6 -> lay Khi (nhom 5 phu)');
+eq(bot.vanduChooseBuff(['[Thuật] T [Thuật Tông - Lam]', '[Khí] K [Khí Tông - Lam]'], { Thuật: 5 }, {}, false, 'Thuật', null, 0).reason, 'khi', 'V99: Cuong The, da co 5 Thuat -> khoa tran 5, lay Khi nhom phu');
+eq(bot.vanduChooseBuff(['[Thuật] T [Thuật Tông - Lam]', '[Khí] K [Khí Tông - Lam]'], { Thuật: 6 }, {}, false, 'Thuật', null, 0).reason, 'khi', 'V99: Cuong The, Thuat du -> lay Khi (nhom phu)');
 bot.vanduNode = 15;
-eq(bot.vanduChooseBuff(['[Thuật] T [Thuật Tông - Vàng (Thần Thoại)]', '[Khí] K [Khí Tông - Lam]'], {}, {}, false, 'Thuật', null, 0).reason, 'counter', 'V50: Cuong The, Tiet 15, khac che (Thuat) van truoc');
-console.log('ALL VANDU TESTS PASSED (V50)');
+eq(bot.vanduChooseBuff(['[Thuật] T [Thuật Tông - Vàng (Thần Thoại)]', '[Khí] K [Khí Tông - Lam]'], {}, {}, false, 'Thuật', null, 0).reason, 'counter', 'V99: Cuong The, Tiet 15, khac che (Thuat) van truoc');
+
+// V99: Test so khớp canonicalKey khi nâng cấp thẻ T2/T3
+const ownedCards = { 'Thái Ất Thần L': 1, 'Tam Muội Chân': 2 };
+eq(bot.vanduCanonicalBuffKey('⬆️T2 👑 ★★ Thái Ất Thần Lô', ownedCards), 'Thái Ất Thần L', 'V99: T2 Thái Ất Thần Lô khớp Thái Ất Thần L');
+eq(bot.vanduCanonicalBuffKey('⬆️T3 🔥 ★★★ Tam Muội Chân H', ownedCards), 'Tam Muội Chân', 'V99: T3 Tam Muội Chân H khớp Tam Muội Chân');
+eq(bot.vanduNextDomainThreshold(2), 3, 'V99: threshold 2 -> 3');
+eq(bot.vanduNextDomainThreshold(4), 5, 'V99: threshold 4 -> 5');
+eq(bot.vanduNextDomainThreshold(5), null, 'V99: threshold 5 -> null (max Dai Linh Vuc)');
+console.log('ALL VANDU TESTS PASSED (V99)');
 
 // V51 (anh 2026-11-09, bang Tiet 19/36 Ky Ngo Huyet Phong Luc To Su):
 eq(bot.vanduKyNgoCongratulateButton('tiet diem 19 36 ky ngo huyet phong luc to su', ['hy chuc', 'khieu chien', 'tu choi']), 'Hỷ chúc', 'V51: bang Huyet Phong Ky Ngo -> Hy chuc');

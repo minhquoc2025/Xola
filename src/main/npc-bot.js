@@ -5660,7 +5660,7 @@ class NpcBot {
   }
 
   vanduNextDomainThreshold(count) {
-    const thresholds = [3, 5, 8];
+    const thresholds = [3, 5];
     for (const t of thresholds) {
       if (count < t) return t;
     }
@@ -5742,16 +5742,39 @@ class NpcBot {
   // bị cắt ngắn ("Huyết Tế Đoạt M" so với "Huyết Tế Đoạt Mệnh"). Bỏ
   // emoji/ký hiệu và tiền tố T2 rồi gộp khoảng trắng, để 2 dạng cùng
   // về 1 khóa. Tên thường không có các dấu này nên không đổi.
+  // V99 (anh 2026-11-18): chuẩn hóa tiền tố T\d+ (T2, T3, T4, T5), bỏ
+  // dấu ngoặc tông và tên tông đầu để so khớp chính xác với thẻ nâng cấp.
   vanduNormalizeBuffName(raw) {
-    // Thứ tự quan trọng: emoji/ký hiệu thành khoảng trắng trước, gộp
-    // khoảng trắng rồi mới cắt tiền tố T2 ở đầu (không gộp trước thì
-    // "⬆️T2 ..." thành "  T2 ..." và ^T2 không khớp).
     return String(raw || '')
+      .replace(/\[[^\]]*\]/g, ' ')
+      .replace(/\([^)]*\)/g, ' ')
+      .replace(/^(?:Kiếm|Khí|Thuật|Ma|Vận)\s*Tông/i, ' ')
       .replace(/[^\p{L}\p{N}\s]/gu, ' ')
       .replace(/\s+/g, ' ')
       .trim()
-      .replace(/^T2\s+/i, '')
+      .replace(/^T\d+\s+/i, '')
       .trim();
+  }
+
+  // V99 (anh 2026-11-18): tìm khóa chuẩn đã có trong sổ vanduOwnedBuffs
+  // theo so khớp tiền tố, tránh việc nút nâng cấp T2/T3 bị cắt ngắn khác
+  // với nút gốc làm sinh ra 2 khóa khác nhau cho cùng 1 thẻ buff (star splitting).
+  vanduCanonicalBuffKey(rawName, ownedBuffs) {
+    const norm = this.vanduNormalizeBuffName(rawName);
+    if (!norm) return '';
+    const owned = ownedBuffs || {};
+    if (owned[norm] !== undefined) return norm;
+    const flat = norm.replace(/\s+/g, '');
+    let best = null;
+    for (const k of Object.keys(owned)) {
+      const kf = k.replace(/\s+/g, '');
+      const shorter = flat.length <= kf.length ? flat : kf;
+      if (shorter.length < 5) continue;
+      if (flat.startsWith(kf) || kf.startsWith(flat)) {
+        if (!best || k.length > best.length) best = k;
+      }
+    }
+    return best || norm;
   }
 
   // V27: tông của thẻ theo mô tả bảng, theo đúng thứ tự nút (như
@@ -5826,26 +5849,31 @@ class NpcBot {
     const fresh = parsed.filter(isNew);
     const buckets = [];
     const counterPicksSoFar = Number(counterPicks) || 0;
-    // V50 (anh 2026-11-06): túi 12 buff theo quái đang đánh — 6 khắc chế
-    // + 5 Thuật + 1 Vận vàng; riêng quái Cương Thể (khắc chế là Thuật)
-    // thì 6 Thuật + 5 Khí + 1 Vận vàng. (Trước đây: 5 khắc chế + 5 Thuật
-    // + 1 Vận vàng + 1 Khí vàng.) Vận vẫn chỉ lấy vàng; Khí 5 lấy mọi độ
-    // hiếm (vàng trước). Chưa đọc được quái thì giữ túi cũ (Thuật 5,
-    // Vận 1 vàng, Khí 1 vàng) làm dự phòng.
-    // Rổ khắc chế chặn thêm theo số tông đã có, để khi khắc chế là Thuật
-    // (rổ Thuật cũng nhắm Thuật) thì đủ 6 Thuật là cả hai rổ cùng đóng,
-    // không bấm thêm lá Thuật thứ 7.
-    const thuatQuota = counterSect === 'Thuật' ? 6 : 5;
+    // V99 (anh 2026-11-18): Đại Lĩnh Vực tối đa 5 thẻ (3 Trung, 5 Đại, > 5 không thêm quyền lợi).
+    // Khóa cứng trần 5 thẻ mỗi tông để không lãng phí slot các tông khác.
+    // Giai đoạn 1 (1-12): 5 Thuật để qua ải 12.
+    // Giai đoạn 2 (13-24+): 5 Khí để thủ qua Boss 24 & 36 + dồn sao cho thẻ đã có.
+    const node = Number(this.vanduNode) || 0;
+    const isStage2 = node > 12;
+
     const pushCounter = () => {
-      if (counterSect && counterPicksSoFar < 6 && (counts[counterSect] || 0) < 6) {
+      if (counterSect && counterPicksSoFar < 5 && (counts[counterSect] || 0) < 5) {
         const b = bestOf(fresh.filter(c => c.sect === counterSect));
         if (b) buckets.push(['counter', b]);
       }
     };
     const pushThuat = () => {
-      if ((counts['Thuật'] || 0) < thuatQuota) {
+      if ((counts['Thuật'] || 0) < 5) {
         const b = bestOf(fresh.filter(c => c.sect === 'Thuật'));
         if (b) buckets.push(['thuat', b]);
+      }
+    };
+    const pushKhi = () => {
+      const khiQuota = (isStage2 || counterSect === 'Thuật' || counterSect === 'Khí') ? 5 : (counterSect ? 0 : 1);
+      if (khiQuota > 0 && (counts['Khí'] || 0) < khiQuota) {
+        const goldOnly = khiQuota === 1;
+        const b = bestOf(fresh.filter(c => c.sect === 'Khí' && (!goldOnly || c.rarity === 4)));
+        if (b) buckets.push(['khi', b]);
       }
     };
     const pushVan = () => {
@@ -5854,41 +5882,30 @@ class NpcBot {
         if (b) buckets.push(['van', b]);
       }
     };
-    const pushKhi = () => {
-      // Khắc chế là Thuật: Khí là nhóm 5 phụ, lấy mọi độ hiếm. Chưa đọc
-      // được quái: Khí 1 vàng như túi cũ. Các quái khác không lấy Khí.
-      const khiQuota = counterSect === 'Thuật' ? 5 : (counterSect ? 0 : 1);
-      if (khiQuota > 0 && (counts['Khí'] || 0) < khiQuota) {
-        const goldOnly = khiQuota === 1;
-        const b = bestOf(fresh.filter(c => c.sect === 'Khí' && (!goldOnly || c.rarity === 4)));
-        if (b) buckets.push(['khi', b]);
-      }
-    };
-    // V49 (anh 2026-11-06): từ Tiết 1 đến 12 ưu tiên chọn 5 buff Thuật
-    // trước — rổ Thuật xếp trên rổ khắc chế. Từ Tiết 13 trở đi (hoặc chưa
-    // đọc được Tiết) giữ thứ tự cũ: khắc chế > Thuật > Vận > Khí. Tiết
-    // đọc từ màn (vanduNode, cập nhật mỗi lần quét); đủ 5 Thuật rồi thì
-    // rổ Thuật tự hết, khắc chế lên đầu như thường.
-    const thuatFirst = this.vanduNode >= 1 && this.vanduNode <= 12;
-    if (thuatFirst) { pushThuat(); pushCounter(); } else { pushCounter(); pushThuat(); }
+
+    const thuatFirst = (node >= 1 && node <= 12) || (node === 0 && !counterSect);
+    if (thuatFirst) {
+      pushThuat();
+      pushCounter();
+    } else {
+      pushCounter();
+      pushThuat();
+    }
     pushVan();
     pushKhi();
-    // Thứ tự rổ (mặc định): khắc chế > Thuật > Vận > Khí; Tiết 1–12 thì
-    // Thuật > khắc chế (v49). Đây là thứ tự ưu tiên khi chọn, KHÔNG phải
-    // thứ tự trong danh sách túi cứng của anh. Khắc chế thắng vàng khác
-    // tông (mẫu tiết 6: Ma Tím thắng Khí Vàng), và trong mỗi rổ thì vàng
-    // > tím > lam > lục (anh dặn "bất kể tông nào"). V50: Khí chỉ còn là
-    // rổ khi khắc chế là Thuật (nhóm 5 phụ) hoặc chưa đọc được quái.
-    // V14: độ hiếm 0 = không đọc được thì KHÔNG coi là thấp.
-    const hasGood = buckets.some(([, c]) => c.rarity >= 3 || c.rarity === 0);
+
     const dup = bestOf(parsed.filter(isUpgradable));
+
+    // Ở Tiết 13 trở đi, NÂNG SAO (dup) là ưu tiên hàng đầu nếu không có Vàng Thần Thoại trong rổ chỉ tiêu
+    if (isStage2 && dup) {
+      const hasGoldInBucket = buckets.some(([, c]) => c.rarity === 4);
+      if (!hasGoldInBucket) {
+        return pick('duplicate', dup);
+      }
+    }
+
+    const hasGood = buckets.some(([, c]) => c.rarity >= 3 || c.rarity === 0);
     if (buckets.length > 0 && hasGood) {
-      // V26 (anh chốt 2026-11-05): buff cũ nâng sao thắng buff mới lam/
-      // lục. Trước đây chỉ cần 1 rổ có vàng/tím là bot lấy luôn rổ đầu,
-      // kể cả khi rổ đầu là buff mới lam/lục — bỏ qua buff cũ nâng được.
-      // Giờ nếu lượt chọn đầu rổ là mới lam/lục đã biết độ hiếm (1-2) mà
-      // có buff cũ nâng được thì lấy buff cũ trước; rổ đầu vàng/tím/
-      // không rõ độ hiếm thì vẫn lấy như cũ (buff mới tốt thắng buff cũ).
       const first = buckets[0][1];
       if ((first.rarity === 1 || first.rarity === 2) && dup) return pick('duplicate', dup);
       return pick(buckets[0][0], buckets[0][1]);
@@ -7706,7 +7723,10 @@ class NpcBot {
             // V27: khóa túi theo tên đã chuẩn hoá (xem
             // vanduNormalizeBuffName) để lần sau nhận ra trùng dù nút
             // đổi tiền tố T2/emoji hay bị cắt ngắn.
-            const ownedKey = this.vanduNormalizeBuffName(card.name);
+            // V99 (anh 2026-11-18): tìm khóa chuẩn bằng vanduCanonicalBuffKey
+            // để nhận đúng thẻ trùng khi nâng sao T2/T3, tránh bug tách thẻ
+            // làm phình túi và cộng sai số lượng thẻ từng tông.
+            const ownedKey = this.vanduCanonicalBuffKey(card.name, this.vanduOwnedBuffs);
             const prevOwned = (ownedKey && this.vanduOwnedBuffs[ownedKey]) || 0;
             const isNewBuff = !prevOwned;
             if (ownedKey) this.vanduOwnedBuffs[ownedKey] = prevOwned + 1;
