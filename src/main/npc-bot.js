@@ -5904,6 +5904,12 @@ class NpcBot {
       }
     }
 
+    // Riêng thẻ Thuật (chưa đủ 5 buff): không quan trọng tím hoặc vàng, lấy luôn
+    // để đẩy nhanh tỉ lệ nhận Đại Lĩnh Vực chuẩn bị cho Boss 12.
+    if (buckets.length > 0 && buckets[0][0] === 'thuat') {
+      return pick('thuat', buckets[0][1]);
+    }
+
     const hasGood = buckets.some(([, c]) => c.rarity >= 3 || c.rarity === 0);
     if (buckets.length > 0 && hasGood) {
       const first = buckets[0][1];
