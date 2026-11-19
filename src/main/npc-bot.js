@@ -5870,17 +5870,57 @@ class NpcBot {
     const byRarity = (a, b) => (b.rarity - a.rarity) || (countOf(b) - countOf(a));
     const pick = (bucket, card) => ({ action: 'pick', buttonText: card.raw, reason: bucket });
     const bestOf = list => (list.length > 0 ? [...list].sort(byRarity)[0] : null);
+
+    // V103 (Gợi ý 3): Ưu tiên nâng sao cho thẻ Chủ Lực (Core Buff) theo dữ liệu 9 lượt thực chiến:
+    // 1. Nhóm sát thương dứt điểm: Tam Muội Chân Hỏa, Dẫn Lôi Thuật, Cửu Thiên Lôi Kiếp, Tuyệt Mệnh Trảm, Nhất Kiếm Trảm.
+    // 2. Nhóm sinh tồn / phòng ngự / all-stat: Càn Khôn Hộ Thể, Kim Cang Bất Hoại, Kinh Thiên Phản, Đại Đạo Đồng Quy, Phản Chấn Cương.
+    const isCoreBuff = c => {
+      if (!c || !c.name) return false;
+      const n = this.vanduNormalizeBuffName(c.name).toLowerCase();
+      if (n.includes('tam muoi chan') || n.includes('dan loi thuat') || n.includes('cuu thien loi') ||
+          n.includes('tuyet menh tram') || n.includes('nhat kiem tram')) {
+        return true;
+      }
+      if (n.includes('can khon ho the') || n.includes('kim cang bat hoai') || n.includes('kinh thien phan') ||
+          n.includes('dai dao dong quy') || n.includes('phan chan cuong')) {
+        return true;
+      }
+      return false;
+    };
+
+    const dupPriority = c => {
+      let score = 0;
+      if (isCoreBuff(c)) score += 100;
+      if (c.sect === 'Vận') score += 30; // Đại Đạo Đồng Quy (Vận Mệnh)
+      else if (c.sect === 'Thuật') score += 20; // Thuật tông (hệ sát thương chính)
+      else if (c.sect === 'Khí') score += 15; // Khí tông (hệ phòng ngự chính)
+      score += (c.rarity || 0) * 2;
+      score += (ownedCount(c.name) || 0) * 3; // Ưu tiên dồn sao lên ★4, ★5
+      return score;
+    };
+
+    const byDupPriority = (a, b) => {
+      const sa = dupPriority(a);
+      const sb = dupPriority(b);
+      if (sa !== sb) return sb - sa;
+      return byRarity(a, b);
+    };
+
+    const bestDupOf = list => (list.length > 0 ? [...list].sort(byDupPriority)[0] : null);
+
     // Các rổ chỉ tiêu tính trên buff MỚI (trùng không tăng số tông, không
     // tính vào chỉ tiêu). Vận/Khí chỉ tính khi là vàng, đúng anh dặn.
     const fresh = parsed.filter(isNew);
     const buckets = [];
     const counterPicksSoFar = Number(counterPicks) || 0;
-    // V99 (anh 2026-11-18): Đại Lĩnh Vực tối đa 5 thẻ (3 Trung, 5 Đại, > 5 không thêm quyền lợi).
+    // V99 & V103: Đại Lĩnh Vực tối đa 5 thẻ (3 Trung, 5 Đại, > 5 không thêm quyền lợi).
     // Khóa cứng trần 5 thẻ mỗi tông để không lãng phí slot các tông khác.
     // Giai đoạn 1 (1-12): 5 Thuật để qua ải 12.
-    // Giai đoạn 2 (13-24+): 5 Khí để thủ qua Boss 24 & 36 + dồn sao cho thẻ đã có.
+    // Giai đoạn 2 (13-24+ hoặc khi ĐÃ ĐỦ 5 THUẬT ngay trong 1-12): 5 Khí để thủ qua Boss 24 & 36 + dồn sao cho thẻ đã có.
     const node = Number(this.vanduNode) || 0;
-    const isStage2 = node > 12;
+    const thuatCount = counts['Thuật'] || 0;
+    const hasThuatDomain = thuatCount >= 5;
+    const isStage2 = node > 12 || hasThuatDomain;
 
     const pushCounter = () => {
       if (counterSect && counterPicksSoFar < 5 && (counts[counterSect] || 0) < 5) {
@@ -5896,7 +5936,8 @@ class NpcBot {
     };
     const pushKhi = () => {
       const khiQuota = (isStage2 || counterSect === 'Thuật' || counterSect === 'Khí') ? 5 : (counterSect ? 0 : 1);
-      if (khiQuota > 0 && (counts['Khí'] || 0) < khiQuota) {
+      const curKhi = Math.max(counts['Khí'] || 0, counterSect === 'Khí' ? counterPicksSoFar : 0);
+      if (khiQuota > 0 && curKhi < khiQuota) {
         const goldOnly = khiQuota === 1;
         const b = bestOf(fresh.filter(c => c.sect === 'Khí' && (!goldOnly || c.rarity === 4)));
         if (b) buckets.push(['khi', b]);
@@ -5909,20 +5950,32 @@ class NpcBot {
       }
     };
 
-    const thuatFirst = (node >= 1 && node <= 12) || (node === 0 && !counterSect);
+    const thuatFirst = (node >= 1 && node <= 12 && !hasThuatDomain) || (node === 0 && !counterSect);
     if (thuatFirst) {
       pushThuat();
       pushCounter();
+      pushVan();
+      pushKhi();
+    } else if (isStage2) {
+      pushVan();
+      if (counterSect === 'Khí' || counterSect === 'Thuật') {
+        pushCounter();
+        pushKhi();
+      } else {
+        pushKhi();
+        pushCounter();
+      }
+      pushThuat();
     } else {
       pushCounter();
       pushThuat();
+      pushVan();
+      pushKhi();
     }
-    pushVan();
-    pushKhi();
 
-    const dup = bestOf(parsed.filter(isUpgradable));
+    const dup = bestDupOf(parsed.filter(isUpgradable));
 
-    // Ở Tiết 13 trở đi, NÂNG SAO (dup) là ưu tiên hàng đầu nếu không có Vàng Thần Thoại trong rổ chỉ tiêu
+    // Ở Tiết 13 trở đi (hoặc khi đã đủ 5 Thuật), NÂNG SAO (dup) là ưu tiên hàng đầu nếu không có Vàng Thần Thoại trong rổ chỉ tiêu
     if (isStage2 && dup) {
       const hasGoldInBucket = buckets.some(([, c]) => c.rarity === 4);
       if (!hasGoldInBucket) {
@@ -5934,6 +5987,17 @@ class NpcBot {
     // để đẩy nhanh tỉ lệ nhận Đại Lĩnh Vực chuẩn bị cho Boss 12.
     if (buckets.length > 0 && buckets[0][0] === 'thuat') {
       return pick('thuat', buckets[0][1]);
+    }
+
+    // V103 (Gợi ý 1): Ở Tầng 1–12 khi chưa đủ 5 Thuật, nếu bảng không có Thuật mới:
+    // - Nếu có thẻ trùng (dup) -> lấy dup để nâng sao ("Nếu có dup thì vẫn ăn dup")
+    // - Nếu có Vận Vàng (Đại Đạo Đồng Quy) -> lấy Vận Vàng
+    // - Nếu còn lượt Đổi Vận (allowReroll) -> Đổi để săn Thuật, KHÔNG lấy Counter tông khác (như Kiếm/Ma) làm loãng túi
+    if (node >= 1 && node <= 12 && !hasThuatDomain) {
+      if (dup) return pick('duplicate', dup);
+      const vanGold = buckets.find(([k, c]) => k === 'van' && c.rarity === 4);
+      if (vanGold) return pick('van', vanGold[1]);
+      if (allowReroll) return { action: 'reroll' };
     }
 
     const hasGood = buckets.some(([, c]) => c.rarity >= 3 || c.rarity === 0);

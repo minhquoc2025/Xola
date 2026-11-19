@@ -240,7 +240,8 @@ eq(botV17.vanduChooseBuff(['[Thuật] T [Thuật Tông - Vàng (Thần Thoại)]
 eq(botV17.vanduChooseBuff(['[Thuật] T [Thuật Tông - Vàng (Thần Thoại)]', '[Kiếm] K [Kiếm Tông - Lam]'], { Thuật: 0 }, {}, true, 'Ma').reason, 'thuat', 'V17: ly do la thuat');
 eq(botV17.vanduChooseBuff(['[Vận] V [Vận Mệnh - Vàng (Thần Thoại)]', '[Kiếm] K [Kiếm Tông - Lam]'], { Thuật: 5, Vận: 0, Khí: 1 }, {}, true, 'Ma', null, 5).buttonText, '[Vận] V [Vận Mệnh - Vàng (Thần Thoại)]', 'V17: chi con Van thieu -> lay Van Vang');
 eq(botV17.vanduChooseBuff(['[Vận] V [Vận Mệnh - Vàng (Thần Thoại)]', '[Kiếm] K [Kiếm Tông - Lam]'], { Thuật: 5, Vận: 0, Khí: 1 }, {}, true, 'Ma', null, 5).reason, 'van', 'V17: ly do la van');
-eq(botV17.vanduChooseBuff(['[Khí] K [Khí Tông - Vàng (Thần Thoại)]', '[Kiếm] Y [Kiếm Tông - Lam]'], { Thuật: 5, Vận: 1, Khí: 0 }, {}, true, 'Ma', null, 5), { action: 'reroll' }, 'V50: khac che Ma, Thuat/Van du, Khi khong con trong tui -> doi tim Ma');
+// V103 (thay V50): Khi đã đủ 5 Thuật, kích hoạt Stage 2 gom 5 Khí -> gặp Khí Vàng thì lấy, không đổi bỏ
+eq(botV17.vanduChooseBuff(['[Khí] K [Khí Tông - Vàng (Thần Thoại)]', '[Kiếm] Y [Kiếm Tông - Lam]'], { Thuật: 5, Vận: 1, Khí: 0 }, {}, true, 'Ma', null, 5).reason, 'khi', 'V103: Thuat du 5 -> kich hoat Stage 2 lay Khi Vang');
 eq(botV17.vanduChooseBuff(['[Ma] M [Ma Tông - Lam]', '[Thuật] T [Thuật Tông - Lam]'], { Thuật: 0 }, {}, true, 'Ma'), { action: 'reroll' }, 'V17: chi tieu toan lam -> doi');
 eq(botV17.vanduChooseBuff(['[Ma] M [Ma Tông - Lam]', '[Thuật] T [Thuật Tông - Lam]'], { Thuật: 0 }, {}, false, 'Ma').buttonText, '[Ma] M [Ma Tông - Lam]', 'V17: het luot doi -> chon Ma Lam (khac che truoc)');
 eq(botV17.vanduChooseBuff(['[Ma] Ma Tôn [Ma Tông - Vàng (Thần Thoại)]', '[Kiếm] K [Kiếm Tông - Lam]'], { Thuật: 5, Vận: 1, Khí: 1, Ma: 1 }, { 'Ma Tôn': 2 }, true, 'Ma', null, 5).buttonText, '[Ma] Ma Tôn [Ma Tông - Vàng (Thần Thoại)]', 'V17: chi tieu du -> lay trung nang sao');
@@ -688,3 +689,86 @@ eq(pickTrap.doorBtn !== 'Cửa Ly', true, 'V102: cua chon phai KHAC Cua Ly de mo
 const pickUnknown = botV102.vanduChoosePuzzleDoor('Không có thơ', puzzleButtons, true);
 eq(pickUnknown.action, 'random', 'V102: khong doan duoc tho -> action random');
 console.log('ALL VANDU TESTS PASSED (V102)');
+
+// V103 (2026-11-19): Tối ưu logic chọn buff theo gợi ý 1, 2, 3 từ dữ liệu thực chiến 9 lượt:
+// Gợi ý 1: Ở Tầng 1–12 khi Thuật < 5: nếu bảng không có Thuật mới -> ưu tiên Reroll để săn Thuật, không nhặt Counter tông khác làm loãng túi. Nếu có dup thì vẫn ăn dup.
+// Gợi ý 2: Khi đã đủ 5 Thuật (kể cả trong tầng 1–12 hay 13+) -> kích hoạt sớm Stage 2 gom 5 Khí và ưu tiên dup.
+// Gợi ý 3: Tối ưu trọng số nâng sao (dup) cho nhóm thẻ Chủ Lực (Tam Muội Chân, Dẫn Lôi, Cửu Thiên, Càn Khôn, Kim Cang, Đại Đạo Đồng Quy...).
+const botV103 = new NpcBot({ executeJavaScript() {} }, 1);
+botV103.vanduNode = 5; // Tầng 5
+
+// --- Test Gợi ý 1 ---
+// 1.1: Tầng 5, Thuật = 2 (chưa đủ 5). Bảng có Kiếm Vàng (counter), không có Thuật, còn lượt đổi -> PHẢI REROLL để săn Thuật
+const g1Reroll = botV103.vanduChooseBuff(
+  ['[Kiếm] Vạn Kiếm Quy Tông [Kiếm Tông - Vàng (Thần Thoại)]', '[Ma] Huyết Tế [Ma Tông - Lam]'],
+  { Thuật: 2 },
+  {},
+  true,
+  'Kiếm'
+);
+eq(g1Reroll, { action: 'reroll' }, 'V103 (Gợi ý 1): Tang 5, Thuat < 5, bang co Kiem Vang khac che -> doi van de san Thuat, khong nhat Kiem');
+
+// 1.2: Tầng 5, Thuật = 2. Hết lượt đổi -> nhặt Kiếm Vàng dự phòng, không đứng im
+const g1Fallback = botV103.vanduChooseBuff(
+  ['[Kiếm] Vạn Kiếm Quy Tông [Kiếm Tông - Vàng (Thần Thoại)]', '[Ma] Huyết Tế [Ma Tông - Lam]'],
+  { Thuật: 2 },
+  {},
+  false,
+  'Kiếm'
+);
+eq(g1Fallback.buttonText, '[Kiếm] Vạn Kiếm Quy Tông [Kiếm Tông - Vàng (Thần Thoại)]', 'V103 (Gợi ý 1): Het luot doi -> nhat Kiem Vang lam du phong');
+
+// 1.3: Tầng 5, Thuật = 2. Bảng không có Thuật mới nhưng CÓ thẻ trùng (dup) -> ăn dup ("Nếu có dup thì vẫn ăn dup")
+const g1Dup = botV103.vanduChooseBuff(
+  ['[Kiếm] Vạn Kiếm Quy Tông [Kiếm Tông - Vàng (Thần Thoại)]', '[Thuật] Tam Muội Chân Hỏa [Thuật Tông - Lục]'],
+  { Thuật: 2 },
+  { 'Tam Muội Chân': 1 },
+  true,
+  'Kiếm'
+);
+eq(g1Dup.reason, 'duplicate', 'V103 (Gợi ý 1): Bang khong co Thuat moi nhung co dup -> an dup nang sao');
+eq(g1Dup.buttonText, '[Thuật] Tam Muội Chân Hỏa [Thuật Tông - Lục]', 'V103 (Gợi ý 1): An dup Tam Muoi Chan Hoa');
+
+// --- Test Gợi ý 2 ---
+// 2.1: Tầng 5 (1-12) nhưng đã đủ 5 Thuật -> kích hoạt sớm Stage 2: gom 5 Khí (khiQuota = 5)
+// Bảng có Khí Lam và Kiếm Lam (counter Kiếm) -> PHẢI chọn Khí Lam để mở Đại Lĩnh Vực Khí
+const g2Khi = botV103.vanduChooseBuff(
+  ['[Khí] Càn Khôn Hộ Thể [Khí Tông - Lam]', '[Kiếm] Tật Phong Kiếm Vũ [Kiếm Tông - Lam]'],
+  { Thuật: 5, Khí: 1 },
+  {},
+  false,
+  'Kiếm'
+);
+eq(g2Khi.reason, 'khi', 'V103 (Gợi ý 2): Da du 5 Thuat o tang 5 -> bat Stage 2 gom Khi truoc counter Kiem');
+eq(g2Khi.buttonText, '[Khí] Càn Khôn Hộ Thể [Khí Tông - Lam]', 'V103 (Gợi ý 2): Chon Can Khon Ho The');
+
+// 2.2: Tầng 5, đã đủ 5 Thuật -> ưu tiên dup cho thẻ đã có nếu không có vàng trong chỉ tiêu
+const g2Dup = botV103.vanduChooseBuff(
+  ['[Khí] Kim Cang Bất Hoại [Khí Tông - Lam]', '[Thuật] Tam Muội Chân Hỏa [Thuật Tông - Lục]'],
+  { Thuật: 5, Khí: 1 },
+  { 'Tam Muội Chân': 1 },
+  false,
+  'Kiếm'
+);
+eq(g2Dup.reason, 'duplicate', 'V103 (Gợi ý 2): Da du 5 Thuat -> uu tien dup nang sao');
+
+// --- Test Gợi ý 3 ---
+// 3.1: Ưu tiên Core Buff (Tam Muội Chân Hỏa - Lục) trước thẻ non-core độ hiếm cao hơn (Tật Phong Kiếm Vũ - Tím)
+const g3CoreWeight = botV103.vanduChooseBuff(
+  ['[Kiếm] Tật Phong Kiếm Vũ [Kiếm Tông - Tím (Cực Phẩm)]', '[Thuật] Tam Muội Chân Hỏa [Thuật Tông - Lục]'],
+  { Thuật: 5, Kiếm: 1 },
+  { 'Tật Phong Kiếm': 1, 'Tam Muội Chân': 1 },
+  false
+);
+eq(g3CoreWeight.buttonText, '[Thuật] Tam Muội Chân Hỏa [Thuật Tông - Lục]', 'V103 (Gợi ý 3): Core Buff (Tam Muội Chân) thang the Tím khong phai core');
+
+// 3.2: Dồn sao: 2 thẻ Core Buff cùng bảng, thẻ nào đã nhiều sao hơn (★3) được ưu tiên dồn tiếp lên ★4/★5
+const g3DonSao = botV103.vanduChooseBuff(
+  ['[Thuật] Dẫn Lôi Thuật [Thuật Tông - Lam]', '[Thuật] Tam Muội Chân Hỏa [Thuật Tông - Lục]'],
+  { Thuật: 5 },
+  { 'Dẫn Lôi Thuật': 1, 'Tam Muội Chân': 3 },
+  false
+);
+eq(g3DonSao.buttonText, '[Thuật] Tam Muội Chân Hỏa [Thuật Tông - Lục]', 'V103 (Gợi ý 3): Don sao cho the Core da co ★3 len ★4 truoc the ★1');
+
+console.log('ALL VANDU TESTS PASSED (V103)');
