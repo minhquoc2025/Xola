@@ -5612,6 +5612,32 @@ class NpcBot {
     });
   }
 
+  // V102: Lựa chọn cửa Bát Quái (Đỗ Môn).
+  // Khi đã đạt Đại Lĩnh Vực Thuật (>= 5 Thuật): cố tình chọn SAI để mở bẫy quái,
+  // đánh quái thắng sẽ nhận thêm/nâng buff chuẩn bị cho Boss 24.
+  // Khi chưa đạt Đại Lĩnh Vực Thuật (< 5 Thuật): bắt buộc chọn ĐÚNG để an toàn,
+  // tránh chết sớm.
+  vanduChoosePuzzleDoor(text, buttons, hasThuatDomain) {
+    const element = this.vanduPuzzleElement(text);
+    const door = element ? this.vanduPuzzleDoor(element) : null;
+    const doorBtn = door ? (buttons || []).find(x => this.vanduNormalize(x).includes(this.vanduNormalize('Cửa ' + door))) : null;
+    const doorBtns = this.vanduPuzzleDoorButtons(buttons);
+
+    if (hasThuatDomain && doorBtn && doorBtns.length > 1) {
+      const wrongDoorBtns = doorBtns.filter(x => this.vanduNormalize(x) !== this.vanduNormalize(doorBtn));
+      if (wrongDoorBtns.length > 0) {
+        return { action: 'wrong', doorBtn: wrongDoorBtns[0], correctDoorBtn: doorBtn, element };
+      }
+    }
+    if (doorBtn) {
+      return { action: 'correct', doorBtn, element };
+    }
+    if (doorBtns.length > 0) {
+      return { action: 'random', doorBtn: doorBtns[0], element };
+    }
+    return null;
+  }
+
   vanduSkillCooldown(buttonText) {
     const m = String(buttonText || '').match(/\((\d+)\)\s*$/);
     return m ? Number(m[1]) : null;
@@ -6209,22 +6235,28 @@ class NpcBot {
   // huong hien "Tui Buff 4/12". Tra ve null neu man khong ghi so.
   vanduBuffBagCount(text) {
     const raw = String(text || '');
-    let m = raw.match(/Túi Buff\s*(\d+)\s*\/\s*\d+/);
+    let m = raw.match(/Túi Buff\s*:?\s*(\d+)\s*\/\s*\d+/i);
     if (m) return Number(m[1]);
-    m = raw.match(/(\d+)\s*Thẻ Buff/);
+    m = raw.match(/(\d+)\s*Thẻ Buff/i);
     if (m) return Number(m[1]);
     return null;
   }
 
   vanduSyncSectCounts(text) {
     const raw = String(text || '');
-    const re = /(Kiếm|Khí|Thuật|Ma)\s*Tông\s*(\d+)\s*\/\s*\d+/g;
+    // Hỗ trợ cả có dấu ':' và không dấu ':', emoji/ký tự viền: "🗡️ Kiếm Tông: 4/5", "⚡ Thuật Tông: 1/3"
+    const re = /(Kiếm|Khí|Thuật|Ma)\s*Tông\s*:?\s*(\d+)\s*\/\s*\d+/gi;
+    const sectMap = { 'kiếm': 'Kiếm', 'khí': 'Khí', 'thuật': 'Thuật', 'ma': 'Ma' };
     let m;
     while ((m = re.exec(raw)) !== null) {
-      const sect = m[1];
+      const sect = sectMap[m[1].toLowerCase()] || m[1];
       const n = Number(m[2]);
-      if (!this.vanduSectCounts[sect] || this.vanduSectCounts[sect] < n) {
-        this.vanduSectCounts[sect] = n;
+      if (Number.isFinite(n) && n >= 0) {
+        const old = this.vanduSectCounts[sect] || 0;
+        if (n !== old) {
+          this.vanduSectCounts[sect] = n;
+          this.vanduLog(`📋 Vân Du: đồng bộ Tông Môn Lĩnh Vực từ game -> ${sect} Tông: ${n} (cũ: ${old})`);
+        }
       }
     }
   }
@@ -7304,6 +7336,11 @@ class NpcBot {
       // thành mạch theo walkthrough là "THIÊN CƠ HOÀN MỸ!" (5/5).
       if (this.vanduIsCircuitComplete(text)) this.vanduCircuit = null;
 
+      // Cập nhật số lượng buff theo Tông Môn Lĩnh Vực từ mọi màn hình có ghi
+      if (/Tông\s*:?\s*\d+\s*\/\s*\d+/i.test(text)) {
+        this.vanduSyncSectCounts(text);
+      }
+
       // V58 (anh chốt 2026-11-11, ảnh Tiết 32/36): sau khi mạch Sinh hoàn
       // thành (THIÊN CƠ HOÀN MỸ 5/5), game hiện bảng Trận Đồ Ngũ Hành kèm
       // Dị Biến Cô Ma Loạn Vũ, 2 nút "Tụng siêu độ vong hồn" (xanh) và
@@ -7559,30 +7596,24 @@ class NpcBot {
         continue;
       }
 
-      // Đố Bát Quái: đọc thơ trong ngoặc kép, map hành -> cửa. V36: không
-      // đoán được đáp án thì chọn ngẫu nhiên 1 cửa thay vì dừng (anh chốt
-      // 2026-11-06); chỉ dừng khi màn không có nút cửa nào.
+      // Đố Bát Quái: đọc thơ trong ngoặc kép, map hành -> cửa.
+      // V102: Khi đã có Đại Lĩnh Vực Thuật (>= 5 Thuật), cố tình chọn SAI đáp án
+      // để mở bẫy quái đánh quái lấy thêm/nâng buff chuẩn bị cho Boss 24.
+      // Khi chưa đủ 5 Thuật: chọn ĐÚNG để bảo toàn sinh mệnh.
       if (/bát quái trận đố|bat quai tran do/i.test(text) || btnNorm.some(x => x.includes('cua ly') || x.includes('cua kham') || x.includes('cua khon') || x.includes('cua chan') || x.includes('cua doai') || x.includes('cua can') || x.includes('cua ton'))) {
-        const element = this.vanduPuzzleElement(text);
-        const door = element ? this.vanduPuzzleDoor(element) : null;
-        const doorBtn = door ? buttons.find(x => this.vanduNormalize(x).includes(this.vanduNormalize('Cửa ' + door))) : null;
-        if (doorBtn) {
-          await this.vanduClickButton(doorBtn);
-          this.vanduLog(`🧩 Vân Du: đố Bát Quái, thơ hành ${element} -> ${doorBtn}`);
+        const hasThuatDomain = (this.vanduSectCounts && this.vanduSectCounts['Thuật'] || 0) >= 5;
+        const choice = this.vanduChoosePuzzleDoor(text, buttons, hasThuatDomain);
+        if (!choice) {
+          this.vanduLog(`⛔ Vân Du: đố Bát Quái, không đoán được hành/cửa từ thơ và không thấy nút cửa nào, dừng để tránh mở sai cửa.`);
+          break;
+        }
+        await this.vanduClickButton(choice.doorBtn);
+        if (choice.action === 'wrong') {
+          this.vanduLog(`🧩 Vân Du: đố Bát Quái đã có Đại Lĩnh Vực Thuật (${this.vanduSectCounts['Thuật']}/5), cố tình chọn SAI cửa (đúng: ${choice.correctDoorBtn} -> chọn sai: ${choice.doorBtn}) để đánh bẫy quái lấy buff`);
+        } else if (choice.action === 'correct') {
+          this.vanduLog(`🧩 Vân Du: đố Bát Quái, thơ hành ${choice.element} -> ${choice.doorBtn}`);
         } else {
-          // V36 (anh chốt 2026-11-06, log 22:33:14): câu đố chưa đọc
-          // được đáp án thì chọn NGẪU NHIÊN 1 cửa thay vì dừng — đáp
-          // sai chỉ mở trận đánh bẫy, không chết ngay; dừng giữa chuyến
-          // thì mất cả chuyến. Chỉ dừng khi màn không có nút cửa nào.
-          const doorBtns = this.vanduPuzzleDoorButtons(buttons);
-          if (doorBtns.length > 0) {
-            const randomBtn = doorBtns[Math.floor(Math.random() * doorBtns.length)];
-            await this.vanduClickButton(randomBtn);
-            this.vanduLog(`🎲 Vân Du: đố Bát Quái, không đoán được hành/cửa từ thơ (hành: ${element || '?'}) — chọn ngẫu nhiên "${randomBtn}" thay vì dừng`);
-          } else {
-            this.vanduLog(`⛔ Vân Du: đố Bát Quái, không đoán được hành/cửa từ thơ (hành: ${element || '?'}) và không thấy nút cửa nào, dừng để tránh mở sai cửa.`);
-            break;
-          }
+          this.vanduLog(`🎲 Vân Du: đố Bát Quái, không đoán được hành/cửa từ thơ (hành: ${choice.element || '?'}) — chọn ngẫu nhiên "${choice.doorBtn}" thay vì dừng`);
         }
         await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
         continue;

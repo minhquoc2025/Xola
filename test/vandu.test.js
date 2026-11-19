@@ -632,3 +632,59 @@ eq(botV100.vanduChooseBuff(['[Ma] Ma Hồn [Ma Tông - Lam]', '[Kiếm] Kiếm �
 // 4. Khi đã đủ 5 Thuật -> không lấy Thuật lam nữa
 eq(botV100.vanduChooseBuff(['[Thuật] Hỏa Cầu [Thuật Tông - Lam]', '[Kiếm] Kiếm Ý [Kiếm Tông - Lam]'], { Thuật: 5 }, {}, true), { action: 'reroll' }, 'V100: da du 5 Thuat -> khong lay Thuat lam nua, doi');
 console.log('ALL VANDU TESTS PASSED (V100)');
+
+// V101: Đồng bộ Tông Môn Lĩnh Vực & Túi Buff từ game text (tránh nhận dư thẻ sau Kinh Môn)
+const botV101 = new NpcBot({ executeJavaScript() {} }, 1);
+const resonanceText = `TIẾT ĐIỂM 21/36: LĨNH NGỘ CHIẾN KHÍ — CHỌN 1 TRONG 4 BUFF
+🏛️ Tông Môn Lĩnh Vực (Resonance)
+🗡️ Kiếm Tông: 4/5 ☀️ [Tiểu Lĩnh Vực Đang Mở] (cần 1 thẻ để đạt Đại Lĩnh Vực)
+🛡️ Khí Tông: 3/5 ☀️ [Tiểu Lĩnh Vực Đang Mở] (cần 2 thẻ để đạt Đại Lĩnh Vực)
+⚡ Thuật Tông: 1/3 (cần thêm 2 thẻ cùng hệ để mở Lĩnh Vực)
+🩸 Ma Tông: 2/3 (cần thêm 1 thẻ cùng hệ để mở Lĩnh Vực)
+🎒 Túi Buff: 11/12 (Lv1 đào thải khi đầy)`;
+
+botV101.vanduSyncSectCounts(resonanceText);
+eq(botV101.vanduSectCounts['Kiếm'], 4, 'V101: Kiếm Tông: 4/5');
+eq(botV101.vanduSectCounts['Khí'], 3, 'V101: Khí Tông: 3/5');
+eq(botV101.vanduSectCounts['Thuật'], 1, 'V101: Thuật Tông: 1/3');
+eq(botV101.vanduSectCounts['Ma'], 2, 'V101: Ma Tông: 2/3');
+eq(botV101.vanduBuffBagCount(resonanceText), 11, 'V101: Túi Buff: 11/12');
+
+// Đồng bộ khi game ghi nhận đủ 5 Thuật từ Kinh Môn -> bot nhận diện đủ 5 Thuật ngay
+const sync5ThuatText = `⚡ Thuật Tông: 5/5 ☀️ [Đại Lĩnh Vực Đang Mở]`;
+botV101.vanduSyncSectCounts(sync5ThuatText);
+eq(botV101.vanduSectCounts['Thuật'], 5, 'V101: Cập nhật Thuật Tông lên 5/5');
+
+// Khi bot vào chọn buff, không lấy thêm thẻ Thuật mới nữa (tránh dư thừa)
+botV101.vanduNode = 5;
+const choiceAfterSync = botV101.vanduChooseBuff(
+  ['[Thuật] Hỏa Cầu [Thuật Tông - Lam]', '[Kiếm] Bạt Kiếm [Kiếm Tông - Lam]'],
+  botV101.vanduSectCounts,
+  {},
+  true
+);
+eq(choiceAfterSync, { action: 'reroll' }, 'V101: Đã đồng bộ 5 Thuật từ game -> không lấy Thuật lam nữa mà reroll');
+console.log('ALL VANDU TESTS PASSED (V101)');
+
+// V102: Logic Đỗ Môn (Bát Quái).
+// Chưa có Đại Lĩnh Vực Thuật (< 5) -> chọn ĐÚNG.
+// Đã có Đại Lĩnh Vực Thuật (>= 5) -> cố tình chọn SAI để đánh bẫy quái lấy thêm/nâng buff.
+const botV102 = new NpcBot({ executeJavaScript() {} }, 1);
+const puzzleHoaText = 'Thơ: "Hỏa viêm bùng sáng giữa trời đêm, xích diễm quang minh thiêu rụi tà chướng"';
+const puzzleButtons = ['Cửa Ly', 'Cửa Khảm', 'Cửa Khôn', 'Cửa Chấn'];
+
+// 1. Chưa đủ 5 Thuật (hasThuatDomain = false) -> chọn ĐÚNG Cửa Ly
+const pickSafe = botV102.vanduChoosePuzzleDoor(puzzleHoaText, puzzleButtons, false);
+eq(pickSafe.action, 'correct', 'V102: chua du Thuat -> action correct');
+eq(pickSafe.doorBtn, 'Cửa Ly', 'V102: chua du Thuat -> chon dung Cua Ly');
+
+// 2. Đã đủ 5 Thuật (hasThuatDomain = true) -> cố tình chọn SAI (khác Cửa Ly)
+const pickTrap = botV102.vanduChoosePuzzleDoor(puzzleHoaText, puzzleButtons, true);
+eq(pickTrap.action, 'wrong', 'V102: da co Dai Linh Vuc Thuat -> action wrong');
+eq(pickTrap.correctDoorBtn, 'Cửa Ly', 'V102: biet cua dung la Cua Ly');
+eq(pickTrap.doorBtn !== 'Cửa Ly', true, 'V102: cua chon phai KHAC Cua Ly de mo bay quai');
+
+// 3. Không đoán được thơ -> chọn ngẫu nhiên
+const pickUnknown = botV102.vanduChoosePuzzleDoor('Không có thơ', puzzleButtons, true);
+eq(pickUnknown.action, 'random', 'V102: khong doan duoc tho -> action random');
+console.log('ALL VANDU TESTS PASSED (V102)');
