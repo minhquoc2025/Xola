@@ -99,6 +99,8 @@ class NpcBot {
     this.vanduLastBuffNode = 0; // V69: Tiết lúc chọn buff gần nhất (xem vanduIsBossByFlow)
     this.vanduBuffClicks = 0; // V80: tổng số lần đã click chọn buff trong chuyến
     this.vanduDanCount = 0;
+    this.vanduLives = 4; // V104: 3 mạng Đạo Tâm + 1 mạng Waifu cứu thế = 4 mạng
+    this.vanduMaxLives = 4;
     this.vanduHpPct = null; // V71: % HP người chơi đọc gần nhất (thẻ HP Neon)
     this.vanduDanEmptyNode = null; // V71: Tiết lúc đan về 0 (thẻ Đan: "HẾT ĐAN từ Tiết X")
     this.vanduCircuit = null;
@@ -831,6 +833,11 @@ class NpcBot {
       tuLuyenActive: this._tuLuyenActive,
       vanduNode: this.vanduNode,
       vanduDanCount: this.vanduDanCount,
+      vanduLives: this.vanduLives !== undefined ? this.vanduLives : 4,
+      vanduMaxLives: 4,
+      vanduBuffClicks: this.vanduBuffClicks || 0,
+      vanduBuffCount: Object.keys(this.vanduOwnedBuffs || {}).length,
+      vanduSectSummary: this.vanduSectSummary ? this.vanduSectSummary() : '',
       vanduHpPct: this.vanduHpPct, // V71: thẻ HP Neon
       vanduDanEmptyNode: this.vanduDanEmptyNode, // V71: thẻ Đan Neon
       vanduTripCount: this.vanduTripCount,
@@ -5563,13 +5570,97 @@ class NpcBot {
     return null;
   }
 
+  // V104: Danh mục tra cứu chuẩn Tông và Độ hiếm của toàn bộ thẻ Buff Vân Du.
+  // Dùng khi nút nâng cấp (⬆️T2/T3/T4/T5) không ghi [Tông] hay màu độ hiếm trên nút,
+  // đồng thời tránh nhận nhầm Tông/Độ hiếm do tên thẻ chứa từ khóa ("Tụ Khí Hoàn Nguyên" là Thuật Lam không phải Khí,
+  // "Thần Ma Trụ Thế" là Khí Vàng không phải Ma, "Bạt Kiếm Thuật" là Kiếm Lục không phải Thuật,
+  // "Thiên Cơ Đồ Lục" là Vận Tím không phải Lục).
+  vanduLookupKnownBuff(rawText) {
+    const n = this.vanduNormalize(this.vanduNormalizeBuffName(rawText));
+    if (!n) return null;
+    const catalog = [
+      // Thuật Tông
+      { prefix: 'tam muoi chan', sect: 'Thuật', rarity: 1 },
+      { prefix: 'dan loi thuat', sect: 'Thuật', rarity: 1 },
+      { prefix: 'tu khi hoan ng', sect: 'Thuật', rarity: 2 },
+      { prefix: 'bang phach ha', sect: 'Thuật', rarity: 2 },
+      { prefix: 'pha phap phu c', sect: 'Thuật', rarity: 2 },
+      { prefix: 'cuu thien loi', sect: 'Thuật', rarity: 3 },
+      { prefix: 'chan phap vo b', sect: 'Thuật', rarity: 3 },
+      { prefix: 'thai at than l', sect: 'Thuật', rarity: 4 },
+      { prefix: 'ngu hanh nghic', sect: 'Thuật', rarity: 4 },
+      // Khí Tông
+      { prefix: 'dong phu ho tam', sect: 'Khí', rarity: 1 },
+      { prefix: 'kim cang cuong t', sect: 'Khí', rarity: 1 },
+      { prefix: 'tuc nhuong quy n', sect: 'Khí', rarity: 2 },
+      { prefix: 'bat hoai phap th', sect: 'Khí', rarity: 2 },
+      { prefix: 'phan chan cuong', sect: 'Khí', rarity: 2 },
+      { prefix: 'kinh thien phan', sect: 'Khí', rarity: 3 },
+      { prefix: 'can khon ho th', sect: 'Khí', rarity: 3 },
+      { prefix: 'kim cang bat h', sect: 'Khí', rarity: 4 },
+      { prefix: 'than ma tru the', sect: 'Khí', rarity: 4 },
+      // Kiếm Tông
+      { prefix: 'phong nhue kie', sect: 'Kiếm', rarity: 1 },
+      { prefix: 'bat kiem thuat', sect: 'Kiếm', rarity: 1 },
+      { prefix: 'tat phong kiem', sect: 'Kiếm', rarity: 2 },
+      { prefix: 'pha giap kiem k', sect: 'Kiếm', rarity: 2 },
+      { prefix: 'liet hon kiem', sect: 'Kiếm', rarity: 2 },
+      { prefix: 'vo anh kiem man', sect: 'Kiếm', rarity: 3 },
+      { prefix: 'tuyet menh tram', sect: 'Kiếm', rarity: 3 },
+      { prefix: 'van kiem quy t', sect: 'Kiếm', rarity: 4 },
+      { prefix: 'nhat kiem tram', sect: 'Kiếm', rarity: 4 },
+      // Ma Tông
+      { prefix: 'thien ma nhan', sect: 'Ma', rarity: 1 },
+      { prefix: 'thon huyet ma con', sect: 'Ma', rarity: 1 },
+      { prefix: 'tuyet doi tap kic', sect: 'Ma', rarity: 2 },
+      { prefix: 'huyet te doat m', sect: 'Ma', rarity: 2 },
+      { prefix: 'doc co bao mon', sect: 'Ma', rarity: 2 },
+      { prefix: 'thao thiet thon', sect: 'Ma', rarity: 3 },
+      { prefix: 'ma hoa cuong no', sect: 'Ma', rarity: 3 },
+      { prefix: 'huyet hai bat d', sect: 'Ma', rarity: 4 },
+      { prefix: 'ma ton giang th', sect: 'Ma', rarity: 4 },
+      // Vận Mệnh
+      { prefix: 'kim ngan dat dao', sect: 'Vận', rarity: 1 },
+      { prefix: 'thien van phuc t', sect: 'Vận', rarity: 2 },
+      { prefix: 'linh duoc bao th', sect: 'Vận', rarity: 2 },
+      { prefix: 'thien co do luc', sect: 'Vận', rarity: 3 },
+      { prefix: 'dai dao dong q', sect: 'Vận', rarity: 4 },
+    ];
+    for (const item of catalog) {
+      if (n.includes(item.prefix)) return item;
+    }
+    return null;
+  }
+
+  // V104: Số sao hiện có suy từ nút nâng cấp ("⬆️T2 ★★" -> đang có 1★, "⬆️T3 ★★★" -> đang có 2★...)
+  vanduButtonUpgradeStars(buttonText) {
+    const s = String(buttonText || '');
+    const tm = s.match(/\bT([2-5])\b/);
+    if (tm) return Number(tm[1]) - 1;
+    const sm = s.match(/★{2,5}/);
+    if (sm) return sm[0].length - 1;
+    if (s.includes('⬆')) return 1;
+    return 0;
+  }
+
+  // V104: Nhận diện nút thẻ 1★ mới trên Discord (có chấm màu 🟢/🔵/🟣/🟡 đứng trước [Tông] và không có ⬆/T2/★★)
+  vanduIsExplicitNew1StarBtn(buttonText) {
+    const s = String(buttonText || '');
+    if (/⬆|\bT[2-5]\b|★{2,5}/.test(s)) return false;
+    return /(?:🟢|🔵|🟣|🟡|🟩|🟦|🟪|🟨)\s*\[ *(?:Kiếm|Khí|Thuật|Ma|Vận)\b/.test(s);
+  }
+
   vanduBuffRarity(buttonText) {
     const raw = String(buttonText || '');
     // V14: vàng/tím có thể chỉ thể hiện bằng emoji màu, không có chữ.
     if (/Vàng|Thần Thoại|Hoàng Kim|🟡|🟨/.test(raw)) return 4;
     if (/Tím|Cực Phẩm|🟣|🟪/.test(raw)) return 3;
     if (/Lam|Hiếm|🔵|🟦/.test(raw)) return 2;
-    if (/Lục|Phổ Thông|🟢|🟩/.test(raw)) return 1;
+    if (/Phổ Thông|🟢|🟩/.test(raw)) return 1;
+    // Tránh nhầm chữ "Lục" trong tên thẻ "Thiên Cơ Đồ Lục"
+    if (/Lục/.test(raw) && !/Đồ\s*Lục/i.test(raw)) return 1;
+    const known = this.vanduLookupKnownBuff(raw);
+    if (known && known.rarity) return known.rarity;
     return 0;
   }
 
@@ -5655,6 +5746,11 @@ class NpcBot {
     // chữ của 1 tông thì lấy tông đó. Đây là nguyên nhân nghi ngờ nhất của
     // lỗi "Thuật vàng mà bot không chọn mà Đổi": nút Thuật vàng không đúng
     // dạng Tông/khung nên trước đây không được tính là Thuật.
+    // V104: Tra cứu danh mục chuẩn trước khi rơi về đoán từ khóa trong tên
+    if (!sect) {
+      const known = this.vanduLookupKnownBuff(raw);
+      if (known && known.sect) sect = known.sect;
+    }
     if (!sect) {
       if (/Thuật/.test(raw)) sect = 'Thuật';
       else if (/Kiếm/.test(raw)) sect = 'Kiếm';
@@ -5681,7 +5777,7 @@ class NpcBot {
     // chọn xử lý (tông lấy từ mô tả bảng qua vanduBuffSects, trùng
     // nhận qua tên chuẩn hoá). Nút rác (tên người, lệnh) không có dấu
     // T2 nên vẫn bị loại như cũ.
-    if (!!card.name && /⬆|T2/.test(String(buttonText || ''))) return true;
+    if (!!card.name && /⬆|\bT[2-5]\b|★{2,5}/.test(String(buttonText || ''))) return true;
     return !!card.sect && !!card.name;
   }
 
@@ -5862,27 +5958,38 @@ class NpcBot {
       }
       return best ? ownedNorm[best] : 0;
     };
-    const isNew = c => ownedCount(c.name) < 1;
+    // V104: Xác định số sao đang sở hữu thực tế của thẻ trên bảng:
+    // - Nếu nút mang ký hiệu nâng cấp của game (⬆️T2..T5 / ★★..★★★★★) -> chắc chắn đã sở hữu (số sao = tier - 1).
+    // - Nếu nút mang ký hiệu thẻ 1★ mới trên Discord (🟢/🔵/🟣/🟡 đứng trước [Tông] và không có ⬆/★★) -> chắc chắn là thẻ mới 1★ (0 sao sở hữu),
+    //   tránh việc thẻ 1★ cũ đã bị đào thải hoặc ghi nhầm lại bị nhận diện thành duplicate làm nhặt lố trần 5 Thuật.
+    // - Các dạng nút khác (như chuỗi test) thì dùng ownedCount(c.name) từ sổ ownedNames.
+    const cardOwnedCount = c => {
+      if (!c) return 0;
+      if (this.vanduIsExplicitNew1StarBtn(c.raw)) return 0;
+      return ownedCount(c.name);
+    };
+    const isNew = c => cardOwnedCount(c) < 1;
     // Buff trùng chỉ được nâng tối đa 4 lần: lần đầu (1) + 4 lần nâng = tối
     // đa 5 lần chọn cùng 1 buff. Đã chọn 5 lần thì không nâng nữa.
-    const isUpgradable = c => ownedCount(c.name) >= 1 && ownedCount(c.name) < 5;
+    const isUpgradable = c => cardOwnedCount(c) >= 1 && cardOwnedCount(c) < 5;
     const countOf = c => (c.sect && counts[c.sect] !== undefined ? counts[c.sect] : 0);
     const byRarity = (a, b) => (b.rarity - a.rarity) || (countOf(b) - countOf(a));
     const pick = (bucket, card) => ({ action: 'pick', buttonText: card.raw, reason: bucket });
     const bestOf = list => (list.length > 0 ? [...list].sort(byRarity)[0] : null);
 
-    // V103 (Gợi ý 3): Ưu tiên nâng sao cho thẻ Chủ Lực (Core Buff) theo dữ liệu 9 lượt thực chiến:
+    // V103 & V104: Ưu tiên nâng sao cho thẻ Chủ Lực (Core Buff):
+    // Dùng vanduNormalize (bỏ dấu tiếng Việt) và khớp tiền tố cho tên nút bị cắt ngắn trên Discord.
     // 1. Nhóm sát thương dứt điểm: Tam Muội Chân Hỏa, Dẫn Lôi Thuật, Cửu Thiên Lôi Kiếp, Tuyệt Mệnh Trảm, Nhất Kiếm Trảm.
     // 2. Nhóm sinh tồn / phòng ngự / all-stat: Càn Khôn Hộ Thể, Kim Cang Bất Hoại, Kinh Thiên Phản, Đại Đạo Đồng Quy, Phản Chấn Cương.
     const isCoreBuff = c => {
       if (!c || !c.name) return false;
-      const n = this.vanduNormalizeBuffName(c.name).toLowerCase();
-      if (n.includes('tam muoi chan') || n.includes('dan loi thuat') || n.includes('cuu thien loi') ||
+      const n = this.vanduNormalize(this.vanduNormalizeBuffName(c.name));
+      if (n.includes('tam muoi chan') || n.includes('dan loi') || n.includes('cuu thien loi') ||
           n.includes('tuyet menh tram') || n.includes('nhat kiem tram')) {
         return true;
       }
-      if (n.includes('can khon ho the') || n.includes('kim cang bat hoai') || n.includes('kinh thien phan') ||
-          n.includes('dai dao dong quy') || n.includes('phan chan cuong')) {
+      if (n.includes('can khon ho') || n.includes('kim cang bat h') || n.includes('kinh thien phan') ||
+          n.includes('dai dao dong q') || n.includes('phan chan cuong')) {
         return true;
       }
       return false;
@@ -5895,7 +6002,7 @@ class NpcBot {
       else if (c.sect === 'Thuật') score += 20; // Thuật tông (hệ sát thương chính)
       else if (c.sect === 'Khí') score += 15; // Khí tông (hệ phòng ngự chính)
       score += (c.rarity || 0) * 2;
-      score += (ownedCount(c.name) || 0) * 3; // Ưu tiên dồn sao lên ★4, ★5
+      score += (cardOwnedCount(c) || 0) * 3; // Ưu tiên dồn sao lên ★4, ★5
       return score;
     };
 
@@ -5975,29 +6082,40 @@ class NpcBot {
 
     const dup = bestDupOf(parsed.filter(isUpgradable));
 
-    // Ở Tiết 13 trở đi (hoặc khi đã đủ 5 Thuật), NÂNG SAO (dup) là ưu tiên hàng đầu nếu không có Vàng Thần Thoại trong rổ chỉ tiêu
-    if (isStage2 && dup) {
-      const hasGoldInBucket = buckets.some(([, c]) => c.rarity === 4);
-      if (!hasGoldInBucket) {
-        return pick('duplicate', dup);
-      }
-    }
-
     // Riêng thẻ Thuật (chưa đủ 5 buff): không quan trọng tím hoặc vàng, lấy luôn
     // để đẩy nhanh tỉ lệ nhận Đại Lĩnh Vực chuẩn bị cho Boss 12.
     if (buckets.length > 0 && buckets[0][0] === 'thuat') {
       return pick('thuat', buckets[0][1]);
     }
 
-    // V103 (Gợi ý 1): Ở Tầng 1–12 khi chưa đủ 5 Thuật, nếu bảng không có Thuật mới:
-    // - Nếu có thẻ trùng (dup) -> lấy dup để nâng sao ("Nếu có dup thì vẫn ăn dup")
-    // - Nếu có Vận Vàng (Đại Đạo Đồng Quy) -> lấy Vận Vàng
-    // - Nếu còn lượt Đổi Vận (allowReroll) -> Đổi để săn Thuật, KHÔNG lấy Counter tông khác (như Kiếm/Ma) làm loãng túi
+    // V104: Ở Giai đoạn 2 (đã đủ 5 Thuật hoặc Tiết > 12):
+    // 1. Ưu tiên gom đủ 3 -> 5 thẻ Khí Tông trước (hoặc Vận Vàng Đại Đạo Đồng Quy)
+    //    để mở Tiểu/Đại Lĩnh Vực Khí phòng thủ Boss 24 & 36, không bị dup đè và không Đổi bỏ mất Khí.
+    // 2. Khi trên bảng không có thẻ Khí mới (hoặc đã đủ 5 Khí), mới ưu tiên NÂNG SAO (dup)
+    //    nếu không có Vàng Thần Thoại trong rổ chỉ tiêu.
+    if (isStage2) {
+      if (buckets.length > 0 && (buckets[0][0] === 'van' || buckets[0][0] === 'khi')) {
+        return pick(buckets[0][0], buckets[0][1]);
+      }
+      if (dup) {
+        const hasGoldInBucket = buckets.some(([, c]) => c.rarity === 4);
+        const hasKhiInBucket = buckets.some(([k]) => k === 'khi');
+        if (!hasGoldInBucket && !hasKhiInBucket) {
+          return pick('duplicate', dup);
+        }
+      }
+    }
+
+    // V104: Ở Tiết 1–12 khi chưa đủ 5 Thuật:
+    // Ưu tiên kích hoạt đại lĩnh vực Thuật tông đủ 5 buff thuật tông (hoặc hết lượt đổi) mới tính tới nâng sao:
+    // - Nếu bảng có Thuật mới: đã được nhặt ở trên (pick thuat).
+    // - Nếu bảng không có Thuật mới: nếu CÒN LƯỢT ĐỔI VẬN (allowReroll) -> PHẢI ĐỔI ĐỂ SĂN THUẬT!
+    // - Chỉ khi HẾT LƯỢT ĐỔI (allowReroll = false): mới tính tới ăn dup nâng sao hoặc lấy Vận Vàng.
     if (node >= 1 && node <= 12 && !hasThuatDomain) {
+      if (allowReroll) return { action: 'reroll' };
       if (dup) return pick('duplicate', dup);
       const vanGold = buckets.find(([k, c]) => k === 'van' && c.rarity === 4);
       if (vanGold) return pick('van', vanGold[1]);
-      if (allowReroll) return { action: 'reroll' };
     }
 
     const hasGood = buckets.some(([, c]) => c.rarity >= 3 || c.rarity === 0);
@@ -6025,19 +6143,24 @@ class NpcBot {
     // phòng cũ (bấm tạm 1 lá max để qua bảng) là code chết, bỏ. Lá nào
     // sổ bot ghi đã max thì loại khỏi "còn lại"; nếu rỗng (sổ lệch) thì
     // trả null để vòng ngoài chờ màn mới, không bấm bừa.
-    const pickable = parsed.filter(c => ownedCount(c.name) < 5);
+    const pickable = parsed.filter(c => cardOwnedCount(c) < 5);
     const best = bestOf(pickable);
     if (!best) return null;
     return pick('remaining', best);
   }
 
-  vanduShopAction(danCount, boughtThisVisit, biTichDoneThisVisit) {
+  vanduShopAction(danCount, boughtThisVisit, biTichDoneThisVisit, hasThuatDomain) {
     // V44 (anh chốt 2026-11-06): đủ 3 đan thì cứ bấm Bí Tịch tới khi màn
     // tự đổi, KHÔNG bấm rời — Bí Tịch bấm được vô hạn. Trước đây bấm Bí
     // Tịch 1 lần rồi lần quét sau bấm Rời đi. biTichDoneThisVisit giữ lại
     // trong chữ ký cho khỏi sửa chỗ gọi/test, nhưng luật mới không dùng
     // nó nữa. Chưa đủ 3 đan thì vẫn như cũ: mua 1 cái rồi rời.
-    if (danCount >= 3) return 'bi-tich';
+    // V104: Khi đã đủ 5 Thuật (Đại Lĩnh Vực Thuật), ngưng mua Bí Tịch Thượng Cổ
+    // để tránh nhận buff ngẫu nhiên làm thừa Thuật (lên 7-9 thẻ) hoặc đào thải mất thẻ 1★ quan trọng.
+    const stopRandomBuff = hasThuatDomain !== undefined
+      ? !!hasThuatDomain
+      : ((this.vanduSectCounts && this.vanduSectCounts['Thuật'] || 0) >= 5);
+    if (danCount >= 3) return stopRandomBuff ? 'roi-di' : 'bi-tich';
     if (boughtThisVisit) return 'roi-di';
     return 'mua-cuu-chuyen';
   }
@@ -6135,8 +6258,13 @@ class NpcBot {
   // hoi o <50% luon, ke ca tran thuong (vao boss voi mau cao van tot
   // hon giu dan). UI status row tu v71 da ghi nguong <50% (boss) cho
   // vung nay — gio bot moi khop voi UI.
-  vanduHealThreshold(node) {
-    return (node === 11 || node === 12 || node === 23 || node === 24 || node === 35 || node === 36) ? 50 : 20;
+  // V104: Thiết Mao Hắc Lang ở tầng sâu (>= 20) sát thương shock dame rất lớn,
+  // nâng ngưỡng hồi lên 65% để tránh bị one-shot trước khi kịp hồi máu.
+  vanduHealThreshold(node, enemyName, isBossBattle) {
+    const isLang = enemyName && this.vanduNormalize(enemyName).includes('thiet mao hac lang');
+    if (isLang && node >= 20) return 65;
+    if (isBossBattle) return isLang ? 65 : 50;
+    return (node === 11 || node === 12 || node === 23 || node === 24 || node === 35 || node === 36) ? (isLang ? 65 : 50) : 20;
   }
 
   // V68 (2026-11-12, anh: boss Tiết 12 máu <50% mà không hồi): màn
@@ -6177,6 +6305,13 @@ class NpcBot {
   vanduIsDefeatScreen(norm) {
     const t = String(norm || '');
     return /roi ve chang|lui ve tiet diem|dao tam menh hon|tu tran truoc|het sinh menh dao tam|that bai tai tiet diem/.test(t);
+  }
+
+  // V104: Tóm tắt phân bổ các tông cho UI status
+  vanduSectSummary() {
+    const sects = this.vanduSectCounts || {};
+    const parts = Object.entries(sects).filter(([, v]) => v > 0).map(([k, v]) => `${k}:${v}`);
+    return parts.length > 0 ? parts.join(' · ') : 'Chưa có buff';
   }
 
   // V80: Tóm tắt thông tin buff hiện có kèm số lượng click và tông
@@ -7067,7 +7202,7 @@ class NpcBot {
         this.vanduLog(`📜 Vân Du: Tình trạng buff hiện có (đã click: ${this.vanduBuffClicks || 0} lần): ${this.vanduFormatBuffSummary()}`);
       }
 
-      const healThreshold = isBossBattle ? 50 : this.vanduHealThreshold(this.vanduNode);
+      const healThreshold = this.vanduHealThreshold(this.vanduNode, enemyName, isBossBattle);
       // V69: chẩn đoán — máu <50% ở vùng chuyển boss (Tiết 11/23/35)
       // mà không hồi thì log 1 lần/trận để lần sau biết bot đã thấy gì.
       if (hp !== null && hp < 50 && (this.vanduNode === 11 || this.vanduNode === 23 || this.vanduNode === 35) && !(hp < healThreshold && itemBtn) && !noHealLogged) {
@@ -7082,35 +7217,57 @@ class NpcBot {
           continue;
         }
       }
-      // V2: không bấm skill đang hồi (nút ghi (2), (1)...), không bấm skill
-      // không có nút (ví dụ Vạn Kiếm Quy Tông không có ở battle Vân Du).
-      // Duyệt theo thứ tự từ vị trí hiện tại, lấy skill đầu tiên có nút và
-      // không hồi; nếu tất cả đều hồi/không có nút thì dùng Kiếm Cơ Bản làm
-      // filler, nếu không có cả filler thì chờ quét lại chứ không bấm bừa.
-      // V15: thứ tự duyệt là thứ tự từ cấu hình chung (vanduSkillNames),
-      // không còn là thứ tự cứng v1 nữa; thứ tự cứng v1 chỉ là mặc định
-      // khi chưa có cấu hình.
+      // V104 (Fix combo skill): Tuân thủ nghiêm ngặt combo cấu hình
+      // Vị trí skill mong muốn ở hiệp này: targetSkill = vanduSkillOrder[vanduSkillIdx % length]
+      // Nếu targetSkill có cooldown: thử chờ 600ms quét lại (tránh Discord turn lag).
+      // Nếu vẫn cooldown: dùng Kiếm Cơ Bản để qua hiệp mà KHÔNG phá vỡ nhịp combo chính.
+      // Chỉ tăng vanduSkillIdx++ đúng 1 lần sau khi hiệp ra đòn thành công.
       let clicked = null;
-      let tried = 0;
-      while (tried < this.vanduSkillOrder.length) {
-        const skill = this.vanduSkillOrder[this.vanduSkillIdx % this.vanduSkillOrder.length];
-        this.vanduSkillIdx++;
-        tried++;
-        const btn = screen.buttons.find(x => this.vanduNormalize(x).includes(this.vanduNormalize(skill)));
-        if (!btn) continue;
-        const cd = this.vanduSkillCooldown(btn);
-        if (cd !== null && cd > 0) continue;
-        clicked = await this.vanduClickButton(skill);
-        break;
+      const targetIdx = this.vanduSkillIdx % this.vanduSkillOrder.length;
+      const targetSkill = this.vanduSkillOrder[targetIdx];
+      let btn = screen.buttons.find(x => this.vanduNormalize(x).includes(this.vanduNormalize(targetSkill)));
+      let cd = btn ? this.vanduSkillCooldown(btn) : null;
+
+      if (!btn || (cd !== null && cd > 0)) {
+        await this.delay(600);
+        const retryScreen = await this.vanduScanLatest();
+        if (retryScreen && retryScreen.buttons) {
+          const retryBtn = retryScreen.buttons.find(x => this.vanduNormalize(x).includes(this.vanduNormalize(targetSkill)));
+          if (retryBtn) {
+            const retryCd = this.vanduSkillCooldown(retryBtn);
+            if (retryCd === null || retryCd <= 0) {
+              btn = retryBtn;
+              cd = null;
+              screen = retryScreen;
+            }
+          }
+        }
       }
-      if (!clicked) {
+
+      if (btn && (cd === null || cd <= 0)) {
+        clicked = await this.vanduClickButton(targetSkill);
+      } else {
         const filler = screen.buttons.find(x => this.vanduNormalize(x).includes('kiem co ban'));
         if (filler) {
           clicked = await this.vanduClickButton('Kiếm Cơ Bản');
-          if (clicked) this.vanduLog('⚔️ Vân Du: tất cả skill chính đang hồi/thiếu nút, dùng Kiếm Cơ Bản');
+          if (clicked) this.vanduLog(`⚔️ Vân Du: hiệp ${roundCount + 1} - [${targetSkill}] đang hồi (${cd !== null ? cd : 'thiếu nút'}), dùng Kiếm Cơ Bản giữ nhịp combo`);
+        } else {
+          for (let s of this.vanduSkillOrder) {
+            if (s === targetSkill) continue;
+            const altBtn = screen.buttons.find(x => this.vanduNormalize(x).includes(this.vanduNormalize(s)));
+            if (altBtn && (this.vanduSkillCooldown(altBtn) === null || this.vanduSkillCooldown(altBtn) <= 0)) {
+              clicked = await this.vanduClickButton(s);
+              if (clicked) {
+                this.vanduLog(`⚔️ Vân Du: hiệp ${roundCount + 1} - [${targetSkill}] đang hồi, tạm dùng [${s}]`);
+                break;
+              }
+            }
+          }
         }
       }
+
       if (clicked) {
+        this.vanduSkillIdx++;
         roundCount++;
         const myHpStr = hp !== null ? `${hp}%` : '?';
         const enemyHpStr = enemy.hpPct !== null ? `${enemy.hpPct}%` : '?';
@@ -7122,9 +7279,10 @@ class NpcBot {
     }
     // V80: Kết quả kết thúc trận đấu
     if (battleEndedReason === 'defeat') {
+      this.vanduLives = Math.max(0, (this.vanduLives !== undefined ? this.vanduLives : 4) - 1);
       const myHpDesc = lastPlayerHp !== null ? `${lastPlayerHp}%` : '0%';
       const enemyHpDesc = lastEnemyHpPct !== null ? `${lastEnemyHpPct}%` : '?';
-      this.vanduLog(`💀 Vân Du: THẤT BẠI trước ${enemyName || 'Quái'} ở Tiết ${this.vanduNode || '?'}! (Tôi: ${myHpDesc} | Quái còn: ${enemyHpDesc} | Hiệp: ${roundCount}) | Đã click: ${this.vanduBuffClicks || 0} buff | Danh sách buff: ${this.vanduFormatBuffSummary()}`);
+      this.vanduLog(`💀 Vân Du: THẤT BẠI trước ${enemyName || 'Quái'} ở Tiết ${this.vanduNode || '?'}! (Tôi: ${myHpDesc} | Quái còn: ${enemyHpDesc} | Hiệp: ${roundCount} | Đạo tâm còn: ${this.vanduLives}/4) | Đã click: ${this.vanduBuffClicks || 0} buff | Danh sách buff: ${this.vanduFormatBuffSummary()}`);
     } else if (battleEndedReason === 'victory') {
       const myHpDesc = lastPlayerHp !== null ? `${lastPlayerHp}%` : '?';
       // V96: thắng mà không ghi buff thì không biết bộ buff nào thắng
@@ -7152,6 +7310,7 @@ class NpcBot {
     this.vanduLastBuffNode = 0; // V69: reset theo chuyến như vanduNode
     this.vanduBuffClicks = 0; // V80: reset đếm click buff theo chuyến
     this.vanduDanCount = 0;
+    this.vanduLives = 4; // V104: 3 mạng Đạo Tâm + 1 mạng Waifu cứu thế = 4 mạng
     this.vanduHpPct = null; // V71: reset theo chuyến như vanduNode
     this.vanduDanEmptyNode = null; // V71: reset theo chuyến như vanduNode
     this.vanduCircuit = null;
@@ -7175,6 +7334,9 @@ class NpcBot {
     let shopBought = false;
     let shopBiTich = false;
     let idleScans = 0;
+    let lastPickedBuffSig = '';
+    let lastPickedBuffBtn = '';
+    let staleBuffScans = 0;
 
     this.log(`\\n=== 🌿 VÂN DU: ${this.vanduCmd} ===`);
     await this.sendChat(this.vanduCmd);
@@ -7231,6 +7393,7 @@ class NpcBot {
           this.vanduLastBuffNode = 0; // V69: reset theo chuyến như vanduNode
           this.vanduBuffClicks = 0; // V80: reset đếm click buff theo chuyến
           this.vanduDanCount = 0;
+          this.vanduLives = 4; // V104: 3 mạng Đạo Tâm + 1 mạng Waifu cứu thế = 4 mạng
           this.vanduHpPct = null; // V71: reset theo chuyến như vanduNode
           this.vanduDanEmptyNode = null; // V71: reset theo chuyến như vanduNode
           this.vanduCircuit = null;
@@ -7246,6 +7409,9 @@ class NpcBot {
           shopBought = false;
           shopBiTich = false;
           idleScans = 0;
+          lastPickedBuffSig = '';
+          lastPickedBuffBtn = '';
+          staleBuffScans = 0;
           await this.sendChat(this.vanduCmd);
           await this.delay(this.rand(3000, 4000));
           if (!this.isRunning || this.runId !== runId) return;
@@ -7400,8 +7566,24 @@ class NpcBot {
       // thành mạch theo walkthrough là "THIÊN CƠ HOÀN MỸ!" (5/5).
       if (this.vanduIsCircuitComplete(text)) this.vanduCircuit = null;
 
-      // Cập nhật số lượng buff theo Tông Môn Lĩnh Vực từ mọi màn hình có ghi
-      if (/Tông\s*:?\s*\d+\s*\/\s*\d+/i.test(text)) {
+      // V104: Nhận diện bảng buff đã chọn nhưng Discord chưa kịp chuyển màn,
+      // tránh đồng bộ ngược số tông cũ hoặc bấm chọn buff thứ 2 / Đổi Vận trên cùng bảng cũ.
+      const isBuffScreenNow = /CHỌN 1 TRONG 4 BUFF|LĨNH NGỘ CHIẾN KHÍ/.test(text) || btnNorm.some(b => b.includes('doi van'));
+      const curBuffBtnsNow = isBuffScreenNow
+        ? buttons.filter(b => {
+            const n = this.vanduNormalize(b);
+            return !n.includes('doi van') && !n.includes('roi di') && this.vanduIsBuffCard(b);
+          })
+        : [];
+      const curBuffSigNow = (isBuffScreenNow && curBuffBtnsNow.length > 0) ? `${this.vanduNode}|${curBuffBtnsNow.join('|')}` : '';
+      if (!isBuffScreenNow && lastPickedBuffSig) {
+        lastPickedBuffSig = '';
+        lastPickedBuffBtn = '';
+        staleBuffScans = 0;
+      }
+
+      // Cập nhật số lượng buff theo Tông Môn Lĩnh Vực từ mọi màn hình có ghi (trừ màn buff cũ vừa bấm chọn xong chưa kịp đổi)
+      if (/Tông\s*:?\s*\d+\s*\/\s*\d+/i.test(text) && (!curBuffSigNow || curBuffSigNow !== lastPickedBuffSig)) {
         this.vanduSyncSectCounts(text);
       }
 
@@ -7471,9 +7653,14 @@ class NpcBot {
         const bagCount = this.vanduBuffBagCount(text);
         const trackedCount = Object.keys(this.vanduOwnedBuffs || {}).length;
         const bagFull = (bagCount !== null ? bagCount : trackedCount) >= 12;
-        if (bagFull && btnNorm.some(x => x.includes('khac kho phong ngu'))) {
+        const hasThuatDomain = (this.vanduSectCounts && this.vanduSectCounts['Thuật'] || 0) >= 5;
+        if ((bagFull || hasThuatDomain) && btnNorm.some(x => x.includes('khac kho phong ngu'))) {
           await this.vanduClickButton('Khắc Khổ Phòng Ngự');
-          this.vanduLog('⚡ Vân Du: túi Buff đã đủ 12, bấm Khắc Khổ Phòng Ngự thay vì Lôi Kiếp');
+          if (bagFull) {
+            this.vanduLog('⚡ Vân Du: túi Buff đã đủ 12, bấm Khắc Khổ Phòng Ngự thay vì Lôi Kiếp');
+          } else {
+            this.vanduLog(`⚡ Vân Du: đã đủ Đại Lĩnh Vực Thuật (${this.vanduSectCounts['Thuật']}/5), bấm Khắc Khổ Phòng Ngự (+10% Giảm Dame) thay vì Lôi Kiếp để tránh loãng túi buff`);
+          }
         } else {
           await this.vanduClickButton('Lôi Kiếp Tôi Thể');
           this.vanduLog('⚡ Vân Du: Lôi Kiếp Tôi Thể (đánh cược lấy buff)');
@@ -7644,20 +7831,35 @@ class NpcBot {
         continue;
       }
 
-      // Cổ Thạch Hòm: ưu tiên Phá Phong Ấn (50% thưởng / 50% bẫy quái),
-      // thay vì Rời đi như fallback v1. Chỉ khi không có Phá Phong Ấn mà có
-      // Vận Năng Linh Thước thì mới mở an toàn bằng Linh Thước.
-      if (btnNorm.some(x => x.includes('pha phong an'))) {
-        await this.vanduClickButton('Phá Phong Ấn');
-        this.vanduLog('📦 Vân Du: Cổ Thạch Hòm, chọn Phá Phong Ấn');
-        await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
-        continue;
-      }
+      // Cổ Thạch Hòm:
+      // V104:
+      // 1. Luôn ưu tiên dùng Vận Năng Linh Thước nếu có (mở an toàn 100%).
+      // 2. Nếu không có chìa khóa:
+      //    - Ở tầng sâu (Tiết >= 25) hoặc khi mạng Đạo Tâm thấp (<= 2 mạng):
+      //      Ưu tiên bấm "Rời đi" an toàn để tránh kích hoạt bẫy quái shock dame làm chết oan trước Boss 36.
+      //    - Ở tầng thấp (< 25) và mạng còn dồi dào (> 2 mạng): mới bấm "Phá Phong Ấn" để săn buff/thưởng.
       if (btnNorm.some(x => x.includes('van nang linh thuoc')) && /cổ thạch hòm|co thach hom|hòm/i.test(text)) {
         await this.vanduClickButton('Vận Năng Linh Thước');
         this.vanduLog('📦 Vân Du: Cổ Thạch Hòm, mở bằng Vận Năng Linh Thước');
         await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
         continue;
+      }
+      if (/cổ thạch hòm|co thach hom|hòm/i.test(text) || btnNorm.some(x => x.includes('pha phong an'))) {
+        const isHighNode = (this.vanduNode || 0) >= 25;
+        const isLowLives = (this.vanduLives !== undefined && this.vanduLives <= 2);
+        const hasRoiDi = btnNorm.some(x => x.includes('roi di'));
+        if ((isHighNode || isLowLives) && hasRoiDi) {
+          await this.vanduClickButton('Rời đi');
+          this.vanduLog(`📦 Vân Du: Cổ Thạch Hòm ở Tiết ${this.vanduNode || '?'} (mạng: ${this.vanduLives !== undefined ? this.vanduLives : '?'}/4) — chọn Rời đi an toàn, không mạo hiểm Phá Phong Ấn`);
+          await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
+          continue;
+        }
+        if (btnNorm.some(x => x.includes('pha phong an'))) {
+          await this.vanduClickButton('Phá Phong Ấn');
+          this.vanduLog(`📦 Vân Du: Cổ Thạch Hòm, chọn Phá Phong Ấn (Tiết ${this.vanduNode || '?'})`);
+          await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
+          continue;
+        }
       }
 
       // Đố Bát Quái: đọc thơ trong ngoặc kép, map hành -> cửa.
@@ -7729,6 +7931,14 @@ class NpcBot {
       // Chọn buff sau khi thắng.
       const isBuff = /CHỌN 1 TRONG 4 BUFF|LĨNH NGỘ CHIẾN KHÍ/.test(text) || btnNorm.some(b => b.includes('doi van'));
       if (isBuff) {
+        if (curBuffSigNow && curBuffSigNow === lastPickedBuffSig) {
+          staleBuffScans++;
+          if (staleBuffScans >= 2 && lastPickedBuffBtn) {
+            await this.vanduClickButton(lastPickedBuffBtn);
+          }
+          await this.delay(Math.max(1500, this.buttonDelayMs || 2000));
+          continue;
+        }
         this.vanduSyncSectCounts(text);
         let rerolls = 0;
         let rerollBlocked = false;
@@ -7737,11 +7947,29 @@ class NpcBot {
         while (this.isRunning && this.runId === runId && !picked) {
           const cur = await this.vanduScanLatest();
           if (!cur) break;
-          this.vanduSyncSectCounts(cur.text || '');
           const buffButtons = (cur.buttons || []).filter(b => {
             const n = this.vanduNormalize(b);
             return !n.includes('doi van') && !n.includes('roi di') && this.vanduIsBuffCard(b);
           });
+          const loopSig = buffButtons.length > 0 ? `${this.vanduNode}|${buffButtons.join('|')}` : '';
+          if (loopSig && loopSig === lastPickedBuffSig) break;
+          this.vanduSyncSectCounts(cur.text || '');
+          // V104: Đồng bộ trạng thái thẻ trong túi theo nút thật trên bảng buff:
+          // - Nút ⬆️T2..T5 cho biết thẻ đã có trong túi (kể cả thẻ rơi từ Lôi Kiếp / Cổ Thạch Hòm / Bí Tịch).
+          // - Nút 🟢/🔵/🟣/🟡[Tông] 1★ cho biết thẻ hiện chưa có trong túi (hoặc thẻ Lv1 cũ đã bị đào thải khi đầy túi 12/12).
+          for (const b of buffButtons) {
+            const upStars = this.vanduButtonUpgradeStars(b);
+            const c = this.vanduParseBuffCard(b);
+            const k = this.vanduCanonicalBuffKey(c.name, this.vanduOwnedBuffs);
+            if (!k) continue;
+            if (upStars > 0) {
+              if (!this.vanduOwnedBuffs[k] || this.vanduOwnedBuffs[k] < upStars) {
+                this.vanduOwnedBuffs[k] = upStars;
+              }
+            } else if (this.vanduIsExplicitNew1StarBtn(b) && this.vanduOwnedBuffs[k]) {
+              delete this.vanduOwnedBuffs[k];
+            }
+          }
           const counterSect = this.vanduCounterSectFromText(cur.text || '');
           // V14: độ hiếm đọc từ mô tả bảng (vanduBuffRarities), vì nút
           // không ghi độ hiếm. Không gán được thì cardRarities là null và
@@ -7829,9 +8057,14 @@ class NpcBot {
             // làm phình túi và cộng sai số lượng thẻ từng tông.
             const ownedKey = this.vanduCanonicalBuffKey(card.name, this.vanduOwnedBuffs);
             const prevOwned = (ownedKey && this.vanduOwnedBuffs[ownedKey]) || 0;
-            const isNewBuff = !prevOwned;
-            if (ownedKey) this.vanduOwnedBuffs[ownedKey] = prevOwned + 1;
-            if (isNewBuff && card.sect) this.vanduSectCounts[card.sect] = (this.vanduSectCounts[card.sect] || 0) + 1;
+            const btnUpgradeStars = this.vanduButtonUpgradeStars(choice.buttonText);
+            const isExplicitNew1 = this.vanduIsExplicitNew1StarBtn(choice.buttonText);
+            const effectivePrev = isExplicitNew1 ? 0 : Math.max(prevOwned, btnUpgradeStars);
+            const isNewBuff = effectivePrev === 0;
+            if (ownedKey) this.vanduOwnedBuffs[ownedKey] = effectivePrev + 1;
+            const cardIdx = buffButtons.indexOf(choice.buttonText);
+            const resolvedSect = (cardSects && cardIdx >= 0 && cardSects[cardIdx]) || card.sect;
+            if (isNewBuff && resolvedSect) this.vanduSectCounts[resolvedSect] = (this.vanduSectCounts[resolvedSect] || 0) + 1;
             if (isNewBuff && choice.reason === 'counter') this.vanduCounterPicks = (this.vanduCounterPicks || 0) + 1;
             this.vanduBuffClicks = (this.vanduBuffClicks || 0) + 1;
             const newLevel = (ownedKey && this.vanduOwnedBuffs[ownedKey]) || 1;
@@ -7842,6 +8075,9 @@ class NpcBot {
             // V69: ghi Tiết lúc chọn buff — trận sau bảng buff ở Tiết
             // 11/23/35 là boss 12/24/36 (boss chen vào không qua màn cửa).
             this.vanduLastBuffNode = this.vanduNode;
+            lastPickedBuffSig = loopSig;
+            lastPickedBuffBtn = choice.buttonText;
+            staleBuffScans = 0;
             picked = true;
           } else {
             break;

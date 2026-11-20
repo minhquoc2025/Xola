@@ -128,6 +128,7 @@ function setMode(mode) {
   const configUpgrade = document.getElementById('config-upgrade');
   if (configUpgrade) configUpgrade.classList.toggle('active', mode === 'spam');
   updateBotButton();
+  updateStats();
 }
 
 // === NPC MODE ===
@@ -706,6 +707,9 @@ function updateStatusRow(status) {
   const hpSub = el('status-hp-sub');
   const danValue = el('status-dan-value');
   const danSub = el('status-dan-sub');
+  const livesValue = el('status-lives-value');
+  const buffCountValue = el('status-buff-count-value');
+  const buffSummarySub = el('status-buff-summary-sub');
   const markers = [12, 24, 36].map((n) => el('boss-marker-' + n));
   const showMarkers = (on) => markers.forEach((m) => { if (m) m.style.display = on ? '' : 'none'; });
   const running = status.isRunning ? true : false;
@@ -728,29 +732,54 @@ function updateStatusRow(status) {
     hpFill.className = 'hp-fill ' + (hp >= 50 ? 'high' : hp >= 25 ? 'mid' : 'low');
     hpSub.innerHTML = dot + ' · ' + thresholdText;
   };
-  const setDan = (dan, emptyNode, nextBoss) => {
-    if (!danValue || !danSub) return;
+
+  const setDanAndLives = (dan, emptyNode, lives, maxLives) => {
+    if (!danValue || !danSub || !livesValue) return;
     if (dan === null || dan === undefined) {
       danValue.textContent = '—';
       danValue.style.color = '';
       danSub.textContent = '—';
       danSub.className = 'status-sub';
+      livesValue.textContent = '—';
+      livesValue.style.color = '';
       return;
     }
     danValue.textContent = dan + '/3';
     danValue.style.color = dan === 0 ? '#ff2d78' : '#39ff14';
     if (dan === 0) {
       const from = emptyNode ? ' từ Tiết ' + emptyNode : '';
-      const boss = nextBoss ? ' trước Boss ' + nextBoss : '';
-      danSub.textContent = '⚠ HẾT ĐAN' + from + ' — không còn hồi phục' + boss;
+      danSub.textContent = '⚠ HẾT ĐAN' + from;
       danSub.className = 'status-sub warn';
     } else {
-      danSub.textContent = 'Còn ' + dan + '/3 — sẵn sàng hồi phục';
+      danSub.textContent = 'Còn ' + dan + '/3 đan';
       danSub.className = 'status-sub ok';
     }
+
+    const curLives = lives !== null && lives !== undefined ? lives : 4;
+    const maxL = maxLives || 4;
+    livesValue.textContent = curLives + '/' + maxL;
+    livesValue.style.color = curLives >= 3 ? '#39ff14' : curLives === 2 ? '#ffb86c' : '#ff2d78';
   };
 
-  if (status.mode === 'vandu') {
+  const setBuffStats = (buffCount, buffClicks, sectSummary) => {
+    if (!buffCountValue || !buffSummarySub) return;
+    if (buffCount === null || buffCount === undefined) {
+      buffCountValue.textContent = '—';
+      buffCountValue.style.color = '';
+      buffSummarySub.textContent = '—';
+      return;
+    }
+    const count = buffCount || 0;
+    const clicks = buffClicks || 0;
+    buffCountValue.innerHTML = count + ' thẻ <span style="font-size:11px;font-weight:normal;color:#aaa;">(' + clicks + '★)</span>';
+    buffCountValue.style.color = count > 0 ? '#39ff14' : '#eee';
+    buffSummarySub.textContent = sectSummary || (count > 0 ? count + ' thẻ buff' : 'Chưa có buff');
+    buffSummarySub.className = 'status-sub ok';
+  };
+
+  const isVandu = status.mode === 'vandu' || (!status.isRunning && currentMode === 'vandu');
+
+  if (isVandu) {
     const node = status.vanduNode || 0;
     const trips = status.vanduTripCount || 0;
     const limit = status.vanduTotalTrips || 0;
@@ -766,7 +795,8 @@ function updateStatusRow(status) {
       : 'Đã qua Boss 36 — chờ Hoàn Tất Nhận Thưởng';
     const inBossZone = node === 11 || node === 23 || node === 35 || node === 12 || node === 24 || node === 36;
     setHp(status.vanduHpPct, inBossZone ? 'Ngưỡng hồi: <50% (boss)' : 'Ngưỡng hồi: <20% (thường)');
-    setDan(status.vanduDanCount || 0, status.vanduDanEmptyNode, nextBoss);
+    setDanAndLives(status.vanduDanCount !== undefined ? status.vanduDanCount : 0, status.vanduDanEmptyNode, status.vanduLives !== undefined ? status.vanduLives : 4, status.vanduMaxLives || 4);
+    setBuffStats(status.vanduBuffCount !== undefined ? status.vanduBuffCount : 0, status.vanduBuffClicks || 0, status.vanduSectSummary || '');
   } else if (status.mode === 'bicanh') {
     // v90 — Bicanh quét số tầng lên thẻ trạng thái (Nguyen: "cho quét số
     // tầng đi, ví dụ hiện tại đang là 542/600"): giá trị "Tầng N / 600",
@@ -780,7 +810,8 @@ function updateStatusRow(status) {
     showMarkers(false);
     progressSub.textContent = running ? 'Đang spam skill...' : 'Đã dừng ở tầng ' + floor;
     setHp(null, 'Không theo dõi HP ở Bicanh');
-    setDan(null);
+    setDanAndLives(null);
+    setBuffStats(null);
   } else if (status.mode === 'luanhoi') {
     const cur = status.lastLuanhoiTarget != null ? status.lastLuanhoiTarget : 0;
     const tgt = status.luanhoiTarget || 0;
@@ -792,7 +823,8 @@ function updateStatusRow(status) {
     showMarkers(false);
     progressSub.textContent = totalRuns > 0 ? 'Đã đi: ' + runs + ' / ' + totalRuns + ' lần' : 'Mục tiêu: Tầng ' + tgt;
     setHp(null, 'Không theo dõi HP ở Luân Hồi');
-    setDan(null);
+    setDanAndLives(null);
+    setBuffStats(null);
   } else {
     if (progressLabel) progressLabel.textContent = 'Trạng thái';
     progressValue.textContent = running ? 'Đang chạy' : 'Đã dừng';
@@ -802,7 +834,8 @@ function updateStatusRow(status) {
       ? 'Tầng ' + (status.diangucFloor || 0) + ', bước ' + (status.diangucStep || 0)
       : status.mode === 'bicanh' ? 'Đang spam skill...' : '';
     setHp(null, 'Không theo dõi HP ở mode này');
-    setDan(null);
+    setDanAndLives(null);
+    setBuffStats(null);
   }
 }
 

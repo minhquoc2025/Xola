@@ -859,10 +859,30 @@ body {
       </div>
       <div class="status-sub" id="status-hp-sub">—</div>
     </div>
-    <div class="status-card">
-      <div class="status-label">Cửu Chuyển Hoàn Hồn Đan</div>
-      <div class="status-value" id="status-dan-value">—</div>
-      <div class="status-sub" id="status-dan-sub">—</div>
+    <div class="status-card" id="status-card-resource">
+      <div style="display:flex;gap:8px;justify-content:space-between;height:100%;">
+        <!-- Cột 1: Cửu Chuyển Đan và Đạo Tâm (1 col) -->
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;">
+          <div class="status-label" style="font-size:10px;">ĐAN & ĐẠO TÂM</div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:1px;">
+            <span style="font-size:11px;color:#aaa;">💊 Đan:</span>
+            <span id="status-dan-value" style="font-weight:700;font-size:12px;color:#39ff14;">—</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-size:11px;color:#aaa;">❤️ Mạng:</span>
+            <span id="status-lives-value" style="font-weight:700;font-size:12px;color:#39ff14;">—</span>
+          </div>
+          <div class="status-sub" id="status-dan-sub" style="margin-top:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10px;">—</div>
+        </div>
+        <!-- Vách ngăn dọc -->
+        <div style="width:1px;background:rgba(123,47,255,.3);margin:0 2px;"></div>
+        <!-- Cột 2: Thống Kê Buff -->
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;">
+          <div class="status-label" style="font-size:10px;">THỐNG KÊ BUFF</div>
+          <div class="status-value" id="status-buff-count-value" style="font-size:14px;margin-top:2px;">—</div>
+          <div class="status-sub ok" id="status-buff-summary-sub" style="margin-top:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10px;">—</div>
+        </div>
+      </div>
     </div>
   </div>
   <div id="control-row">

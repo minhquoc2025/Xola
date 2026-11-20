@@ -718,16 +718,27 @@ const g1Fallback = botV103.vanduChooseBuff(
 );
 eq(g1Fallback.buttonText, '[Kiếm] Vạn Kiếm Quy Tông [Kiếm Tông - Vàng (Thần Thoại)]', 'V103 (Gợi ý 1): Het luot doi -> nhat Kiem Vang lam du phong');
 
-// 1.3: Tầng 5, Thuật = 2. Bảng không có Thuật mới nhưng CÓ thẻ trùng (dup) -> ăn dup ("Nếu có dup thì vẫn ăn dup")
-const g1Dup = botV103.vanduChooseBuff(
+// 1.3: Tầng 5, Thuật = 2 (chưa đủ 5). Bảng không có Thuật mới nhưng có dup:
+// - V104: Còn lượt đổi -> PHẢI Reroll để săn Thuật, chưa ăn dup
+const g1RerollBeforeDup = botV103.vanduChooseBuff(
   ['[Kiếm] Vạn Kiếm Quy Tông [Kiếm Tông - Vàng (Thần Thoại)]', '[Thuật] Tam Muội Chân Hỏa [Thuật Tông - Lục]'],
   { Thuật: 2 },
   { 'Tam Muội Chân': 1 },
   true,
   'Kiếm'
 );
-eq(g1Dup.reason, 'duplicate', 'V103 (Gợi ý 1): Bang khong co Thuat moi nhung co dup -> an dup nang sao');
-eq(g1Dup.buttonText, '[Thuật] Tam Muội Chân Hỏa [Thuật Tông - Lục]', 'V103 (Gợi ý 1): An dup Tam Muoi Chan Hoa');
+eq(g1RerollBeforeDup.action, 'reroll', 'V104: Chua du 5 Thuat o Tiet 1-12 ma con luot doi -> phai Reroll tim Thuat truoc khi dup');
+
+// - V104: Hết lượt đổi -> lúc này mới ăn dup nâng sao
+const g1DupAfterReroll = botV103.vanduChooseBuff(
+  ['[Kiếm] Vạn Kiếm Quy Tông [Kiếm Tông - Vàng (Thần Thoại)]', '[Thuật] Tam Muội Chân Hỏa [Thuật Tông - Lục]'],
+  { Thuật: 2 },
+  { 'Tam Muội Chân': 1 },
+  false,
+  'Kiếm'
+);
+eq(g1DupAfterReroll.reason, 'duplicate', 'V104: Het luot doi -> moi an dup Tam Muoi Chan');
+eq(g1DupAfterReroll.buttonText, '[Thuật] Tam Muội Chân Hỏa [Thuật Tông - Lục]', 'V104: An dup Tam Muoi Chan Hoa khi het luot doi');
 
 // --- Test Gợi ý 2 ---
 // 2.1: Tầng 5 (1-12) nhưng đã đủ 5 Thuật -> kích hoạt sớm Stage 2: gom 5 Khí (khiQuota = 5)
@@ -742,15 +753,25 @@ const g2Khi = botV103.vanduChooseBuff(
 eq(g2Khi.reason, 'khi', 'V103 (Gợi ý 2): Da du 5 Thuat o tang 5 -> bat Stage 2 gom Khi truoc counter Kiem');
 eq(g2Khi.buttonText, '[Khí] Càn Khôn Hộ Thể [Khí Tông - Lam]', 'V103 (Gợi ý 2): Chon Can Khon Ho The');
 
-// 2.2: Tầng 5, đã đủ 5 Thuật -> ưu tiên dup cho thẻ đã có nếu không có vàng trong chỉ tiêu
-const g2Dup = botV103.vanduChooseBuff(
-  ['[Khí] Kim Cang Bất Hoại [Khí Tông - Lam]', '[Thuật] Tam Muội Chân Hỏa [Thuật Tông - Lục]'],
+// 2.2: V104: Tầng 5, đã đủ 5 Thuật nhưng Khí < 5 -> ưu tiên gom Khí trước khi dup
+const g2KhiBeforeDup = botV103.vanduChooseBuff(
+  ['[Khí] Phản Chấn Cương [Khí Tông - Lam]', '[Thuật] Tam Muội Chân Hỏa [Thuật Tông - Lục]'],
   { Thuật: 5, Khí: 1 },
   { 'Tam Muội Chân': 1 },
   false,
   'Kiếm'
 );
-eq(g2Dup.reason, 'duplicate', 'V103 (Gợi ý 2): Da du 5 Thuat -> uu tien dup nang sao');
+eq(g2KhiBeforeDup.reason, 'khi', 'V104: Da du 5 Thuat nhung Khi < 5 -> uu tien gom Khi truoc dup');
+
+// Khi đã đủ 5 Khí (hoặc bảng không có Khí mới) -> ưu tiên dup nâng sao
+const g2Dup = botV103.vanduChooseBuff(
+  ['[Khí] Phản Chấn Cương [Khí Tông - Lam]', '[Thuật] Tam Muội Chân Hỏa [Thuật Tông - Lục]'],
+  { Thuật: 5, Khí: 5 },
+  { 'Tam Muội Chân': 1 },
+  false,
+  'Kiếm'
+);
+eq(g2Dup.reason, 'duplicate', 'V104: Da du 5 Thuat va 5 Khi -> uu tien dup nang sao');
 
 // --- Test Gợi ý 3 ---
 // 3.1: Ưu tiên Core Buff (Tam Muội Chân Hỏa - Lục) trước thẻ non-core độ hiếm cao hơn (Tật Phong Kiếm Vũ - Tím)
