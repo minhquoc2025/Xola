@@ -105,6 +105,40 @@ function eq(actual, expected, msg) {
   eq(bot.vanduShopAction(3, false, false), 'roi-di', 'Da du 5 Thuat, 3 dan -> roi di ngay, khong mua Bi Tich tranh thua Thuat/loang tui');
   eq(bot.vanduShopAction(2, false, false), 'mua-cuu-chuyen', 'Da du 5 Thuat nhung dan < 3 -> van mua Cuu Chuyen');
 
+  // 8. Test trọng số dupPriority (vandu2011-2.txt): Thẻ Vàng Thần Thoại & hệ khắc chế thắng thẻ Lam/Lục
+  // 8.1: Tiết 20 (dòng 288): Thần Ma Trụ Thế (Khí:Vàng ★1) thắng Phá Pháp Phù Chú (Thuật:Lam ★2)
+  bot.vanduNode = 20;
+  const pick20_v2 = bot.vanduChooseBuff(
+    ['⬆️T2 🔆 ★★ Thần Ma Trụ Thế', '⬆️T3 🔱 ★★★ Phá Pháp Phù C', '⬆️T2 ❄️ ★★ Băng Phách Hàn', '🟣[Vận] 📜 Thiên Cơ Đồ Lục'],
+    { Thuật: 6, Vận: 1, Khí: 1, Kiếm: 2 },
+    { 'Thần Ma Trụ Thế': 1, 'Phá Pháp Phù C': 2, 'Băng Phách Hà': 1 },
+    true,
+    'Kiếm'
+  );
+  eq(pick20_v2.buttonText, '⬆️T2 🔆 ★★ Thần Ma Trụ Thế', 'Tiet 20 (vandu2011-2): Nang sao Than Ma Tru The (Khi:Vang) thay vi Pha Phap Phu Chu (Thuat:Lam)');
+
+  // 8.2: Tiết 21 (dòng 225): Vạn Kiếm Quy Tông (Kiếm:Vàng ★1, khắc chế Kiếm) thắng Dẫn Lôi Thuật (Thuật:Lục ★2)
+  bot.vanduNode = 21;
+  const pick21_v2 = bot.vanduChooseBuff(
+    ['⬆️T3 ⚡ ★★★ Dẫn Lôi Thuật', '⬆️T2 👑 ★★ Vạn Kiếm Quy Tô', '🟢[Kiếm] 🗡️ Bạt Kiếm Thuật', '⬆️T2 🔆 ★★ Thần Ma Trụ Thế'],
+    { Thuật: 5, Vận: 1, Khí: 1, Kiếm: 1 },
+    { 'Dẫn Lôi Thuật': 2, 'Vạn Kiếm Quy Tô': 1, 'Thần Ma Trụ Thế': 1 },
+    true,
+    'Kiếm'
+  );
+  eq(pick21_v2.buttonText, '⬆️T2 👑 ★★ Vạn Kiếm Quy Tô', 'Tiet 21 (vandu2011-2): Nang sao Van Kiem Quy Tong (Kiem:Vang, khac che) thay vi Dan Loi Thuat (Thuat:Luc)');
+
+  // 8.3: Tiết 23 (dòng 321): Vạn Kiếm Quy Tông (Kiếm:Vàng ★1) thắng Tụ Khí Hoàn Nguyên (Thuật:Lam ★1)
+  bot.vanduNode = 23;
+  const pick23_v2 = bot.vanduChooseBuff(
+    ['⬆️T2 👑 ★★ Vạn Kiếm Quy Tô', '🟡[Thuật] 👑 Thái Ất Thần L', '🟢[Kiếm] 🗡️ Bạt Kiếm Thuật', '⬆️T2 ⏳ ★★ Tụ Khí Hoàn Ngu'],
+    { Thuật: 6, Vận: 1, Khí: 2, Kiếm: 3 },
+    { 'Vạn Kiếm Quy Tô': 1, 'Tụ Khí Hoàn Ng': 1 },
+    true,
+    'Kiếm'
+  );
+  eq(pick23_v2.buttonText, '⬆️T2 👑 ★★ Vạn Kiếm Quy Tô', 'Tiet 23 (vandu2011-2): Nang sao Van Kiem Quy Tong (Kiem:Vang) thay vi Tu Khi Hoan Nguyen (Thuat:Lam)');
+
   console.log('vandu-v104 tests passed 100%!');
 })().catch(e => {
   console.error(e);

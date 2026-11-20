@@ -5979,30 +5979,38 @@ class NpcBot {
 
     // V103 & V104: Ưu tiên nâng sao cho thẻ Chủ Lực (Core Buff):
     // Dùng vanduNormalize (bỏ dấu tiếng Việt) và khớp tiền tố cho tên nút bị cắt ngắn trên Discord.
-    // 1. Nhóm sát thương dứt điểm: Tam Muội Chân Hỏa, Dẫn Lôi Thuật, Cửu Thiên Lôi Kiếp, Tuyệt Mệnh Trảm, Nhất Kiếm Trảm.
-    // 2. Nhóm sinh tồn / phòng ngự / all-stat: Càn Khôn Hộ Thể, Kim Cang Bất Hoại, Kinh Thiên Phản, Đại Đạo Đồng Quy, Phản Chấn Cương.
+    // 1. Toàn bộ thẻ Vàng Thần Thoại (rarity === 4): Đại Đạo Đồng Quy, Kim Cang Bất Hoại, Thần Ma Trụ Thế,
+    //    Thái Ất Thần Lô, Ngũ Hành Nghịch Chuyển, Vạn Kiếm Quy Tông, Nhất Kiếm Trảm, Ma Tôn Giáng Thế, Huyết Hải Bất Diệt.
+    // 2. Nhóm sát thương chủ lực: Tam Muội Chân Hỏa, Dẫn Lôi Thuật, Cửu Thiên Lôi Kiếp, Tuyệt Mệnh Trảm.
+    // 3. Nhóm phòng ngự / sinh tồn chủ lực: Càn Khôn Hộ Thể, Kinh Thiên Phản Chấn, Phản Chấn Cương Khí.
     const isCoreBuff = c => {
       if (!c || !c.name) return false;
+      if (c.rarity === 4) return true;
       const n = this.vanduNormalize(this.vanduNormalizeBuffName(c.name));
       if (n.includes('tam muoi chan') || n.includes('dan loi') || n.includes('cuu thien loi') ||
-          n.includes('tuyet menh tram') || n.includes('nhat kiem tram')) {
+          n.includes('tuyet menh tram') || n.includes('nhat kiem tram') || n.includes('van kiem quy t') ||
+          n.includes('thai at than l') || n.includes('ngu hanh nghic') || n.includes('ma ton giang th') ||
+          n.includes('huyet hai bat d')) {
         return true;
       }
       if (n.includes('can khon ho') || n.includes('kim cang bat h') || n.includes('kinh thien phan') ||
-          n.includes('dai dao dong q') || n.includes('phan chan cuong')) {
+          n.includes('dai dao dong q') || n.includes('phan chan cuong') || n.includes('than ma tru the')) {
         return true;
       }
       return false;
     };
+
+    const rarityDupScore = r => (r === 4 ? 35 : r === 3 ? 15 : r === 2 ? 6 : r === 1 ? 2 : 0);
 
     const dupPriority = c => {
       let score = 0;
       if (isCoreBuff(c)) score += 100;
       if (c.sect === 'Vận') score += 30; // Đại Đạo Đồng Quy (Vận Mệnh)
       else if (c.sect === 'Thuật') score += 20; // Thuật tông (hệ sát thương chính)
-      else if (c.sect === 'Khí') score += 15; // Khí tông (hệ phòng ngự chính)
-      score += (c.rarity || 0) * 2;
-      score += (cardOwnedCount(c) || 0) * 3; // Ưu tiên dồn sao lên ★4, ★5
+      else if (c.sect === 'Khí') score += 18; // Khí tông (hệ phòng ngự chính)
+      if (c.sect && counterSect && c.sect === counterSect) score += 20; // Ưu tiên nâng sao thẻ thuộc hệ khắc chế quái/Boss
+      score += rarityDupScore(c.rarity || 0);
+      score += (cardOwnedCount(c) || 0) * 6; // Ưu tiên dồn sao lên ★4, ★5
       return score;
     };
 
