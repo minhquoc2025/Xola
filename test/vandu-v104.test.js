@@ -139,6 +139,35 @@ function eq(actual, expected, msg) {
   );
   eq(pick23_v2.buttonText, '⬆️T2 👑 ★★ Vạn Kiếm Quy Tô', 'Tiet 23 (vandu2011-2): Nang sao Van Kiem Quy Tong (Kiem:Vang) thay vi Tu Khi Hoan Nguyen (Thuat:Lam)');
 
+  // 9. Test vanduBattleLoop 600ms retry branch không bị crash TypeError: Assignment to constant variable (`screen = retryScreen`)
+  {
+    const b2 = new NpcBot({ executeJavaScript() {} }, 2);
+    b2.updateConfig({ mode: 'vandu', vanduCmd: '!vandu' });
+    b2.vanduSkillOrder = ['Lôi Đình Vạn Quân', 'Hư Không Đại Na Di', 'Băng Phong'];
+    b2.isRunning = true;
+    b2.runId = 99;
+    b2.delay = async () => {};
+    b2.dismissEphemeralMessages = async () => {};
+    const clickedSkills = [];
+    b2.vanduClickButton = async (name) => { clickedSkills.push(name); return name; };
+    let scanCall = 0;
+    const screens = [
+      // Hiệp 1: Lôi Đình Vạn Quân sẵn sàng
+      { text: 'TRẠNG THÁI CHIẾN TRƯỜNG\n❤️ Tôi: 100/100 (100%)\n[Cuồng Bạo] Băng Tuyết Dạ Báo: 100/100 (100%)', buttons: ['⚡ Lôi Đình Vạn Quân', '🌀 Hư Không Đại Na Di', '🌊 Băng Phong'] },
+      // Hiệp 2: Hư Không Đại Na Di sẵn sàng
+      { text: 'TRẠNG THÁI CHIẾN TRƯỜNG\n❤️ Tôi: 100/100 (100%)\n[Cuồng Bạo] Băng Tuyết Dạ Báo: 68/100 (68%)', buttons: ['⚡ Lôi Đình Vạn Quân (2)', '🌀 Hư Không Đại Na Di', '🌊 Băng Phong'] },
+      // Hiệp 3 - lần quét đầu: Băng Phong đang lag/cooldown (1), kích hoạt retry 600ms
+      { text: 'TRẠNG THÁI CHIẾN TRƯỜNG\n❤️ Tôi: 100/100 (100%)\n[Cuồng Bạo] Băng Tuyết Dạ Báo: 40/100 (40%)', buttons: ['⚡ Lôi Đình Vạn Quân (2)', '🌀 Hư Không Đại Na Di (2)', '🌊 Băng Phong (1)'] },
+      // Hiệp 3 - lần quét retry sau 600ms: Băng Phong hết cooldown -> chạy vào `screen = retryScreen`
+      { text: 'TRẠNG THÁI CHIẾN TRƯỜNG\n❤️ Tôi: 100/100 (100%)\n[Cuồng Bạo] Băng Tuyết Dạ Báo: 40/100 (40%)', buttons: ['⚡ Lôi Đình Vạn Quân (1)', '🌀 Hư Không Đại Na Di (1)', '🌊 Băng Phong'] },
+      // Kết thúc trận (màn chọn buff)
+      { text: 'Tông Môn Lĩnh Vực', buttons: ['🟡[Khí] 👑 Kim Cang Bất Hoạ'] }
+    ];
+    b2.vanduScanLatest = async () => screens[Math.min(scanCall++, screens.length - 1)];
+    await b2.vanduBattleLoop(99);
+    eq(clickedSkills, ['Lôi Đình Vạn Quân', 'Hư Không Đại Na Di', 'Băng Phong'], 'vanduBattleLoop retry 600ms khong crash va click dung Bang Phong o hiep 3');
+  }
+
   console.log('vandu-v104 tests passed 100%!');
 })().catch(e => {
   console.error(e);

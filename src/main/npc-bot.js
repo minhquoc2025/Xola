@@ -7126,7 +7126,7 @@ class NpcBot {
         return;
       }
       await this.dismissEphemeralMessages();
-      const screen = await this.vanduScanLatest();
+      let screen = await this.vanduScanLatest();
       if (!screen) { await this.delay(2000); continue; }
       const norm = this.vanduNormalize(screen.text);
       const btnNorm = screen.buttons.map(b => this.vanduNormalize(b));
