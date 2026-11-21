@@ -209,5 +209,62 @@ function battleBot(screens, node, lastBuffNode) {
     if (!start.includes('👑 BOSS')) throw new Error('vuccanh: man co chu Vuc Canh phai gan BOSS, thực tế: ' + start);
   }
 
+  // 12. V106: Boss 24 khi mạng > 1 (ví dụ 4/4 hoặc 2/4) -> BẬT CHẾ ĐỘ CỐ CHẾT:
+  // - Chỉ click 'Kiếm Cơ Bản', KHÔNG click skill combo (Kim Đan Phá Sát, Hư Không Đại Na Di)
+  // - KHÔNG dùng đan 'Cửu Chuyển Hoàn Hồn' dù máu tụt xuống 30% (< 65%)
+  // - Cập nhật vanduNode lên 24
+  {
+    const clickedBtns = [];
+    const { bot, logs } = battleBot([
+      { msgId: 'b24-1', text: battleText('176.583.809/588.612.697', '[Cương Thể] Thiết Mao Hắc Lang', '900.000.000/900.000.000').replace('HP (100%)', 'HP (30%)'), buttons: BATTLE_BTNS },
+      { msgId: 'b24-2', text: battleText('100.000.000/588.612.697', '[Cương Thể] Thiết Mao Hắc Lang', '880.000.000/900.000.000').replace('HP (100%)', 'HP (17%)'), buttons: BATTLE_BTNS },
+      { msgId: 'loss', text: LOSS_BOARD_TEXT, buttons: LOSS_BOARD_BTNS },
+    ], 23, 20);
+    bot.vanduLives = 3; // mạng > 1
+    bot.vanduClickButton = async (needle) => { clickedBtns.push(needle); return needle; };
+    await bot.vanduBattleLoop(1);
+    eq(bot.vanduNode, 24, 'boss24 die-mode: vanduNode phai cap nhat len 24');
+    eq(clickedBtns, ['Kiếm Cơ Bản', 'Kiếm Cơ Bản'], 'boss24 die-mode (lives=3): chi duoc click Kiem Co Ban, khong dung dan va khong dung combo');
+    has(logs, 'BẬT CHẾ ĐỘ CỐ CHẾT', 'boss24 die-mode: phai log thong bao bat che do co chet');
+    lacks(logs, 'hồi máu bằng Cửu Chuyển', 'boss24 die-mode: khong duoc hoi mau bang Cuu Chuyen');
+    eq(bot.vanduLives, 2, 'boss24 die-mode: sau khi thua mang giam tu 3 xuong 2');
+  }
+
+  // 13. V106: Boss 24 khi mạng == 1 (mạng cuối cùng) -> ĐÁNH THẬT:
+  // - Hồi máu bằng Cửu Chuyển khi HP < 65%
+  // - Đánh đúng combo cấu hình ('Kim Đan Phá Sát', 'Hư Không Đại Na Di')
+  {
+    const clickedBtns = [];
+    const { bot, logs } = battleBot([
+      // Hiệp 1: HP 30% (< 65%) -> phải ăn đan Cửu Chuyển trước
+      { msgId: 'b24-real-1', text: battleText('176.583.809/588.612.697', '[Cương Thể] Thiết Mao Hắc Lang', '900.000.000/900.000.000').replace('HP (100%)', 'HP (30%)'), buttons: BATTLE_BTNS },
+      // Sau khi ăn đan, HP 80% -> đánh skill 1 trong combo (Kim Đan Phá Sát)
+      { msgId: 'b24-real-2', text: battleText('470.890.157/588.612.697', '[Cương Thể] Thiết Mao Hắc Lang', '900.000.000/900.000.000').replace('HP (100%)', 'HP (80%)'), buttons: ['Kiếm Cơ Bản', 'Kim Đan Phá Sát', 'Hư Không Đại Na Di'] },
+      { msgId: 'door', text: DOOR_TEXT, buttons: DOOR_BTNS },
+    ], 23, 20);
+    bot.vanduLives = 1; // mạng cuối cùng
+    bot.vanduClickButton = async (needle) => { clickedBtns.push(needle); return needle; };
+    await bot.vanduBattleLoop(1);
+    eq(clickedBtns, ['Cửu Chuyển Hoàn Hồn', 'Kim Đan Phá Sát'], 'boss24 real-mode (lives=1): phai hoi mau Cuu Chuyen va danh skill combo');
+    has(logs, 'ĐÁNH THẬT theo combo cấu hình', 'boss24 real-mode: phai log danh that');
+    lacks(logs, 'BẬT CHẾ ĐỘ CỐ CHẾT', 'boss24 real-mode: khong duoc bat che do co chet khi mang = 1');
+  }
+
+  // 14. V106: Boss 12 và Boss 36 KHÔNG bật chế độ cố chết dù mạng > 1 (ví dụ 4/4)
+  {
+    for (const node of [11, 35]) {
+      const clickedBtns = [];
+      const { bot, logs } = battleBot([
+        { msgId: 'b-other', text: battleText('588.612.697/588.612.697', '[Cương Thể] Thiết Mao Hắc Lang', '900.000.000/900.000.000'), buttons: BATTLE_BTNS },
+        { msgId: 'door', text: DOOR_TEXT, buttons: DOOR_BTNS },
+      ], node, node - 1);
+      bot.vanduLives = 4;
+      bot.vanduClickButton = async (needle) => { clickedBtns.push(needle); return needle; };
+      await bot.vanduBattleLoop(1);
+      eq(clickedBtns, ['Kim Đan Phá Sát'], `boss ở node ${node} (lives=4) phai danh combo that, khong co chet`);
+      lacks(logs, 'BẬT CHẾ ĐỘ CỐ CHẾT', `boss ở node ${node} khong duoc bat che do co chet`);
+    }
+  }
+
   console.log('vandu-boss-floor: OK');
 })().catch((e) => { console.error(e); process.exit(1); });

@@ -7252,7 +7252,19 @@ class NpcBot {
       // V105: tầng boss thật (12/24/36) — node còn lag 11/23/35 trong
       // lúc đánh nên mọi log battle phải ghi tầng thật, không ghi node.
       const bossFloor = this.vanduBossFloor(this.vanduNode, isBossBattle);
-      if (isBossBattle) bossFloorSeen = bossFloor;
+      if (isBossBattle) {
+        bossFloorSeen = bossFloor;
+        if (bossFloor) this.vanduNode = bossFloor;
+      }
+
+      // V106 (anh chốt 2026-11-21): Tận dụng lượt chết ở Boss 24 để lùi về
+      // tầng trước farm thêm buff / nâng sao khi mạng còn dư (> 1).
+      // Chỉ áp dụng tại Boss 24: khi mạng > 1 thì bật chế độ "cố chết" —
+      // KHÔNG dùng đan Cửu Chuyển và chỉ đánh "Kiếm Cơ Bản" (dmg yếu nhất,
+      // hồi liên tục) để nhân vật chết nhanh. Khi mạng == 1 (mạng cuối cùng)
+      // mới đánh thật theo combo cấu hình và dùng đan để vượt qua Boss 24.
+      const currentLives = this.vanduLives !== undefined ? this.vanduLives : 4;
+      const isIntentionalDieBoss24 = isBossBattle && bossFloor === 24 && currentLives > 1;
 
       // V80: log chi tiết đối thủ và buff sở hữu khi bắt đầu trận
       if (!battleLogged) {
@@ -7267,16 +7279,21 @@ class NpcBot {
         const bossFloorText = isBossBattle ? ` (Tiết ${bossFloor})` : '';
         this.vanduLog(`⚔️ Vân Du: [Trận đấu ${bossTag}]${bossFloorText} Đối thủ: ${enemyName || 'Quái'}${counterDesc} | Máu Quái: ${enemyHpDesc} | Máu Tôi: ${playerHpDesc} | Đan: ${itemBtns.length}/3`);
         this.vanduLog(`📜 Vân Du: Tình trạng buff hiện có (đã click: ${this.vanduBuffClicks || 0} lần): ${this.vanduFormatBuffSummary()}`);
+        if (isIntentionalDieBoss24) {
+          this.vanduLog(`💀 Vân Du: Boss 24 còn dư mạng (${currentLives}/4 > 1) -> BẬT CHẾ ĐỘ CỐ CHẾT (chỉ dùng Kiếm Cơ Bản, không dùng đan Cửu Chuyển) để lùi tầng farm thêm buff/nâng sao!`);
+        } else if (isBossBattle && bossFloor === 24) {
+          this.vanduLog(`🔥 Vân Du: Boss 24 mạng cuối (${currentLives}/4) -> ĐÁNH THẬT theo combo cấu hình để qua ải!`);
+        }
       }
 
       const healThreshold = this.vanduHealThreshold(this.vanduNode, enemyName, isBossBattle);
       // V69: chẩn đoán — máu <50% ở vùng chuyển boss (Tiết 11/23/35)
       // mà không hồi thì log 1 lần/trận để lần sau biết bot đã thấy gì.
-      if (hp !== null && hp < 50 && (this.vanduNode === 11 || this.vanduNode === 23 || this.vanduNode === 35 || isBossBattle) && !(hp < healThreshold && itemBtn) && !noHealLogged) {
+      if (!isIntentionalDieBoss24 && hp !== null && hp < 50 && (this.vanduNode === 11 || this.vanduNode === 23 || this.vanduNode === 35 || isBossBattle) && !(hp < healThreshold && itemBtn) && !noHealLogged) {
         noHealLogged = true;
         this.vanduLog(`💊 Vân Du: máu ${hp}% <50% nhưng không hồi (ngưỡng ${healThreshold}, đan ${itemBtns.length}/3, boss=${isBossBattle ? 'có' : 'không'}, Tiết ${bossFloor || '?'})`);
       }
-      if (hp !== null && hp < healThreshold && itemBtn) {
+      if (!isIntentionalDieBoss24 && hp !== null && hp < healThreshold && itemBtn) {
         const clicked = await this.vanduClickButton('Cửu Chuyển Hoàn Hồn');
         if (clicked) {
           this.vanduLog(`💊 Vân Du: hồi máu bằng Cửu Chuyển (HP ${hp}%, Tiết ${bossFloor || '?'})`);
@@ -7289,44 +7306,50 @@ class NpcBot {
       // Nếu targetSkill có cooldown: thử chờ 600ms quét lại (tránh Discord turn lag).
       // Nếu vẫn cooldown: dùng Kiếm Cơ Bản để qua hiệp mà KHÔNG phá vỡ nhịp combo chính.
       // Chỉ tăng vanduSkillIdx++ đúng 1 lần sau khi hiệp ra đòn thành công.
+      // V106: Nếu đang bật chế độ cố chết ở Boss 24 (isIntentionalDieBoss24),
+      // chỉ click "Kiếm Cơ Bản" liên tục để chết nhanh.
       let clicked = null;
-      const targetIdx = this.vanduSkillIdx % this.vanduSkillOrder.length;
-      const targetSkill = this.vanduSkillOrder[targetIdx];
-      let btn = screen.buttons.find(x => this.vanduNormalize(x).includes(this.vanduNormalize(targetSkill)));
-      let cd = btn ? this.vanduSkillCooldown(btn) : null;
+      if (isIntentionalDieBoss24) {
+        clicked = await this.vanduClickButton('Kiếm Cơ Bản');
+      } else {
+        const targetIdx = this.vanduSkillIdx % this.vanduSkillOrder.length;
+        const targetSkill = this.vanduSkillOrder[targetIdx];
+        let btn = screen.buttons.find(x => this.vanduNormalize(x).includes(this.vanduNormalize(targetSkill)));
+        let cd = btn ? this.vanduSkillCooldown(btn) : null;
 
-      if (!btn || (cd !== null && cd > 0)) {
-        await this.delay(600);
-        const retryScreen = await this.vanduScanLatest();
-        if (retryScreen && retryScreen.buttons) {
-          const retryBtn = retryScreen.buttons.find(x => this.vanduNormalize(x).includes(this.vanduNormalize(targetSkill)));
-          if (retryBtn) {
-            const retryCd = this.vanduSkillCooldown(retryBtn);
-            if (retryCd === null || retryCd <= 0) {
-              btn = retryBtn;
-              cd = null;
-              screen = retryScreen;
+        if (!btn || (cd !== null && cd > 0)) {
+          await this.delay(600);
+          const retryScreen = await this.vanduScanLatest();
+          if (retryScreen && retryScreen.buttons) {
+            const retryBtn = retryScreen.buttons.find(x => this.vanduNormalize(x).includes(this.vanduNormalize(targetSkill)));
+            if (retryBtn) {
+              const retryCd = this.vanduSkillCooldown(retryBtn);
+              if (retryCd === null || retryCd <= 0) {
+                btn = retryBtn;
+                cd = null;
+                screen = retryScreen;
+              }
             }
           }
         }
-      }
 
-      if (btn && (cd === null || cd <= 0)) {
-        clicked = await this.vanduClickButton(targetSkill);
-      } else {
-        const filler = screen.buttons.find(x => this.vanduNormalize(x).includes('kiem co ban'));
-        if (filler) {
-          clicked = await this.vanduClickButton('Kiếm Cơ Bản');
-          if (clicked) this.vanduLog(`⚔️ Vân Du: hiệp ${roundCount + 1} - [${targetSkill}] đang hồi (${cd !== null ? cd : 'thiếu nút'}), dùng Kiếm Cơ Bản giữ nhịp combo`);
+        if (btn && (cd === null || cd <= 0)) {
+          clicked = await this.vanduClickButton(targetSkill);
         } else {
-          for (let s of this.vanduSkillOrder) {
-            if (s === targetSkill) continue;
-            const altBtn = screen.buttons.find(x => this.vanduNormalize(x).includes(this.vanduNormalize(s)));
-            if (altBtn && (this.vanduSkillCooldown(altBtn) === null || this.vanduSkillCooldown(altBtn) <= 0)) {
-              clicked = await this.vanduClickButton(s);
-              if (clicked) {
-                this.vanduLog(`⚔️ Vân Du: hiệp ${roundCount + 1} - [${targetSkill}] đang hồi, tạm dùng [${s}]`);
-                break;
+          const filler = screen.buttons.find(x => this.vanduNormalize(x).includes('kiem co ban'));
+          if (filler) {
+            clicked = await this.vanduClickButton('Kiếm Cơ Bản');
+            if (clicked) this.vanduLog(`⚔️ Vân Du: hiệp ${roundCount + 1} - [${targetSkill}] đang hồi (${cd !== null ? cd : 'thiếu nút'}), dùng Kiếm Cơ Bản giữ nhịp combo`);
+          } else {
+            for (let s of this.vanduSkillOrder) {
+              if (s === targetSkill) continue;
+              const altBtn = screen.buttons.find(x => this.vanduNormalize(x).includes(this.vanduNormalize(s)));
+              if (altBtn && (this.vanduSkillCooldown(altBtn) === null || this.vanduSkillCooldown(altBtn) <= 0)) {
+                clicked = await this.vanduClickButton(s);
+                if (clicked) {
+                  this.vanduLog(`⚔️ Vân Du: hiệp ${roundCount + 1} - [${targetSkill}] đang hồi, tạm dùng [${s}]`);
+                  break;
+                }
               }
             }
           }
