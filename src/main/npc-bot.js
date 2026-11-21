@@ -6293,9 +6293,55 @@ class NpcBot {
   // trận bắt đầu ngay sau bảng buff ở Tiết 11/23/35 là boss 12/24/36
   // (boss chen vào không qua màn cửa — walkthrough bước 21). Nhầm thì
   // cũng chỉ hồi sớm ở ngưỡng 50% như luật cũ trước v64, không bấm bừa.
+  // V105: KHÔNG còn gọi trong vòng battle — luồng buff trượt cả 2 chiều
+  // trong 7 log 19-20/11 (boss 36 sau tiết điểm phụ không nhận ra; trận
+  // thường Báo ở 11/23 sau buff ở 11/23 nhận nhầm thành BOSS). Giữ hàm
+  // để tham khảo / test, cơ chế chính giờ là vanduIsBossByEnemy.
   vanduIsBossByFlow() {
     const n = this.vanduNode;
     return (n === 11 || n === 23 || n === 35) && this.vanduLastBuffNode === n;
+  }
+
+  // V105 (anh 2026-11-21, 7 log 19-20/11): boss 12/24/36 đánh khi node
+  // còn lag ở 11/23/35 — cả 3 cơ chế cũ đều có thể trượt cùng lúc:
+  //  (1) chữ Vực Cảnh / Mảnh Cổ Khí: nằm ở màn chuyển TRƯỚC trận, màn
+  //      battle lúc đánh thường không có (v69 đã ghi nhận);
+  //  (2) luồng buff (trận sau bảng buff ở 11/23/35): trượt khi có Tiết
+  //      phụ chen vào — log 19/11: buff cuối ở Tiết 34, Tiết 35 là tiết
+  //      điểm phụ bấm Rời đi rồi mới vào boss 36, nên vanduLastBuffNode
+  //      (34) !== 35; ngược lại nó còn NHẬN NHẦM trận thường (Băng Tuyết
+  //      Dạ Báo ở 11/23) thành BOSS khi buff cuối đúng ở 11/23;
+  //  (3) node == 12/24/36: màn battle không ghi Tiết Điểm nên node không
+  //      bao giờ lên 12/24/36 trong lúc đánh (chỉ 1 ca hiếm 08:48:16
+  //      node kịp lên 12).
+  // Hậu quả: 4/4 trận boss 36 trong 7 log đều ghi ⚔️ QUÁI, thua cả 4,
+  // chưa từng thắng boss 36; mọi log battle/defeat/victory đều ghi sai
+  // tầng (11/23/35 thay vì 12/24/36).
+  // Dấu hiệu còn lại duy nhất trong màn battle lúc đánh: TÊN QUÁI +
+  // VÙNG TIẾT. Boss luôn là Thiết Mao Hắc Lang mang tiền tố tông
+  // ([Huyết Tế] / [Cuồng Bạo] / [Cương Thể] / [Hư Ảo] — đúng 4 tông
+  // khắc chế), đánh ở 11/23/35. Quái thường cùng tên mang tiền tố
+  // [Diệt Tuyệt] (gặp ở mọi Tiết, cả 11/23/35) — loại ra. Lang 4 tiền
+  // tố ở ngoài vùng 11/23/35 cũng là quái thường (vd Tiết 16/22) —
+  // chỉ nhận trong vùng.
+  vanduIsBossByEnemy(enemyName, node) {
+    if (node !== 11 && node !== 23 && node !== 35) return false;
+    const n = this.vanduNormalize(enemyName || '').trim();
+    if (!n.includes('thiet mao hac lang')) return false;
+    return n.startsWith('huyet te') || n.startsWith('cuong bao') ||
+      n.startsWith('cuong the') || n.startsWith('hu ao');
+  }
+
+  // V105: tầng boss THẬT của trận đang đánh — boss chen vào khi node còn
+  // 11/23/35 nên tầng thật là node + 1 (12/24/36). Trận thường giữ nguyên
+  // node. Dùng cho mọi log battle (bắt đầu / hồi máu / thắng / thua /
+  // timeout) để dữ liệu nghiên cứu buff boss ghi đúng tầng.
+  vanduBossFloor(node, isBossBattle) {
+    if (!isBossBattle) return node;
+    if (node === 11 || node === 12) return 12;
+    if (node === 23 || node === 24) return 24;
+    if (node === 35 || node === 36) return 36;
+    return node;
   }
 
   // V96 (nối commit fix vandu bbd3bcb): nhận diện bảng THUA trận để vòng
@@ -7109,6 +7155,7 @@ class NpcBot {
     const startedAt = Date.now();
     let noHealLogged = false; // V69: log chẩn đoán không-hồi 1 lần/trận
     let battleLogged = false; // V80: log thông tin chi tiết đối thủ, HP, và buff hiện có
+    let bossFloorSeen = 0; // V105: tầng boss thật (12/24/36) đã thấy trong trận này — chốt khi isBossBattle đúng 1 lần, dùng cho log thắng/thua/timeout sau vòng lặp
     let enemyName = '';
     let lastPlayerHp = null;
     let lastEnemyHpPct = null;
@@ -7122,7 +7169,7 @@ class NpcBot {
         // không chết thì cũng như thua) — ghi tổng kết kèm buff như defeat.
         const myHpDesc = lastPlayerHp !== null ? `${lastPlayerHp}%` : '?';
         const enemyHpDesc = lastEnemyHpPct !== null ? `${lastEnemyHpPct}%` : '?';
-        this.vanduLog(`⏱️ Vân Du: trận với ${enemyName || 'Quái'} ở Tiết ${this.vanduNode || '?'} QUÁ LÂU (timeout sau ${Math.round((Date.now() - startedAt) / 1000)}s, đã đánh ${roundCount} hiệp) — chưa phân thắng bại (Tôi: ${myHpDesc} | Quái còn: ${enemyHpDesc}) | Buff: ${this.vanduFormatBuffSummary()}`);
+        this.vanduLog(`⏱️ Vân Du: trận với ${enemyName || 'Quái'} ở Tiết ${bossFloorSeen || this.vanduNode || '?'} QUÁ LÂU (timeout sau ${Math.round((Date.now() - startedAt) / 1000)}s, đã đánh ${roundCount} hiệp) — chưa phân thắng bại (Tôi: ${myHpDesc} | Quái còn: ${enemyHpDesc}) | Buff: ${this.vanduFormatBuffSummary()}`);
         return;
       }
       await this.dismissEphemeralMessages();
@@ -7193,11 +7240,19 @@ class NpcBot {
       }
       // V68: boss thì ngưỡng 50% kể cả khi số Tiết đọc được còn lag
       // (màn boss có chữ Vực Cảnh / Mảnh Cổ Khí, xem vanduIsBossBattle).
-      // V69: thêm nhận diện theo luồng (trận sau bảng buff ở Tiết
-      // 11/23/35 là boss 12/24/36) vì màn battle lúc đánh không mang
-      // 2 chữ đó — log 10:57:43 vẫn không hồi dù đã có v68.
-      const isBossBattle = this.vanduIsBossBattle(screen.text) || this.vanduIsBossByFlow() ||
+      // V105: nhận boss theo TÊN QUÁI + VÙNG TIẾT (vanduIsBossByEnemy)
+      // thay cho luồng buff v69 — luồng buff trượt cả 2 chiều trong
+      // 7 log 19-20/11: boss 36 sau tiết điểm phụ (buff cuối ở 34)
+      // không nhận ra, còn trận thường Băng Tuyết Dạ Báo ở 11/23 sau
+      // buff ở 11/23 lại nhận nhầm thành BOSS. Tên quái là dấu hiệu
+      // duy nhất còn lại trong màn battle lúc đánh.
+      const isBossBattle = this.vanduIsBossBattle(screen.text) ||
+        this.vanduIsBossByEnemy(enemy.name || enemyName, this.vanduNode) ||
         this.vanduNode === 12 || this.vanduNode === 24 || this.vanduNode === 36;
+      // V105: tầng boss thật (12/24/36) — node còn lag 11/23/35 trong
+      // lúc đánh nên mọi log battle phải ghi tầng thật, không ghi node.
+      const bossFloor = this.vanduBossFloor(this.vanduNode, isBossBattle);
+      if (isBossBattle) bossFloorSeen = bossFloor;
 
       // V80: log chi tiết đối thủ và buff sở hữu khi bắt đầu trận
       if (!battleLogged) {
@@ -7206,21 +7261,25 @@ class NpcBot {
         const enemyHpDesc = enemy.hpPct !== null ? `${enemy.hpPct}%` : (enemy.hpCur ? `${enemy.hpCur}/${enemy.hpMax}` : '?');
         const counterDesc = enemy.counterSect ? ` (khắc chế: ${enemy.counterSect} Tông)` : '';
         const playerHpDesc = hp !== null ? `${hp}%` : '?';
-        this.vanduLog(`⚔️ Vân Du: [Trận đấu ${bossTag}] Đối thủ: ${enemyName || 'Quái'}${counterDesc} | Máu Quái: ${enemyHpDesc} | Máu Tôi: ${playerHpDesc} | Đan: ${itemBtns.length}/3`);
+        // V105: trận boss ghi rõ tầng thật (Tiết 12/24/36) trong câu log —
+        // có chữ 'Tiết' nên vanduLog không gắn thêm tiền tố [Tiết 11/23/35]
+        // sai; trận thường giữ nguyên (tiền tố tự động ghi đúng node).
+        const bossFloorText = isBossBattle ? ` (Tiết ${bossFloor})` : '';
+        this.vanduLog(`⚔️ Vân Du: [Trận đấu ${bossTag}]${bossFloorText} Đối thủ: ${enemyName || 'Quái'}${counterDesc} | Máu Quái: ${enemyHpDesc} | Máu Tôi: ${playerHpDesc} | Đan: ${itemBtns.length}/3`);
         this.vanduLog(`📜 Vân Du: Tình trạng buff hiện có (đã click: ${this.vanduBuffClicks || 0} lần): ${this.vanduFormatBuffSummary()}`);
       }
 
       const healThreshold = this.vanduHealThreshold(this.vanduNode, enemyName, isBossBattle);
       // V69: chẩn đoán — máu <50% ở vùng chuyển boss (Tiết 11/23/35)
       // mà không hồi thì log 1 lần/trận để lần sau biết bot đã thấy gì.
-      if (hp !== null && hp < 50 && (this.vanduNode === 11 || this.vanduNode === 23 || this.vanduNode === 35) && !(hp < healThreshold && itemBtn) && !noHealLogged) {
+      if (hp !== null && hp < 50 && (this.vanduNode === 11 || this.vanduNode === 23 || this.vanduNode === 35 || isBossBattle) && !(hp < healThreshold && itemBtn) && !noHealLogged) {
         noHealLogged = true;
-        this.vanduLog(`💊 Vân Du: máu ${hp}% <50% nhưng không hồi (ngưỡng ${healThreshold}, đan ${itemBtns.length}/3, boss=${isBossBattle ? 'có' : 'không'}, Tiết ${this.vanduNode || '?'})`);
+        this.vanduLog(`💊 Vân Du: máu ${hp}% <50% nhưng không hồi (ngưỡng ${healThreshold}, đan ${itemBtns.length}/3, boss=${isBossBattle ? 'có' : 'không'}, Tiết ${bossFloor || '?'})`);
       }
       if (hp !== null && hp < healThreshold && itemBtn) {
         const clicked = await this.vanduClickButton('Cửu Chuyển Hoàn Hồn');
         if (clicked) {
-          this.vanduLog(`💊 Vân Du: hồi máu bằng Cửu Chuyển (HP ${hp}%, Tiết ${this.vanduNode || '?'})`);
+          this.vanduLog(`💊 Vân Du: hồi máu bằng Cửu Chuyển (HP ${hp}%, Tiết ${bossFloor || '?'})`);
           await this.delay(Math.max(1000, skillGapMs));
           continue;
         }
@@ -7290,12 +7349,12 @@ class NpcBot {
       this.vanduLives = Math.max(0, (this.vanduLives !== undefined ? this.vanduLives : 4) - 1);
       const myHpDesc = lastPlayerHp !== null ? `${lastPlayerHp}%` : '0%';
       const enemyHpDesc = lastEnemyHpPct !== null ? `${lastEnemyHpPct}%` : '?';
-      this.vanduLog(`💀 Vân Du: THẤT BẠI trước ${enemyName || 'Quái'} ở Tiết ${this.vanduNode || '?'}! (Tôi: ${myHpDesc} | Quái còn: ${enemyHpDesc} | Hiệp: ${roundCount} | Đạo tâm còn: ${this.vanduLives}/4) | Đã click: ${this.vanduBuffClicks || 0} buff | Danh sách buff: ${this.vanduFormatBuffSummary()}`);
+      this.vanduLog(`💀 Vân Du: THẤT BẠI trước ${enemyName || 'Quái'} ở Tiết ${bossFloorSeen || this.vanduNode || '?'}! (Tôi: ${myHpDesc} | Quái còn: ${enemyHpDesc} | Hiệp: ${roundCount} | Đạo tâm còn: ${this.vanduLives}/4) | Đã click: ${this.vanduBuffClicks || 0} buff | Danh sách buff: ${this.vanduFormatBuffSummary()}`);
     } else if (battleEndedReason === 'victory') {
       const myHpDesc = lastPlayerHp !== null ? `${lastPlayerHp}%` : '?';
       // V96: thắng mà không ghi buff thì không biết bộ buff nào thắng
       // boss — ghi kèm như dòng defeat để so được thắng/thua theo buff.
-      this.vanduLog(`🏆 Vân Du: CHIẾN THẮNG ${enemyName || 'Quái'} (Tiết ${this.vanduNode || '?'})! (Tôi còn: ${myHpDesc} HP | Đan: ${this.vanduDanCount}/3 | Hiệp: ${roundCount}) | Buff: ${this.vanduFormatBuffSummary()}`);
+      this.vanduLog(`🏆 Vân Du: CHIẾN THẮNG ${enemyName || 'Quái'} (Tiết ${bossFloorSeen || this.vanduNode || '?'})! (Tôi còn: ${myHpDesc} HP | Đan: ${this.vanduDanCount}/3 | Hiệp: ${roundCount}) | Buff: ${this.vanduFormatBuffSummary()}`);
     }
   }
 
