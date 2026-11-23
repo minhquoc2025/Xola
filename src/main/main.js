@@ -22,7 +22,8 @@ function createMainWindow() {
     height,
     minWidth: 960,
     minHeight: 640,
-    title: 'Discord NPC Auto',
+    title: 'Auto XoLa',
+    icon: path.join(__dirname, '..', 'assets', 'icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, '..', 'renderer', 'preload.js'),
       contextIsolation: true,
