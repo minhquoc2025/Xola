@@ -103,6 +103,10 @@ const ALL_SKILLS = [
   { stt: 31, name: 'Pháp Tướng Thiên Địa', cat: 'Hóa Thần' },
   { stt: 32, name: 'Lôi Đình Vạn Quân', cat: 'Hóa Thần' },
   { stt: 33, name: 'Niết Bàn Trùng Sinh', cat: 'Hóa Thần' },
+  // Đại Thừa
+  { stt: 34, name: 'Đại La Thiên Tôn', cat: 'Đại Thừa' },
+  { stt: 35, name: 'Hỗn Độn Sơ Khai', cat: 'Đại Thừa' },
+  { stt: 36, name: 'Thiên Địa Đại Phong Ấn', cat: 'Đại Thừa' },
 ];
 
 // === MODE ===
@@ -299,6 +303,8 @@ function getVanduConfig() {
     'Kết Đan': 'Đông Hải Tiên Đảo',
     'Nguyên Anh': 'Tây Vực Sa Mạc',
     'Hóa Thần': 'Thiên Sơn Tuyết Lãnh',
+    'Đại Thừa': 'U Minh Quỷ Vực',
+    'Độ Kiếp': 'Cửu Trọng Thiên Giới',
   };
   // User ID dùng chung (userid-shared trong modal ⚙️) như 5 mode kia —
   // ô riêng của tab Vân Du đã bỏ, dùng chung 1 ô trong modal (port 2026-11-09).

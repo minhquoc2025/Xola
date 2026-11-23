@@ -69,7 +69,7 @@ class NpcBot {
     this.luanhoi = false;
     this.luanhoiTarget = 10;
     this.luanhoiCmd = '!luanhoi';
-    this.luanhoiSkillNames = ['Kiếm Cơ Bản', 'Liên Hoàn Kích', 'Trọng Kích', 'Phá Giáp', 'Xuyên Tâm', 'Liệt Hỏa Trảm', 'Hấp Huyết', 'Kịch Độc', 'Lôi Kích', 'Tuyệt Sát', 'Thần Uy', 'Băng Phong', 'Phòng Ngự', 'Phản Kích', 'Hồi Phục', 'Hộ Thuẫn', 'Hỏa Giáp', 'Chống Xỏ Lá', 'Thái Cực Dưỡng Sinh', 'Kiếm Khí Xung Thiên', 'Kim Cương Phục Ma', 'Hỗn Nguyên Hộ Thể', 'Vạn Kiếm Quy Tông', 'Phong Ấn Thất Mạch', 'Cửu Chuyển Hồi Xuân', 'Kim Đan Phá Sát', 'Tam Muội Chân Hỏa', 'Bất Diệt Kim Thân', 'Hư Không Đại Na Di', 'Nguyên Anh Xuất Khiếu', 'Pháp Tướng Thiên Địa', 'Lôi Đình Vạn Quân', 'Niết Bàn Trùng Sinh'];
+    this.luanhoiSkillNames = ['Kiếm Cơ Bản', 'Liên Hoàn Kích', 'Trọng Kích', 'Phá Giáp', 'Xuyên Tâm', 'Liệt Hỏa Trảm', 'Hấp Huyết', 'Kịch Độc', 'Lôi Kích', 'Tuyệt Sát', 'Thần Uy', 'Băng Phong', 'Phòng Ngự', 'Phản Kích', 'Hồi Phục', 'Hộ Thuẫn', 'Hỏa Giáp', 'Chống Xỏ Lá', 'Thái Cực Dưỡng Sinh', 'Kiếm Khí Xung Thiên', 'Kim Cương Phục Ma', 'Hỗn Nguyên Hộ Thể', 'Vạn Kiếm Quy Tông', 'Phong Ấn Thất Mạch', 'Cửu Chuyển Hồi Xuân', 'Kim Đan Phá Sát', 'Tam Muội Chân Hỏa', 'Bất Diệt Kim Thân', 'Hư Không Đại Na Di', 'Nguyên Anh Xuất Khiếu', 'Pháp Tướng Thiên Địa', 'Lôi Đình Vạn Quân', 'Niết Bàn Trùng Sinh', 'Đại La Thiên Tôn', 'Hỗn Độn Sơ Khai', 'Thiên Địa Đại Phong Ấn'];
     this.luanhoiSkillIdx = 0;
     this.luanhoiCooldownLeft = new Map(); // V80: skill -> so turn con hoi
     this.luanhoiCurrentTier = 0;
@@ -4620,8 +4620,9 @@ class NpcBot {
     // detail ghi đè bằng số thật (như v92). Skill khác (ngoài combo
     // 32/29/26/23) giữ 3 như cũ.
     const bicanhCooldownTurns = (skill) => {
-      if (skill === 'Lôi Đình Vạn Quân') return 3;
-      if (skill === 'Hư Không Đại Na Di' || skill === 'Kim Đan Phá Sát' || skill === 'Vạn Kiếm Quy Tông') return 2;
+      if (skill === 'Thiên Địa Đại Phong Ấn') return 4;
+      if (skill === 'Lôi Đình Vạn Quân' || skill === 'Hỗn Độn Sơ Khai') return 3;
+      if (skill === 'Hư Không Đại Na Di' || skill === 'Kim Đan Phá Sát' || skill === 'Vạn Kiếm Quy Tông' || skill === 'Đại La Thiên Tôn') return 2;
       return 3;
     };
     // Skill của click gần nhất mà kết quả (được chấp nhận hay bị từ chối)
@@ -6521,6 +6522,8 @@ class NpcBot {
       'Kết Đan': 'Đông Hải Tiên Đảo',
       'Nguyên Anh': 'Tây Vực Sa Mạc',
       'Hóa Thần': 'Thiên Sơn Tuyết Lãnh',
+      'Đại Thừa': 'U Minh Quỷ Vực',
+      'Độ Kiếp': 'Cửu Trọng Thiên Giới',
     };
     return maps[String(realm || '').trim()] || '';
   }
@@ -6539,7 +6542,7 @@ class NpcBot {
     const raw = String(text || '');
     const idx = raw.indexOf('Đại Vùng Đang Chọn');
     const hay = idx >= 0 ? raw.slice(idx) : raw;
-    const maps = ['Thanh Vân Trấn', 'Vạn Sơn Liên Mạch', 'Đông Hải Tiên Đảo', 'Tây Vực Sa Mạc', 'Thiên Sơn Tuyết Lãnh'];
+    const maps = ['Thanh Vân Trấn', 'Vạn Sơn Liên Mạch', 'Đông Hải Tiên Đảo', 'Tây Vực Sa Mạc', 'Thiên Sơn Tuyết Lãnh', 'U Minh Quỷ Vực', 'Cửu Trọng Thiên Giới'];
     let best = '';
     let bestIdx = Infinity;
     for (const map of maps) {
